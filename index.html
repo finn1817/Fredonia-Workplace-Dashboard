@@ -128,19 +128,22 @@
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+        import { getFirestore, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
-        // Firebase config
-        const config = {
-            apiKey: "AIzaSyBkkq4nPnmyfSOKtVLsO95rpAUsMDA1o0A",
-            authDomain: "workplace-scheduler-ace38.firebaseapp.com",
-            projectId: "workplace-scheduler-ace38",
-            storageBucket: "workplace-scheduler-ace38.firebasestorage.app",
-            messagingSenderId: "153631302747",
-            appId: "1:153631302747:web:2c731351893dca19510b7e"
+        // AUTH DATABASE CONFIG (for login)
+        const authConfig = {
+            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+            projectId: "my-admin-dashboard-b9c89",
+            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+            messagingSenderId: "1001105953619",
+            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+            measurementId: "G-DGTX5YCKYF"
         };
 
-        const app = initializeApp(config);
-        const auth = getAuth(app);
+        const authApp = initializeApp(authConfig);
+        const auth = getAuth(authApp);
+        const authDb = getFirestore(authApp);
 
         // Check if already logged in
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -161,15 +164,33 @@
             loadingMsg.style.display = 'block';
             
             try {
+                // First try Firebase Auth
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
+                const firebaseUser = userCredential.user;
                 
-                // Store user info
-                localStorage.setItem('user', JSON.stringify({
-                    email: user.email,
-                    uid: user.uid,
+                // Then check if user exists in Firestore users collection
+                const usersRef = collection(authDb, 'users');
+                const q = query(usersRef, where('email', '==', email));
+                const querySnapshot = await getDocs(q);
+                
+                let userData = null;
+                querySnapshot.forEach((doc) => {
+                    userData = { id: doc.id, ...doc.data() };
+                });
+                
+                if (!userData) {
+                    throw new Error('User not found in database');
+                }
+                
+                // Store user info including admin status
+                const userInfo = {
+                    email: firebaseUser.email,
+                    uid: firebaseUser.uid,
+                    isAdmin: userData.isAdmin === 1 || userData.isAdmin === true,
                     loginTime: new Date().toISOString()
-                }));
+                };
+                
+                localStorage.setItem('user', JSON.stringify(userInfo));
                 
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';
@@ -177,6 +198,8 @@
             } catch (error) {
                 loadingMsg.style.display = 'none';
                 errorMsg.style.display = 'block';
+                
+                console.error('Login error:', error);
                 
                 switch (error.code) {
                     case 'auth/user-not-found':
@@ -188,8 +211,14 @@
                     case 'auth/invalid-email':
                         errorMsg.textContent = 'Invalid email address.';
                         break;
+                    case 'auth/invalid-credential':
+                        errorMsg.textContent = 'Invalid email or password.';
+                        break;
+                    case 'auth/too-many-requests':
+                        errorMsg.textContent = 'Too many failed attempts. Please try again later.';
+                        break;
                     default:
-                        errorMsg.textContent = 'Login failed. Please try again.';
+                        errorMsg.textContent = error.message || 'Login failed. Please try again.';
                 }
             }
         });
