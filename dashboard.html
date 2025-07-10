@@ -134,65 +134,14 @@
             text-align: center;
         }
 
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
 
-        .btn-primary:hover {
-            background: #0056b3;
-            transform: translateY(-1px);
-        }
-
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #1e7e34;
-            transform: translateY(-1px);
-        }
-
-        .btn-info {
-            background: #17a2b8;
-            color: white;
-        }
-
-        .btn-info:hover {
-            background: #117a8b;
-            transform: translateY(-1px);
-        }
-
-        .btn-warning {
-            background: #ffc107;
-            color: #212529;
-        }
-
-        .btn-warning:hover {
-            background: #e0a800;
-            transform: translateY(-1px);
-        }
-
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #c82333;
-            transform: translateY(-1px);
-        }
-
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #545b62;
-            transform: translateY(-1px);
-        }
+        .btn:hover { transform: translateY(-1px); }
 
         .schedule-form {
             background: #f8f9fa;
@@ -307,8 +256,7 @@
             margin-top: 1rem;
         }
 
-        .worker-table th,
-        .worker-table td {
+        .worker-table th, .worker-table td {
             padding: 0.75rem;
             text-align: left;
             border-bottom: 1px solid #dee2e6;
@@ -359,25 +307,11 @@
         }
 
         @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-            
-            .workplace-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .action-buttons {
-                flex-direction: column;
-            }
-            
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            
-            .stats {
-                grid-template-columns: 1fr;
-            }
+            .container { padding: 1rem; }
+            .workplace-grid { grid-template-columns: 1fr; }
+            .action-buttons { flex-direction: column; }
+            .form-row { grid-template-columns: 1fr; }
+            .stats { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -395,7 +329,7 @@
         <div class="workplace-section">
             <h2 class="section-title">Select Workplace</h2>
             <div class="workplace-grid" id="workplaceGrid">
-                <div class="loading">Loading workplaces...</div>
+                <!-- Will be populated by JavaScript -->
             </div>
         </div>
 
@@ -468,7 +402,7 @@
     </div>
 
     <script type="module">
-        // Check auth first
+        // Check auth first (from login system)
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         if (!user.email) {
             window.location.href = 'index.html';
@@ -481,24 +415,24 @@
             window.location.href = 'index.html';
         };
 
-        // Import Firebase modules
+        // Import Firebase modules for WORKPLACE DATABASE
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
         import { 
             getFirestore, collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc
         } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
-        // Firebase config
-        const config = {
+        // WORKPLACE DATABASE CONFIG (separate from auth)
+        const workplaceConfig = {
             apiKey: "AIzaSyBkkq4nPnmyfSOKtVLsO95rpAUsMDA1o0A",
-            authDomain: "workplace-scheduler-ace38.firebaseapp.com",
+            authDomain: "workplace-scheduler-ace38.firebaseapp.com", 
             projectId: "workplace-scheduler-ace38",
             storageBucket: "workplace-scheduler-ace38.firebasestorage.app",
             messagingSenderId: "153631302747",
             appId: "1:153631302747:web:2c731351893dca19510b7e"
         };
 
-        const app = initializeApp(config);
-        const db = getFirestore(app);
+        const workplaceApp = initializeApp(workplaceConfig);
+        const db = getFirestore(workplaceApp);
 
         // Global state
         let selectedWorkplace = null;
@@ -566,117 +500,83 @@
             return dayAvail.some(slot => slot.startHour <= startHour && endHour <= slot.endHour);
         };
 
-        // Initialize workplaces
-        async function initializeWorkplaces() {
-            try {
-                const workplaces = [
-                    { 
-                        id: 'esports_lounge', 
-                        name: '🎮 eSports Lounge',
-                        hours: {
-                            Monday: [{ start: "09:00", end: "17:00" }],
-                            Tuesday: [{ start: "09:00", end: "17:00" }],
-                            Wednesday: [{ start: "09:00", end: "17:00" }],
-                            Thursday: [{ start: "09:00", end: "17:00" }],
-                            Friday: [{ start: "09:00", end: "17:00" }],
-                            Saturday: [{ start: "10:00", end: "16:00" }],
-                            Sunday: [{ start: "12:00", end: "18:00" }]
-                        }
-                    },
-                    { 
-                        id: 'esports_arena', 
-                        name: '🏟️ eSports Arena',
-                        hours: {
-                            Monday: [{ start: "10:00", end: "20:00" }],
-                            Tuesday: [{ start: "10:00", end: "20:00" }],
-                            Wednesday: [{ start: "10:00", end: "20:00" }],
-                            Thursday: [{ start: "10:00", end: "20:00" }],
-                            Friday: [{ start: "10:00", end: "22:00" }],
-                            Saturday: [{ start: "09:00", end: "22:00" }],
-                            Sunday: [{ start: "11:00", end: "19:00" }]
-                        }
-                    },
-                    { 
-                        id: 'it_service_center', 
-                        name: '💻 IT Service Center',
-                        hours: {
-                            Monday: [{ start: "08:00", end: "16:00" }],
-                            Tuesday: [{ start: "08:00", end: "16:00" }],
-                            Wednesday: [{ start: "08:00", end: "16:00" }],
-                            Thursday: [{ start: "08:00", end: "16:00" }],
-                            Friday: [{ start: "08:00", end: "16:00" }],
-                            Saturday: [{ start: "09:00", end: "15:00" }],
-                            Sunday: [{ start: "10:00", end: "14:00" }]
-                        }
+        // Initialize default workplaces
+        async function initializeDefaultWorkplaces() {
+            const workplaces = [
+                { 
+                    id: 'esports_lounge', 
+                    name: '🎮 eSports Lounge',
+                    hours: {
+                        Monday: [{ start: "09:00", end: "17:00" }],
+                        Tuesday: [{ start: "09:00", end: "17:00" }],
+                        Wednesday: [{ start: "09:00", end: "17:00" }],
+                        Thursday: [{ start: "09:00", end: "17:00" }],
+                        Friday: [{ start: "09:00", end: "17:00" }],
+                        Saturday: [{ start: "10:00", end: "16:00" }],
+                        Sunday: [{ start: "12:00", end: "18:00" }]
                     }
-                ];
-
-                for (const workplace of workplaces) {
-                    try {
-                        await setDoc(doc(db, 'workplaces', workplace.id), {
-                            name: workplace.name,
-                            hours_of_operation: workplace.hours,
-                            created_at: new Date().toISOString()
-                        });
-                        console.log(`Initialized ${workplace.id}`);
-                    } catch (error) {
-                        console.error(`Error creating ${workplace.id}:`, error);
+                },
+                { 
+                    id: 'esports_arena', 
+                    name: '🏟️ eSports Arena',
+                    hours: {
+                        Monday: [{ start: "10:00", end: "20:00" }],
+                        Tuesday: [{ start: "10:00", end: "20:00" }],
+                        Wednesday: [{ start: "10:00", end: "20:00" }],
+                        Thursday: [{ start: "10:00", end: "20:00" }],
+                        Friday: [{ start: "10:00", end: "22:00" }],
+                        Saturday: [{ start: "09:00", end: "22:00" }],
+                        Sunday: [{ start: "11:00", end: "19:00" }]
+                    }
+                },
+                { 
+                    id: 'it_service_center', 
+                    name: '💻 IT Service Center',
+                    hours: {
+                        Monday: [{ start: "08:00", end: "16:00" }],
+                        Tuesday: [{ start: "08:00", end: "16:00" }],
+                        Wednesday: [{ start: "08:00", end: "16:00" }],
+                        Thursday: [{ start: "08:00", end: "16:00" }],
+                        Friday: [{ start: "08:00", end: "16:00" }],
+                        Saturday: [{ start: "09:00", end: "15:00" }],
+                        Sunday: [{ start: "10:00", end: "14:00" }]
                     }
                 }
+            ];
 
-                return workplaces;
-            } catch (error) {
-                console.error('Error initializing workplaces:', error);
-                return [];
-            }
-        }
-
-        // Load workplaces
-        async function loadWorkplaces() {
-            try {
-                console.log('Loading workplaces...');
-                
-                // First try to get existing workplaces
-                const snapshot = await getDocs(collection(db, 'workplaces'));
-                let workplaces = [];
-
-                if (snapshot.empty) {
-                    console.log('No workplaces found, creating defaults...');
-                    workplaces = await initializeWorkplaces();
-                } else {
-                    snapshot.forEach(doc => {
-                        workplaces.push({
-                            id: doc.id,
-                            name: doc.data().name || doc.id.replace('_', ' ').toUpperCase(),
-                            ...doc.data()
-                        });
+            for (const workplace of workplaces) {
+                try {
+                    await setDoc(doc(db, 'workplaces', workplace.id), {
+                        name: workplace.name,
+                        hours_of_operation: workplace.hours,
+                        created_at: new Date().toISOString()
                     });
+                } catch (error) {
+                    console.error(`Error creating ${workplace.id}:`, error);
                 }
-
-                let html = '';
-                workplaces.forEach(wp => {
-                    html += `
-                        <div class="workplace-card" onclick="selectWorkplace('${wp.id}')">
-                            <h4>${wp.name}</h4>
-                            <p>${wp.id}</p>
-                        </div>
-                    `;
-                });
-
-                document.getElementById('workplaceGrid').innerHTML = html;
-                console.log(`Loaded ${workplaces.length} workplaces`);
-
-            } catch (error) {
-                console.error('Error loading workplaces:', error);
-                document.getElementById('workplaceGrid').innerHTML = `
-                    <div class="error">
-                        <h4>Error loading workplaces</h4>
-                        <p>${error.message}</p>
-                        <button class="btn btn-primary" onclick="loadWorkplaces()">Retry</button>
-                    </div>
-                `;
             }
+
+            return workplaces;
         }
+
+        // Create default workplaces immediately
+        document.getElementById('workplaceGrid').innerHTML = `
+            <div class="workplace-card" onclick="selectWorkplace('esports_lounge')">
+                <h4>🎮 eSports Lounge</h4>
+                <p>esports_lounge</p>
+            </div>
+            <div class="workplace-card" onclick="selectWorkplace('esports_arena')">
+                <h4>🏟️ eSports Arena</h4>
+                <p>esports_arena</p>
+            </div>
+            <div class="workplace-card" onclick="selectWorkplace('it_service_center')">
+                <h4>💻 IT Service Center</h4>
+                <p>it_service_center</p>
+            </div>
+        `;
+
+        // Initialize workplaces in background
+        initializeDefaultWorkplaces();
 
         // Select workplace
         window.selectWorkplace = async function(id) {
@@ -787,7 +687,7 @@
             }
         };
 
-        // Simple schedule creation
+        // Simple schedule creation with work study priority
         function createSimpleSchedule(maxHours, workersPerShift) {
             const schedule = {};
             const workerHours = {};
@@ -806,11 +706,13 @@
                     const start = timeToHour(period.start);
                     const end = timeToHour(period.end);
                     
-                    // Create 4-hour shifts
+                    // Create shifts (2-4 hours each)
                     let current = start;
                     while (current < end) {
-                        const shiftEnd = Math.min(current + 4, end);
-                        if (shiftEnd - current < 2) break; // Minimum 2-hour shifts
+                        const maxShiftLength = Math.min(4, end - current);
+                        const shiftEnd = current + Math.max(2, maxShiftLength); // Min 2 hours
+                        
+                        if (shiftEnd > end) break;
                         
                         // Find available workers
                         const available = workers.filter(worker => {
@@ -821,39 +723,30 @@
                             return isWorkerAvailable(worker, day, current, shiftEnd);
                         });
                         
-                        // Sort by hours worked (fairness)
-                        available.sort((a, b) => (workerHours[a.email] || 0) - (workerHours[b.email] || 0));
+                        // Sort by hours worked (fairness) and prioritize work study
+                        available.sort((a, b) => {
+                            // Prioritize work study students who need hours
+                            if (a.work_study && !b.work_study) return -1;
+                            if (!a.work_study && b.work_study) return 1;
+                            
+                            // Then by hours worked (fairness)
+                            return (workerHours[a.email] || 0) - (workerHours[b.email] || 0);
+                        });
                         
-                        // Assign work study students first (need exactly 5 hours)
-                        const workStudy = available.filter(w => w.work_study);
-                        const regular = available.filter(w => !w.work_study);
-                        
-                        let assigned = [];
                         const shiftDuration = shiftEnd - current;
+                        const selected = available.slice(0, workersPerShift);
                         
-                        // Assign work study students first
-                        for (const worker of workStudy) {
-                            if (assigned.length >= workersPerShift) break;
-                            const currentHours = workerHours[worker.email] || 0;
-                            if (currentHours < 5 && currentHours + shiftDuration <= 5) {
-                                assigned.push(worker);
-                                workerHours[worker.email] = currentHours + shiftDuration;
-                            }
-                        }
-                        
-                        // Fill remaining slots with regular workers
-                        for (const worker of regular) {
-                            if (assigned.length >= workersPerShift) break;
-                            assigned.push(worker);
+                        // Update hours
+                        selected.forEach(worker => {
                             workerHours[worker.email] = (workerHours[worker.email] || 0) + shiftDuration;
-                        }
+                        });
                         
                         const shift = {
                             start: hourToTime(current),
                             end: hourToTime(shiftEnd),
-                            workers: assigned.length > 0 ? assigned.map(w => `${w.first_name} ${w.last_name}`) : ['Unfilled'],
-                            emails: assigned.map(w => w.email),
-                            workStudy: assigned.some(w => w.work_study)
+                            workers: selected.length > 0 ? selected.map(w => `${w.first_name} ${w.last_name}`) : ['Unfilled'],
+                            emails: selected.map(w => w.email),
+                            workStudy: selected.some(w => w.work_study)
                         };
                         
                         schedule[day].push(shift);
@@ -1113,8 +1006,8 @@
                 let status = 'OK';
                 let statusColor = '';
                 
-                if (isWS && hours !== 5) {
-                    status = `WS Issue (${hours}h)`;
+                if (isWS && Math.abs(hours - 5) > 0.1) {
+                    status = `WS Issue (${hours.toFixed(1)}h)`;
                     statusColor = 'color: #dc3545;';
                 } else if (hours < 3) {
                     status = 'Low Hours';
@@ -1157,7 +1050,7 @@
             workers.forEach(worker => {
                 if (worker.work_study) {
                     const hours = workerHours[worker.email] || 0;
-                    if (hours !== 5) {
+                    if (Math.abs(hours - 5) > 0.1) {
                         issues.push(`${worker.first_name} ${worker.last_name}: ${hours.toFixed(1)} hours (needs exactly 5)`);
                     }
                 }
@@ -1197,9 +1090,6 @@
                 console.error('Error viewing schedule:', error);
             }
         };
-
-        // Initialize app
-        loadWorkplaces();
     </script>
 </body>
 </html>
