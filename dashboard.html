@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workplace Scheduler Dashboard</title>
     <style>
-        /* All the same CSS from before */
         * {
             margin: 0;
             padding: 0;
@@ -39,6 +38,14 @@
             gap: 1rem;
         }
 
+        .admin-badge {
+            background: #28a745;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            display: none;
+        }
+
         .logout-btn {
             background: rgba(255,255,255,0.2);
             color: white;
@@ -59,7 +66,7 @@
             padding: 2rem;
         }
 
-        .workplace-section {
+        .workplace-section, .admin-section {
             background: white;
             border-radius: 15px;
             padding: 2rem;
@@ -67,11 +74,22 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
 
+        .admin-section {
+            border: 2px solid #28a745;
+        }
+
         .section-title {
             font-size: 1.25rem;
             font-weight: 600;
             margin-bottom: 1.5rem;
             color: #333;
+        }
+
+        .admin-title {
+            color: #28a745;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .workplace-grid {
@@ -116,7 +134,7 @@
             display: none;
         }
 
-        .action-buttons {
+        .action-buttons, .admin-buttons {
             display: flex;
             flex-wrap: wrap;
             gap: 1rem;
@@ -141,10 +159,11 @@
         .btn-warning { background: #ffc107; color: #212529; }
         .btn-danger { background: #dc3545; color: white; }
         .btn-secondary { background: #6c757d; color: white; }
+        .btn-admin { background: #28a745; color: white; }
 
         .btn:hover { transform: translateY(-1px); }
 
-        .schedule-form {
+        .form-section {
             background: #f8f9fa;
             padding: 2rem;
             border-radius: 12px;
@@ -163,7 +182,7 @@
             color: #555;
         }
 
-        .form-group input, .form-group select {
+        .form-group input, .form-group select, .form-group textarea {
             width: 100%;
             padding: 0.75rem;
             border: 2px solid #e1e5e9;
@@ -172,7 +191,7 @@
             transition: border-color 0.3s ease;
         }
 
-        .form-group input:focus, .form-group select:focus {
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
             outline: none;
             border-color: #667eea;
         }
@@ -181,6 +200,30 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1rem;
+        }
+
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .hours-grid {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .day-hours {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+        }
+
+        .day-hours h5 {
+            margin-bottom: 0.5rem;
+            color: #333;
         }
 
         .schedule-display {
@@ -247,10 +290,6 @@
             background: #ffebee;
         }
 
-        .worker-summary {
-            margin-top: 2rem;
-        }
-
         .worker-table {
             width: 100%;
             border-collapse: collapse;
@@ -271,6 +310,16 @@
 
         .worker-table tr:hover {
             background: #f8f9fa;
+        }
+
+        .worker-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .worker-actions .btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
         }
 
         .loading {
@@ -307,12 +356,52 @@
             margin-bottom: 1rem;
         }
 
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .close {
+            font-size: 2rem;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
         @media (max-width: 768px) {
             .container { padding: 1rem; }
             .workplace-grid { grid-template-columns: 1fr; }
-            .action-buttons { flex-direction: column; }
-            .form-row { grid-template-columns: 1fr; }
+            .action-buttons, .admin-buttons { flex-direction: column; }
+            .form-row, .form-row-3 { grid-template-columns: 1fr; }
             .stats { grid-template-columns: 1fr; }
+            .modal-content { margin: 10% auto; width: 95%; }
         }
     </style>
 </head>
@@ -321,12 +410,22 @@
         <h1>🏢 Workplace Scheduler</h1>
         <div class="user-info">
             <span id="userEmail"></span>
-            <span id="adminBadge" style="background: #28a745; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; display: none;">ADMIN</span>
+            <span id="adminBadge" class="admin-badge">ADMIN</span>
             <button class="logout-btn" onclick="logout()">Logout</button>
         </div>
     </div>
 
     <div class="container">
+        <!-- Admin Controls -->
+        <div id="adminSection" class="admin-section" style="display: none;">
+            <h2 class="section-title admin-title">🔧 Admin Controls</h2>
+            <div class="admin-buttons">
+                <button class="btn btn-admin" onclick="showManageHours()">⏰ Manage Hours</button>
+                <button class="btn btn-admin" onclick="showManageWorkers()">👥 Manage Workers</button>
+                <button class="btn btn-admin" onclick="showAddWorker()">➕ Add Worker</button>
+            </div>
+        </div>
+
         <!-- Workplace Selection -->
         <div class="workplace-section">
             <h2 class="section-title">Select Workplace</h2>
@@ -356,10 +455,11 @@
                     <button class="btn btn-success" onclick="viewCurrentSchedule()">👁️ View Current Schedule</button>
                     <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
                     <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
+                    <button class="btn btn-secondary" onclick="viewWorkers()">👥 View Workers</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
-                <div class="schedule-form" id="generateForm" style="display: none;">
+                <div class="form-section" id="generateForm" style="display: none;">
                     <h3>Generate New Schedule</h3>
                     <div class="form-row">
                         <div class="form-group">
@@ -371,12 +471,31 @@
                             <input type="number" id="workersPerShift" value="2" min="1" max="5">
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="scheduleVariation">Schedule Variation</label>
+                            <select id="scheduleVariation">
+                                <option value="balanced">Balanced Distribution</option>
+                                <option value="random">Random Assignment</option>
+                                <option value="work_study_first">Work Study Priority</option>
+                                <option value="fair_rotation">Fair Rotation</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="shiftLength">Preferred Shift Length</label>
+                            <select id="shiftLength">
+                                <option value="flexible">Flexible (2-4 hours)</option>
+                                <option value="short">Short (2-3 hours)</option>
+                                <option value="long">Long (3-4 hours)</option>
+                            </select>
+                        </div>
+                    </div>
                     <button class="btn btn-success" onclick="generateSchedule()">🚀 Generate Schedule</button>
                     <button class="btn btn-secondary" onclick="hideAllForms()">Cancel</button>
                 </div>
 
                 <!-- Check Availability Form -->
-                <div class="schedule-form" id="availabilityForm" style="display: none;">
+                <div class="form-section" id="availabilityForm" style="display: none;">
                     <h3>Check Worker Availability</h3>
                     <div class="form-row">
                         <div class="form-group">
@@ -414,8 +533,77 @@
         </div>
     </div>
 
+    <!-- Modal for Manage Hours -->
+    <div id="hoursModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⏰ Manage Hours of Operation</h3>
+                <span class="close" onclick="closeModal('hoursModal')">&times;</span>
+            </div>
+            <div id="hoursModalContent">
+                <div class="loading">Loading hours...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Manage Workers -->
+    <div id="workersModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>👥 Manage Workers</h3>
+                <span class="close" onclick="closeModal('workersModal')">&times;</span>
+            </div>
+            <div id="workersModalContent">
+                <div class="loading">Loading workers...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Add/Edit Worker -->
+    <div id="workerFormModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="workerFormTitle">➕ Add Worker</h3>
+                <span class="close" onclick="closeModal('workerFormModal')">&times;</span>
+            </div>
+            <form id="workerForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="workerFirstName">First Name</label>
+                        <input type="text" id="workerFirstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="workerLastName">Last Name</label>
+                        <input type="text" id="workerLastName" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="workerEmail">Email</label>
+                        <input type="email" id="workerEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="workerWorkStudy">Work Study</label>
+                        <select id="workerWorkStudy">
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="workerAvailability">Availability (e.g., "Mon 09:00-17:00, Tue 10:00-16:00")</label>
+                    <textarea id="workerAvailability" rows="3" placeholder="Mon 09:00-17:00, Tue 10:00-16:00, Wed 08:00-14:00"></textarea>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button type="submit" class="btn btn-success">💾 Save Worker</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('workerFormModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script type="module">
-        // Check auth first (from login system)
+        // Check auth and setup
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         if (!user.email) {
             window.location.href = 'index.html';
@@ -424,21 +612,15 @@
         document.getElementById('userEmail').textContent = user.email;
         if (user.isAdmin) {
             document.getElementById('adminBadge').style.display = 'inline';
+            document.getElementById('adminSection').style.display = 'block';
         }
 
-        // Logout function
-        window.logout = function() {
-            localStorage.removeItem('user');
-            window.location.href = 'index.html';
-        };
-
-        // Import Firebase modules for WORKPLACE DATABASE
+        // Firebase setup
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
         import { 
             getFirestore, collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc
         } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
-        // WORKPLACE DATABASE CONFIG (separate from auth)
         const workplaceConfig = {
             apiKey: "AIzaSyBkkq4nPnmyfSOKtVLsO95rpAUsMDA1o0A",
             authDomain: "workplace-scheduler-ace38.firebaseapp.com", 
@@ -455,9 +637,10 @@
         let selectedWorkplace = null;
         let workers = [];
         let hours = {};
+        let editingWorkerId = null;
         const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-        // All the same functions from before...
+        // Utility functions
         const timeToHour = (timeStr) => {
             if (!timeStr) return 0;
             const [h, m] = timeStr.split(':').map(Number);
@@ -515,7 +698,7 @@
             return dayAvail.some(slot => slot.startHour <= startHour && endHour <= slot.endHour);
         };
 
-        // Initialize default workplaces
+        // Initialize default workplaces with basic hours
         async function initializeDefaultWorkplaces() {
             const workplaces = [
                 { 
@@ -561,21 +744,31 @@
 
             for (const workplace of workplaces) {
                 try {
-                    await setDoc(doc(db, 'workplaces', workplace.id), {
-                        name: workplace.name,
-                        hours_of_operation: workplace.hours,
-                        created_at: new Date().toISOString()
-                    });
+                    const docRef = doc(db, 'workplaces', workplace.id);
+                    const docSnap = await getDoc(docRef);
+                    
+                    if (!docSnap.exists()) {
+                        await setDoc(docRef, {
+                            name: workplace.name,
+                            hours_of_operation: workplace.hours,
+                            created_at: new Date().toISOString()
+                        });
+                    }
                 } catch (error) {
                     console.error(`Error creating ${workplace.id}:`, error);
                 }
             }
         }
 
-        // Initialize workplaces in background
         initializeDefaultWorkplaces();
 
-        // Rest of the functions remain the same...
+        // Logout function
+        window.logout = function() {
+            localStorage.removeItem('user');
+            window.location.href = 'index.html';
+        };
+
+        // Select workplace
         window.selectWorkplace = async function(id) {
             selectedWorkplace = id;
             
@@ -592,10 +785,12 @@
             document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Select an option above to get started.</div>';
         };
 
+        // Load workplace data
         async function loadWorkplaceData() {
             try {
                 console.log(`Loading data for ${selectedWorkplace}`);
                 
+                // Load workers
                 const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
                 workers = [];
                 
@@ -609,10 +804,12 @@
                         last_name: data['Last Name'] || 'Worker',
                         email: data['Email'] || 'no-email',
                         work_study: data['Work Study'] === 'Yes',
-                        availability
+                        availability,
+                        availability_text: data['Days & Times Available'] || ''
                     });
                 });
 
+                // Load operating hours
                 const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
                 if (workplaceDoc.exists()) {
                     hours = workplaceDoc.data().hours_of_operation || {};
@@ -629,6 +826,221 @@
             }
         }
 
+        // Modal functions
+        window.closeModal = function(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        };
+
+        // Admin: Manage Hours
+        window.showManageHours = async function() {
+            if (!user.isAdmin) {
+                alert('Admin access required');
+                return;
+            }
+
+            if (!selectedWorkplace) {
+                alert('Please select a workplace first');
+                return;
+            }
+
+            await loadWorkplaceData();
+            
+            let html = '<div class="hours-grid">';
+            
+            DAYS.forEach(day => {
+                const dayHours = hours[day] || [{ start: "09:00", end: "17:00" }];
+                html += `
+                    <div class="day-hours">
+                        <h5>${day}</h5>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Start Time</label>
+                                <input type="time" id="start_${day}" value="${dayHours[0]?.start || '09:00'}">
+                            </div>
+                            <div class="form-group">
+                                <label>End Time</label>
+                                <input type="time" id="end_${day}" value="${dayHours[0]?.end || '17:00'}">
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            html += '<button class="btn btn-success" onclick="saveHours()">💾 Save Hours</button>';
+            
+            document.getElementById('hoursModalContent').innerHTML = html;
+            document.getElementById('hoursModal').style.display = 'block';
+        };
+
+        // Save hours
+        window.saveHours = async function() {
+            try {
+                const newHours = {};
+                
+                DAYS.forEach(day => {
+                    const start = document.getElementById(`start_${day}`).value;
+                    const end = document.getElementById(`end_${day}`).value;
+                    
+                    if (start && end) {
+                        newHours[day] = [{ start, end }];
+                    }
+                });
+                
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace), {
+                    hours_of_operation: newHours,
+                    updated_at: new Date().toISOString()
+                });
+                
+                hours = newHours;
+                alert('✅ Hours updated successfully!');
+                closeModal('hoursModal');
+                
+            } catch (error) {
+                console.error('Error saving hours:', error);
+                alert('❌ Error saving hours');
+            }
+        };
+
+        // Admin: Manage Workers
+        window.showManageWorkers = async function() {
+            if (!user.isAdmin) {
+                alert('Admin access required');
+                return;
+            }
+
+            if (!selectedWorkplace) {
+                alert('Please select a workplace first');
+                return;
+            }
+
+            await loadWorkplaceData();
+            displayWorkersInModal();
+        };
+
+        function displayWorkersInModal() {
+            let html = `
+                <div style="margin-bottom: 1rem;">
+                    <button class="btn btn-success" onclick="showAddWorker()">➕ Add New Worker</button>
+                </div>
+                <table class="worker-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Work Study</th>
+                            <th>Availability</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            workers.forEach(worker => {
+                html += `
+                    <tr>
+                        <td>${worker.first_name} ${worker.last_name}</td>
+                        <td>${worker.email}</td>
+                        <td>${worker.work_study ? '✅ Yes' : '❌ No'}</td>
+                        <td><small>${worker.availability_text}</small></td>
+                        <td>
+                            <div class="worker-actions">
+                                <button class="btn btn-warning" onclick="editWorker('${worker.id}')">✏️ Edit</button>
+                                <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')">🗑️ Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            
+            document.getElementById('workersModalContent').innerHTML = html;
+            document.getElementById('workersModal').style.display = 'block';
+        }
+
+        // Add Worker
+        window.showAddWorker = function() {
+            if (!user.isAdmin) {
+                alert('Admin access required');
+                return;
+            }
+
+            editingWorkerId = null;
+            document.getElementById('workerFormTitle').textContent = '➕ Add Worker';
+            document.getElementById('workerForm').reset();
+            closeModal('workersModal');
+            document.getElementById('workerFormModal').style.display = 'block';
+        };
+
+        // Edit Worker
+        window.editWorker = function(workerId) {
+            const worker = workers.find(w => w.id === workerId);
+            if (!worker) return;
+
+            editingWorkerId = workerId;
+            document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
+            
+            document.getElementById('workerFirstName').value = worker.first_name;
+            document.getElementById('workerLastName').value = worker.last_name;
+            document.getElementById('workerEmail').value = worker.email;
+            document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
+            document.getElementById('workerAvailability').value = worker.availability_text;
+            
+            closeModal('workersModal');
+            document.getElementById('workerFormModal').style.display = 'block';
+        };
+
+        // Delete Worker
+        window.deleteWorker = async function(workerId) {
+            if (!confirm('Are you sure you want to delete this worker?')) return;
+
+            try {
+                await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId));
+                alert('✅ Worker deleted successfully!');
+                await loadWorkplaceData();
+                displayWorkersInModal();
+            } catch (error) {
+                console.error('Error deleting worker:', error);
+                alert('❌ Error deleting worker');
+            }
+        };
+
+        // Save Worker (Add/Edit)
+        document.getElementById('workerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const workerData = {
+                'First Name': document.getElementById('workerFirstName').value,
+                'Last Name': document.getElementById('workerLastName').value,
+                'Email': document.getElementById('workerEmail').value,
+                'Work Study': document.getElementById('workerWorkStudy').value,
+                'Days & Times Available': document.getElementById('workerAvailability').value,
+                'updated_at': new Date().toISOString()
+            };
+
+            try {
+                if (editingWorkerId) {
+                    // Update existing worker
+                    await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', editingWorkerId), workerData);
+                    alert('✅ Worker updated successfully!');
+                } else {
+                    // Add new worker
+                    workerData.created_at = new Date().toISOString();
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'workers'), workerData);
+                    alert('✅ Worker added successfully!');
+                }
+                
+                closeModal('workerFormModal');
+                await loadWorkplaceData();
+                
+            } catch (error) {
+                console.error('Error saving worker:', error);
+                alert('❌ Error saving worker');
+            }
+        });
+
+        // Show/hide forms
         window.showGenerateForm = function() {
             hideAllForms();
             document.getElementById('generateForm').style.display = 'block';
@@ -640,11 +1052,72 @@
         };
 
         window.hideAllForms = function() {
-            document.querySelectorAll('.schedule-form').forEach(form => {
+            document.querySelectorAll('.form-section').forEach(form => {
                 form.style.display = 'none';
             });
         };
 
+        // View Workers
+        window.viewWorkers = function() {
+            if (workers.length === 0) {
+                document.getElementById('scheduleDisplay').innerHTML = `
+                    <div class="schedule-display">
+                        <h3>👥 Workers for ${selectedWorkplace}</h3>
+                        <div class="warning">No workers found for this workplace.</div>
+                        ${user.isAdmin ? '<button class="btn btn-success" onclick="showAddWorker()">➕ Add First Worker</button>' : ''}
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="schedule-display">
+                    <h3>👥 Workers for ${selectedWorkplace}</h3>
+                    <div class="stats">
+                        <div class="stat-card">
+                            <div class="stat-number">${workers.length}</div>
+                            <div class="stat-label">Total Workers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${workers.filter(w => w.work_study).length}</div>
+                            <div class="stat-label">Work Study</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${workers.filter(w => !w.work_study).length}</div>
+                            <div class="stat-label">Regular Workers</div>
+                        </div>
+                    </div>
+                    <table class="worker-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Work Study</th>
+                                <th>Availability</th>
+                                <th>Contact</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            workers.forEach(worker => {
+                html += `
+                    <tr>
+                        <td><strong>${worker.first_name} ${worker.last_name}</strong></td>
+                        <td>${worker.email}</td>
+                        <td>${worker.work_study ? '<span style="color: #28a745;">✅ Yes</span>' : '❌ No'}</td>
+                        <td><small>${worker.availability_text}</small></td>
+                        <td><button class="btn btn-primary" onclick="contactWorker('${worker.email}')">📧 Contact</button></td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            document.getElementById('scheduleDisplay').innerHTML = html;
+            hideAllForms();
+        };
+
+        // Generate schedule with variations
         window.generateSchedule = async function() {
             if (!selectedWorkplace) {
                 alert('Please select a workplace first.');
@@ -652,7 +1125,7 @@
             }
 
             if (workers.length === 0) {
-                alert('No workers found for this workplace. Please add workers to the database first.');
+                alert('No workers found for this workplace. Please add workers first.');
                 return;
             }
 
@@ -663,12 +1136,14 @@
 
             const maxHours = parseInt(document.getElementById('maxHours').value);
             const workersPerShift = parseInt(document.getElementById('workersPerShift').value);
+            const variation = document.getElementById('scheduleVariation').value;
+            const shiftLength = document.getElementById('shiftLength').value;
             
             document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">🔄 Generating schedule...</div>';
             
             try {
-                const schedule = createSimpleSchedule(maxHours, workersPerShift);
-                await saveSchedule(schedule);
+                const schedule = createVariedSchedule(maxHours, workersPerShift, variation, shiftLength);
+                await saveSchedule(schedule, variation);
                 displaySchedule(schedule, false);
                 hideAllForms();
             } catch (error) {
@@ -677,12 +1152,26 @@
             }
         };
 
-        function createSimpleSchedule(maxHours, workersPerShift) {
+        // Create varied schedules
+        function createVariedSchedule(maxHours, workersPerShift, variation, shiftLength) {
             const schedule = {};
             const workerHours = {};
             
             workers.forEach(w => workerHours[w.email] = 0);
             
+            // Determine shift lengths based on preference
+            const getShiftLength = (start, end) => {
+                const maxTime = end - start;
+                switch (shiftLength) {
+                    case 'short':
+                        return Math.min(3, Math.max(2, maxTime));
+                    case 'long':
+                        return Math.min(4, Math.max(3, maxTime));
+                    default: // flexible
+                        return Math.min(4, Math.max(2, maxTime));
+                }
+            };
+
             DAYS.forEach(day => {
                 const dayHours = hours[day];
                 if (!dayHours || dayHours.length === 0) return;
@@ -695,30 +1184,66 @@
                     
                     let current = start;
                     while (current < end) {
-                        const maxShiftLength = Math.min(4, end - current);
-                        const shiftEnd = current + Math.max(2, maxShiftLength);
+                        const shiftDuration = getShiftLength(current, end);
+                        const shiftEnd = Math.min(current + shiftDuration, end);
                         
-                        if (shiftEnd > end) break;
+                        if (shiftEnd - current < 2) break;
                         
+                        // Get available workers
                         const available = workers.filter(worker => {
                             const remainingHours = maxHours - (workerHours[worker.email] || 0);
-                            const shiftDuration = shiftEnd - current;
+                            const duration = shiftEnd - current;
                             
-                            if (remainingHours < shiftDuration) return false;
+                            if (remainingHours < duration) return false;
                             return isWorkerAvailable(worker, day, current, shiftEnd);
                         });
                         
-                        available.sort((a, b) => {
-                            if (a.work_study && !b.work_study) return -1;
-                            if (!a.work_study && b.work_study) return 1;
-                            return (workerHours[a.email] || 0) - (workerHours[b.email] || 0);
-                        });
+                        // Apply different selection strategies
+                        let selected = [];
+                        const duration = shiftEnd - current;
                         
-                        const shiftDuration = shiftEnd - current;
-                        const selected = available.slice(0, workersPerShift);
+                        switch (variation) {
+                            case 'random':
+                                // Shuffle and take first N
+                                const shuffled = [...available].sort(() => Math.random() - 0.5);
+                                selected = shuffled.slice(0, workersPerShift);
+                                break;
+                                
+                            case 'work_study_first':
+                                // Prioritize work study students
+                                const workStudy = available.filter(w => w.work_study);
+                                const regular = available.filter(w => !w.work_study);
+                                workStudy.sort((a, b) => (workerHours[a.email] || 0) - (workerHours[b.email] || 0));
+                                regular.sort((a, b) => (workerHours[a.email] || 0) - (workerHours[b.email] || 0));
+                                selected = [...workStudy, ...regular].slice(0, workersPerShift);
+                                break;
+                                
+                            case 'fair_rotation':
+                                // Ensure fair distribution based on total hours worked
+                                available.sort((a, b) => {
+                                    const hoursA = workerHours[a.email] || 0;
+                                    const hoursB = workerHours[b.email] || 0;
+                                    // Add some randomness to break ties
+                                    return hoursA - hoursB + (Math.random() - 0.5) * 0.1;
+                                });
+                                selected = available.slice(0, workersPerShift);
+                                break;
+                                
+                            default: // balanced
+                                // Balance work study and fairness
+                                available.sort((a, b) => {
+                                    if (a.work_study && !b.work_study) return -1;
+                                    if (!a.work_study && b.work_study) return 1;
+                                    const hoursA = workerHours[a.email] || 0;
+                                    const hoursB = workerHours[b.email] || 0;
+                                    return hoursA - hoursB;
+                                });
+                                selected = available.slice(0, workersPerShift);
+                        }
                         
+                        // Update hours
                         selected.forEach(worker => {
-                            workerHours[worker.email] = (workerHours[worker.email] || 0) + shiftDuration;
+                            workerHours[worker.email] = (workerHours[worker.email] || 0) + duration;
                         });
                         
                         const shift = {
@@ -742,13 +1267,16 @@
             return schedule;
         }
 
-        async function saveSchedule(schedule) {
+        // Save schedule
+        async function saveSchedule(schedule, variation) {
             try {
                 const scheduleData = {
                     days: schedule,
                     createdAt: new Date().toISOString(),
                     workplaceId: selectedWorkplace,
-                    name: `${selectedWorkplace} Schedule ${new Date().toLocaleDateString()}`
+                    name: `${selectedWorkplace} Schedule ${new Date().toLocaleDateString()}`,
+                    variation: variation,
+                    generatedBy: user.email
                 };
                 
                 await addDoc(collection(db, 'workplaces', selectedWorkplace, 'schedules'), scheduleData);
@@ -759,6 +1287,7 @@
             }
         }
 
+        // View current schedule
         window.viewCurrentSchedule = async function() {
             try {
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading current schedule...</div>';
@@ -781,6 +1310,7 @@
             }
         };
 
+        // View history
         window.viewHistory = async function() {
             try {
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading schedule history...</div>';
@@ -798,11 +1328,13 @@
                     snapshot.forEach((doc, index) => {
                         const data = doc.data();
                         const date = new Date(data.createdAt).toLocaleDateString();
+                        const time = new Date(data.createdAt).toLocaleTimeString();
                         html += `
                             <div style="padding: 1rem; border: 1px solid #dee2e6; margin-bottom: 0.5rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
                                 <div>
                                     <strong>${data.name || 'Schedule'}</strong><br>
-                                    <small>Created: ${date}</small>
+                                    <small>Created: ${date} at ${time}</small><br>
+                                    <small>Variation: ${data.variation || 'balanced'} | By: ${data.generatedBy || 'Unknown'}</small>
                                     ${index === 0 ? '<span style="color: #28a745; font-weight: bold;"> (Current)</span>' : ''}
                                 </div>
                                 <div>
@@ -822,6 +1354,7 @@
             }
         };
 
+        // Find available workers
         window.findAvailable = function() {
             const day = document.getElementById('availDay').value;
             const start = document.getElementById('availStart').value;
@@ -906,6 +1439,7 @@
             hideAllForms();
         };
 
+        // Display schedule
         function displaySchedule(schedule, isCurrent = false) {
             const workerHours = calculateWorkerHours(schedule);
             const totalShifts = Object.values(schedule).flat().length;
