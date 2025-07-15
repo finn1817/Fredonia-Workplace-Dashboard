@@ -491,6 +491,7 @@
                     <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
                     <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
                     <button class="btn btn-secondary" onclick="viewWorkers()">👥 View Workers</button>
+                    <button class="btn btn-warning" onclick="showLastMinuteCheck()">🚨 Last Minute</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
@@ -677,6 +678,7 @@
         let workers = [];
         let hours = {};
         let editingWorkerId = null;
+        let schedule = {};
         const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
         // Utility functions from parser.py
@@ -750,6 +752,16 @@
             const dayAvail = worker.availability[day] || [];
             return dayAvail.some(slot => slot.start_hour <= startHour && endHour <= slot.end_hour);
         };
+
+        // Utility function to shuffle array
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
 
         // Advanced scheduling functions from scheduler.py
         const overlaps = (s1, e1, s2, e2) => {
@@ -846,70 +858,6 @@
             return issues;
         };
 
-        // Initialize default workplaces
-        async function initializeDefaultWorkplaces() {
-            const workplaces = [
-                { 
-                    id: 'esports_lounge', 
-                    name: '🎮 eSports Lounge',
-                    hours: {
-                        Monday: [{ start: "09:00", end: "17:00" }],
-                        Tuesday: [{ start: "09:00", end: "17:00" }],
-                        Wednesday: [{ start: "09:00", end: "17:00" }],
-                        Thursday: [{ start: "09:00", end: "17:00" }],
-                        Friday: [{ start: "09:00", end: "17:00" }],
-                        Saturday: [{ start: "10:00", end: "16:00" }],
-                        Sunday: [{ start: "12:00", end: "18:00" }]
-                    }
-                },
-                { 
-                    id: 'esports_arena', 
-                    name: '🏟️ eSports Arena',
-                    hours: {
-                        Monday: [{ start: "10:00", end: "20:00" }],
-                        Tuesday: [{ start: "10:00", end: "20:00" }],
-                        Wednesday: [{ start: "10:00", end: "20:00" }],
-                        Thursday: [{ start: "10:00", end: "20:00" }],
-                        Friday: [{ start: "10:00", end: "22:00" }],
-                        Saturday: [{ start: "09:00", end: "22:00" }],
-                        Sunday: [{ start: "11:00", end: "19:00" }]
-                    }
-                },
-                { 
-                    id: 'it_service_center', 
-                    name: '💻 IT Service Center',
-                    hours: {
-                        Monday: [{ start: "08:00", end: "16:00" }],
-                        Tuesday: [{ start: "08:00", end: "16:00" }],
-                        Wednesday: [{ start: "08:00", end: "16:00" }],
-                        Thursday: [{ start: "08:00", end: "16:00" }],
-                        Friday: [{ start: "08:00", end: "16:00" }],
-                        Saturday: [{ start: "09:00", end: "15:00" }],
-                        Sunday: [{ start: "10:00", end: "14:00" }]
-                    }
-                }
-            ];
-
-            for (const workplace of workplaces) {
-                try {
-                    const docRef = doc(db, 'workplaces', workplace.id);
-                    const docSnap = await getDoc(docRef);
-                    
-                    if (!docSnap.exists()) {
-                        await setDoc(docRef, {
-                            name: workplace.name,
-                            hours_of_operation: workplace.hours,
-                            created_at: new Date().toISOString()
-                        });
-                    }
-                } catch (error) {
-                    console.error(`Error creating ${workplace.id}:`, error);
-                }
-            }
-        }
-
-        initializeDefaultWorkplaces();
-
         // Logout function
         window.logout = function() {
             localStorage.removeItem('user');
@@ -929,17 +877,6 @@
             const schedule = {};
             const unfilledShifts = [];
             const shiftLengths = [2, 3, 4, 5];
-            
-            // Shuffle for randomness
-            const shuffleArray = (array) => {
-                const arr = [...array];
-                for (let i = arr.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [arr[i], arr[j]] = [arr[j], arr[i]];
-                }
-                return arr;
-            };
-            
             const shuffledLengths = shuffleArray(shiftLengths);
 
             // Track hours for each worker
@@ -1208,7 +1145,71 @@
             };
         };
 
-// Select workplace
+        // Initialize default workplaces
+        async function initializeDefaultWorkplaces() {
+            const workplaces = [
+                { 
+                    id: 'esports_lounge', 
+                    name: '🎮 eSports Lounge',
+                    hours: {
+                        Monday: [{ start: "09:00", end: "17:00" }],
+                        Tuesday: [{ start: "09:00", end: "17:00" }],
+                        Wednesday: [{ start: "09:00", end: "17:00" }],
+                        Thursday: [{ start: "09:00", end: "17:00" }],
+                        Friday: [{ start: "09:00", end: "17:00" }],
+                        Saturday: [{ start: "10:00", end: "16:00" }],
+                        Sunday: [{ start: "12:00", end: "18:00" }]
+                    }
+                },
+                { 
+                    id: 'esports_arena', 
+                    name: '🏟️ eSports Arena',
+                    hours: {
+                        Monday: [{ start: "10:00", end: "20:00" }],
+                        Tuesday: [{ start: "10:00", end: "20:00" }],
+                        Wednesday: [{ start: "10:00", end: "20:00" }],
+                        Thursday: [{ start: "10:00", end: "20:00" }],
+                        Friday: [{ start: "10:00", end: "22:00" }],
+                        Saturday: [{ start: "09:00", end: "22:00" }],
+                        Sunday: [{ start: "11:00", end: "19:00" }]
+                    }
+                },
+                { 
+                    id: 'it_service_center', 
+                    name: '💻 IT Service Center',
+                    hours: {
+                        Monday: [{ start: "08:00", end: "16:00" }],
+                        Tuesday: [{ start: "08:00", end: "16:00" }],
+                        Wednesday: [{ start: "08:00", end: "16:00" }],
+                        Thursday: [{ start: "08:00", end: "16:00" }],
+                        Friday: [{ start: "08:00", end: "16:00" }],
+                        Saturday: [{ start: "09:00", end: "15:00" }],
+                        Sunday: [{ start: "10:00", end: "14:00" }]
+                    }
+                }
+            ];
+
+            for (const workplace of workplaces) {
+                try {
+                    const docRef = doc(db, 'workplaces', workplace.id);
+                    const docSnap = await getDoc(docRef);
+                    
+                    if (!docSnap.exists()) {
+                        await setDoc(docRef, {
+                            name: workplace.name,
+                            hours_of_operation: workplace.hours,
+                            created_at: new Date().toISOString()
+                        });
+                    }
+                } catch (error) {
+                    console.error(`Error creating ${workplace.id}:`, error);
+                }
+            }
+        }
+
+        initializeDefaultWorkplaces();
+
+        // Select workplace
         window.selectWorkplace = async function(id) {
             selectedWorkplace = id;
             
@@ -1500,13 +1501,18 @@
         // View Workers
         window.viewWorkers = function() {
             if (workers.length === 0) {
-                document.getElementById('scheduleDisplay').innerHTML = `
+                let html = `
                     <div class="schedule-display">
                         <h3>👥 Workers for ${selectedWorkplace}</h3>
                         <div class="warning">No workers found for this workplace.</div>
-                        ${user.isAdmin ? '<button class="btn btn-success" onclick="showAddWorker()">➕ Add First Worker</button>' : ''}
-                    </div>
                 `;
+                
+                if (user.isAdmin) {
+                    html += '<button class="btn btn-success" onclick="showAddWorker()">➕ Add First Worker</button>';
+                }
+                
+                html += '</div>';
+                document.getElementById('scheduleDisplay').innerHTML = html;
                 return;
             }
 
@@ -1552,7 +1558,19 @@
                 `;
             });
 
-            html += '</tbody></table></div>';
+            html += '</tbody></table>';
+            
+            // Add admin action buttons if user is admin
+            if (user.isAdmin) {
+                html += `
+                    <div style="margin-top: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button class="btn btn-warning" onclick="showLastMinuteCheck()">🚨 Last Minute Check</button>
+                        <button class="btn btn-success" onclick="addNewShift()">➕ Add New Shift</button>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
             document.getElementById('scheduleDisplay').innerHTML = html;
             hideAllForms();
         };
@@ -1620,7 +1638,7 @@
                 );
                 
                 const {
-                    schedule,
+                    schedule: generatedSchedule,
                     assignedHours,
                     lowHours,
                     unassigned,
@@ -1629,6 +1647,9 @@
                     wsIssues,
                     minHoursIssues
                 } = result;
+
+                // Update global schedule
+                schedule = generatedSchedule;
 
                 await saveSchedule(schedule, variation);
                 
@@ -1723,137 +1744,6 @@
             };
         }
 
-        // View current schedule
-        window.viewCurrentSchedule = async function() {
-            try {
-                document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading current schedule...</div>';
-                
-                const snapshot = await getDocs(query(
-                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
-                    orderBy('createdAt', 'desc')
-                ));
-                
-                if (!snapshot.empty) {
-                    const doc = snapshot.docs[0];
-                    const scheduleData = doc.data();
-                    const schedule = scheduleData.days;
-                    
-                    // Calculate assigned hours
-                    const assignedHours = calculateAssignedHours(schedule);
-                    const lowHours = workers
-                        .filter(w => !w.work_study && assignedHours[w.email] < 4)
-                        .map(w => `${w.first_name} ${w.last_name}`);
-                    const unassigned = workers
-                        .filter(w => assignedHours[w.email] === 0)
-                        .map(w => `${w.first_name} ${w.last_name}`);
-                    
-                    displaySchedule(schedule, assignedHours, lowHours, unassigned, true);
-                } else {
-                    document.getElementById('scheduleDisplay').innerHTML = '<div class="warning">No current schedule found. Generate a new one!</div>';
-                }
-            } catch (error) {
-                console.error('Error loading current schedule:', error);
-                document.getElementById('scheduleDisplay').innerHTML = '<div class="error">Error loading schedule.</div>';
-            }
-        };
-
-        // Calculate assigned hours from schedule
-        function calculateAssignedHours(schedule) {
-            const assignedHours = {};
-            
-            Object.values(schedule).forEach(shifts => {
-                shifts.forEach(shift => {
-                    const duration = timeToHour(shift.end) - timeToHour(shift.start);
-                    (shift.raw_assigned || []).forEach(email => {
-                        assignedHours[email] = (assignedHours[email] || 0) + duration;
-                    });
-                });
-            });
-            
-            return assignedHours;
-        }
-
-        // View schedule history
-        window.viewHistory = async function() {
-            try {
-                document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading schedule history...</div>';
-                
-                const snapshot = await getDocs(query(
-                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
-                    orderBy('createdAt', 'desc')
-                ));
-                
-                let html = '<div class="schedule-display"><h3>📚 Schedule History</h3>';
-                
-                if (snapshot.empty) {
-                    html += '<p>No schedules found.</p>';
-                } else {
-                    snapshot.forEach((doc, index) => {
-                        const data = doc.data();
-                        const date = new Date(data.createdAt).toLocaleDateString();
-                        const time = new Date(data.createdAt).toLocaleTimeString();
-                        html += `
-                            <div style="padding: 1rem; border: 1px solid #dee2e6; margin-bottom: 0.5rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <strong>${data.name || 'Schedule'}</strong><br>
-                                    <small>Created: ${date} at ${time}</small><br>
-                                    <small>Variation: ${data.variation || 'balanced'} | By: ${data.generatedBy || 'Unknown'}</small>
-                                    ${index === 0 ? '<span style="color: #28a745; font-weight: bold;"> (Current)</span>' : ''}
-                                </div>
-                                <div>
-                                    <button class="btn btn-secondary" onclick="viewScheduleById('${doc.id}')">View</button>
-                                    <button class="btn btn-danger" onclick="deleteSchedule('${doc.id}')">Delete</button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                }
-                
-                html += '</div>';
-                document.getElementById('scheduleDisplay').innerHTML = html;
-            } catch (error) {
-                console.error('Error loading history:', error);
-                document.getElementById('scheduleDisplay').innerHTML = '<div class="error">Error loading schedule history.</div>';
-            }
-        };
-
-        // View schedule by ID
-        window.viewScheduleById = async function(scheduleId) {
-            try {
-                const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleId));
-                if (docSnap.exists()) {
-                    const scheduleData = docSnap.data();
-                    const schedule = scheduleData.days;
-                    
-                    const assignedHours = calculateAssignedHours(schedule);
-                    const lowHours = workers
-                        .filter(w => !w.work_study && assignedHours[w.email] < 4)
-                        .map(w => `${w.first_name} ${w.last_name}`);
-                    const unassigned = workers
-                        .filter(w => assignedHours[w.email] === 0)
-                        .map(w => `${w.first_name} ${w.last_name}`);
-                    
-                    displaySchedule(schedule, assignedHours, lowHours, unassigned, false);
-                }
-            } catch (error) {
-                console.error('Error viewing schedule:', error);
-            }
-        };
-
-        // Delete schedule
-        window.deleteSchedule = async function(scheduleId) {
-            if (confirm('Delete this schedule? This cannot be undone.')) {
-                try {
-                    await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleId));
-                    alert('✅ Schedule deleted.');
-                    viewHistory();
-                } catch (error) {
-                    console.error('Error deleting schedule:', error);
-                    alert('❌ Error deleting schedule.');
-                }
-            }
-        };
-
         // Display schedule with enhanced functionality
         function displaySchedule(schedule, assignedHours, lowHours, unassigned, isCurrent = false) {
             const totalShifts = Object.values(schedule).flat().length;
@@ -1909,10 +1799,12 @@
                                     ${shift.assigned.join(', ')}
                                 </div>
                             </div>
+                            ${user.isAdmin ? `
                             <div class="shift-actions">
                                 <button class="btn btn-warning" onclick="editShift('${day}', ${index})">✏️ Edit</button>
                                 ${unfilled ? '<button class="btn btn-info" onclick="suggestAlternatives(\'' + day + '\', ' + index + ')">💡 Suggest</button>' : ''}
                             </div>
+                            ` : ''}
                         </div>
                     `;
                 });
@@ -1963,32 +1855,170 @@
             
             html += '</tbody></table></div>';
             
-            // Action buttons
-            html += `
-                <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
-                    <button class="btn btn-success" onclick="saveCurrentSchedule()">💾 Save Schedule</button>
-                    <button class="btn btn-info" onclick="emailSchedule()">📧 Email Schedule</button>
-                    <button class="btn btn-secondary" onclick="printSchedule()">🖨️ Print Schedule</button>
-                    <button class="btn btn-warning" onclick="exportSchedule()">📤 Export Excel</button>
-                </div>
-            `;
+            // Action buttons (only show admin buttons for admins)
+            if (user.isAdmin) {
+                html += `
+                    <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button class="btn btn-success" onclick="saveCurrentSchedule()">💾 Save Schedule</button>
+                        <button class="btn btn-success" onclick="addNewShift()">➕ Add New Shift</button>
+                        <button class="btn btn-info" onclick="emailSchedule()">📧 Email Schedule</button>
+                        <button class="btn btn-secondary" onclick="printSchedule()">🖨️ Print Schedule</button>
+                        <button class="btn btn-warning" onclick="exportSchedule()">📤 Export Excel</button>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="printSchedule()">🖨️ Print Schedule</button>
+                    </div>
+                `;
+            }
             
             html += '</div>';
             document.getElementById('scheduleDisplay').innerHTML = html;
         }
 
-        // Edit shift functionality
-        window.editShift = function(day, shiftIndex) {
-            const shift = schedule[day][shiftIndex];
-            // Implementation for editing shifts would go here
-            alert('Shift editing functionality - to be implemented');
+        // View current schedule
+        window.viewCurrentSchedule = async function() {
+            try {
+                document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading current schedule...</div>';
+                
+                const snapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                    orderBy('createdAt', 'desc')
+                ));
+                
+                if (!snapshot.empty) {
+                    const doc = snapshot.docs[0];
+                    const scheduleData = doc.data();
+                    schedule = scheduleData.days;
+                    
+                    // Calculate assigned hours
+                    const assignedHours = calculateAssignedHours(schedule);
+                    const lowHours = workers
+                        .filter(w => !w.work_study && assignedHours[w.email] < 4)
+                        .map(w => `${w.first_name} ${w.last_name}`);
+                    const unassigned = workers
+                        .filter(w => assignedHours[w.email] === 0)
+                        .map(w => `${w.first_name} ${w.last_name}`);
+                    
+                    displaySchedule(schedule, assignedHours, lowHours, unassigned, true);
+                } else {
+                    document.getElementById('scheduleDisplay').innerHTML = '<div class="warning">No current schedule found. Generate a new one!</div>';
+                }
+            } catch (error) {
+                console.error('Error loading current schedule:', error);
+                document.getElementById('scheduleDisplay').innerHTML = '<div class="error">Error loading schedule.</div>';
+            }
         };
 
-        // Suggest alternatives for unfilled shifts
-        window.suggestAlternatives = function(day, shiftIndex) {
-            const shift = schedule[day][shiftIndex];
-            // Implementation for suggesting alternatives would go here
-            alert('Alternative suggestions - to be implemented');
+        // Calculate assigned hours from schedule
+        function calculateAssignedHours(schedule) {
+            const assignedHours = {};
+            
+            Object.values(schedule).forEach(shifts => {
+                shifts.forEach(shift => {
+                    const duration = timeToHour(shift.end) - timeToHour(shift.start);
+                    (shift.raw_assigned || []).forEach(email => {
+                        assignedHours[email] = (assignedHours[email] || 0) + duration;
+                    });
+                });
+            });
+            
+            return assignedHours;
+        }
+
+        // View schedule history
+        window.viewHistory = async function() {
+            try {
+                document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading schedule history...</div>';
+                
+                const snapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                    orderBy('createdAt', 'desc')
+                ));
+                
+                let html = '<div class="schedule-display"><h3>📚 Schedule History</h3>';
+                
+                if (snapshot.empty) {
+                    html += '<p>No schedules found.</p>';
+                } else {
+                    snapshot.forEach((doc, index) => {
+                        const data = doc.data();
+                        const date = new Date(data.createdAt).toLocaleDateString();
+                        const time = new Date(data.createdAt).toLocaleTimeString();
+                        
+                        const editActions = user.isAdmin ? `
+                            <button class="btn btn-secondary" onclick="viewScheduleById('${doc.id}')">View</button>
+                            <button class="btn btn-danger" onclick="deleteSchedule('${doc.id}')">Delete</button>
+                        ` : `
+                            <button class="btn btn-secondary" onclick="viewScheduleById('${doc.id}')">View</button>
+                        `;
+                        
+                        html += `
+                            <div style="padding: 1rem; border: 1px solid #dee2e6; margin-bottom: 0.5rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${data.name || 'Schedule'}</strong><br>
+                                    <small>Created: ${date} at ${time}</small><br>
+                                    <small>Variation: ${data.variation || 'balanced'} | By: ${data.generatedBy || 'Unknown'}</small>
+                                    ${index === 0 ? '<span style="color: #28a745; font-weight: bold;"> (Current)</span>' : ''}
+                                </div>
+                                <div>
+                                    ${editActions}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                html += '</div>';
+                document.getElementById('scheduleDisplay').innerHTML = html;
+            } catch (error) {
+                console.error('Error loading history:', error);
+                document.getElementById('scheduleDisplay').innerHTML = '<div class="error">Error loading schedule history.</div>';
+            }
+        };
+
+        // View schedule by ID
+        window.viewScheduleById = async function(scheduleId) {
+            try {
+                const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleId));
+                if (docSnap.exists()) {
+                    const scheduleData = docSnap.data();
+                    schedule = scheduleData.days;
+                    
+                    const assignedHours = calculateAssignedHours(schedule);
+                    const lowHours = workers
+                        .filter(w => !w.work_study && assignedHours[w.email] < 4)
+                        .map(w => `${w.first_name} ${w.last_name}`);
+                    const unassigned = workers
+                        .filter(w => assignedHours[w.email] === 0)
+                        .map(w => `${w.first_name} ${w.last_name}`);
+                    
+                    displaySchedule(schedule, assignedHours, lowHours, unassigned, false);
+                }
+            } catch (error) {
+                console.error('Error viewing schedule:', error);
+            }
+        };
+
+        // Delete schedule (admin only)
+        window.deleteSchedule = async function(scheduleId) {
+            if (!user.isAdmin) {
+                alert('Admin access required');
+                return;
+            }
+            
+            if (confirm('Delete this schedule? This cannot be undone.')) {
+                try {
+                    await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleId));
+                    alert('✅ Schedule deleted.');
+                    viewHistory();
+                } catch (error) {
+                    console.error('Error deleting schedule:', error);
+                    alert('❌ Error deleting schedule.');
+                }
+            }
         };
 
         // Find available workers
@@ -2076,13 +2106,459 @@
             hideAllForms();
         };
 
+        // Last Minute Availability Check
+        window.showLastMinuteCheck = function() {
+            if (!selectedWorkplace) {
+                alert('Please select a workplace first');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>🚨 Last Minute Availability Check</h3>
+                        <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+                    </div>
+                    <div class="form-section" style="display: block;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="urgentDay">Day</label>
+                                <select id="urgentDay">
+                                    ${DAYS.map(day => `<option value="${day}">${day}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="urgentStart">Start Time</label>
+                                <input type="time" id="urgentStart">
+                            </div>
+                            <div class="form-group">
+                                <label for="urgentEnd">End Time</label>
+                                <input type="time" id="urgentEnd">
+                            </div>
+                        </div>
+                        <button class="btn btn-warning" onclick="findUrgentAvailable()">🔍 Find Available Workers</button>
+                    </div>
+                    <div id="urgentResults"></div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        };
+
+        window.findUrgentAvailable = function() {
+            const day = document.getElementById('urgentDay').value;
+            const start = document.getElementById('urgentStart').value;
+            const end = document.getElementById('urgentEnd').value;
+            
+            if (!start || !end) {
+                alert('Please enter both start and end times.');
+                return;
+            }
+            
+            const startHour = timeToHour(start);
+            const endHour = timeToHour(end);
+            
+            if (endHour <= startHour) {
+                alert('End time must be after start time.');
+                return;
+            }
+            
+            const available = workers.filter(worker => {
+                return isWorkerAvailable(worker, day, startHour, endHour);
+            });
+            
+            let html = `
+                <div style="margin-top: 1rem;">
+                    <h4>Available Workers for ${day} ${formatTime(start)} - ${formatTime(end)}</h4>
+            `;
+            
+            if (available.length === 0) {
+                html += '<div class="error">❌ No workers available for this urgent shift.</div>';
+            } else {
+                html += `<div class="success">✅ Found ${available.length} available workers</div>`;
+                available.forEach(worker => {
+                    const wsIndicator = worker.work_study ? ' (Work Study)' : '';
+                    html += `
+                        <div style="padding: 0.75rem; border: 1px solid #28a745; margin-bottom: 0.5rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>${worker.first_name} ${worker.last_name}${wsIndicator}</strong><br>
+                                <small>${worker.email}</small>
+                            </div>
+                            <div>
+                                <button class="btn btn-success" onclick="contactWorkerUrgent('${worker.email}', '${day}', '${start}', '${end}')">📧 Contact</button>
+                                ${user.isAdmin ? `<button class="btn btn-primary" onclick="assignUrgentShift('${worker.email}', '${day}', '${start}', '${end}')">➕ Assign</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            document.getElementById('urgentResults').innerHTML = html;
+        };
+
+        window.contactWorkerUrgent = function(email, day, start, end) {
+            const subject = `Urgent Shift Coverage Needed: ${day} ${formatTime(start)} - ${formatTime(end)}`;
+            const body = `Hello!\n\nWe need coverage for an urgent shift on ${day} from ${formatTime(start)} to ${formatTime(end)}.\n\nPlease let me know if you are available.\n\nThank you!`;
+            window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+        };
+
+        window.assignUrgentShift = function(email, day, start, end) {
+            if (!user.isAdmin) {
+                alert('Admin access required to assign shifts');
+                return;
+            }
+            
+            const worker = workers.find(w => w.email === email);
+            if (!worker) return;
+            
+            // Add shift to current schedule
+            if (!schedule[day]) schedule[day] = [];
+            
+            schedule[day].push({
+                start: start,
+                end: end,
+                assigned: [`${worker.first_name} ${worker.last_name}`],
+                raw_assigned: [email],
+                all_available: [worker],
+                urgent: true
+            });
+            
+            alert(`✅ Assigned ${worker.first_name} ${worker.last_name} to urgent shift`);
+            
+            // Close modal
+            document.querySelector('.modal').remove();
+        };
+
+        // Enhanced Schedule Editing System
+        window.editShift = function(day, shiftIndex) {
+            if (!user.isAdmin) {
+                alert('Admin access required to edit shifts');
+                return;
+            }
+            
+            const shift = schedule[day][shiftIndex];
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>✏️ Edit Shift: ${day} ${formatTime(shift.start)} - ${formatTime(shift.end)}</h3>
+                        <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+                    </div>
+                    <div class="form-section" style="display: block;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editShiftStart">Start Time</label>
+                                <input type="time" id="editShiftStart" value="${shift.start}">
+                            </div>
+                            <div class="form-group">
+                                <label for="editShiftEnd">End Time</label>
+                                <input type="time" id="editShiftEnd" value="${shift.end}">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Assign Workers (select up to 2):</label>
+                            <div id="workerSelection" style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 0.5rem;">
+                                <!-- Worker checkboxes will be populated here -->
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                            <button class="btn btn-success" onclick="saveShiftEdit('${day}', ${shiftIndex})">💾 Save Changes</button>
+                            <button class="btn btn-danger" onclick="deleteShift('${day}', ${shiftIndex})">🗑️ Delete Shift</button>
+                            <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            // Populate worker selection
+            populateWorkerSelection(shift, day);
+        };
+
+        function populateWorkerSelection(shift, day) {
+            const startTime = document.getElementById('editShiftStart').value;
+            const endTime = document.getElementById('editShiftEnd').value;
+            const startHour = timeToHour(startTime);
+            const endHour = timeToHour(endTime);
+            
+            let html = '';
+            workers.forEach(worker => {
+                const available = isWorkerAvailable(worker, day, startHour, endHour);
+                const isAssigned = shift.raw_assigned && shift.raw_assigned.includes(worker.email);
+                const wsIndicator = worker.work_study ? ' (WS)' : '';
+                
+                html += `
+                    <div style="padding: 0.5rem; border-bottom: 1px solid #e9ecef;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" 
+                                   value="${worker.email}" 
+                                   ${isAssigned ? 'checked' : ''} 
+                                   ${!available ? 'disabled' : ''}
+                                   style="margin-right: 0.5rem;">
+                            <span style="color: ${available ? '#000' : '#999'};">
+                                ${worker.first_name} ${worker.last_name}${wsIndicator}
+                                ${!available ? ' (Not Available)' : ''}
+                            </span>
+                        </label>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('workerSelection').innerHTML = html;
+            
+            // Update worker selection when times change
+            document.getElementById('editShiftStart').addEventListener('change', () => populateWorkerSelection(shift, day));
+            document.getElementById('editShiftEnd').addEventListener('change', () => populateWorkerSelection(shift, day));
+        }
+
+        window.saveShiftEdit = function(day, shiftIndex) {
+            const newStart = document.getElementById('editShiftStart').value;
+            const newEnd = document.getElementById('editShiftEnd').value;
+            const selectedWorkers = Array.from(document.querySelectorAll('#workerSelection input:checked')).map(cb => cb.value);
+            
+            if (selectedWorkers.length > 2) {
+                alert('Cannot assign more than 2 workers to a shift');
+                return;
+            }
+            
+            // Update the shift
+            const shift = schedule[day][shiftIndex];
+            
+            shift.start = newStart;
+            shift.end = newEnd;
+            
+            if (selectedWorkers.length === 0) {
+                shift.assigned = ['Unfilled'];
+                shift.raw_assigned = [];
+            } else {
+                shift.assigned = selectedWorkers.map(email => {
+                    const worker = workers.find(w => w.email === email);
+                    return `${worker.first_name} ${worker.last_name}`;
+                });
+                shift.raw_assigned = selectedWorkers;
+            }
+            
+            // Save to Firebase
+            saveScheduleChanges(schedule);
+            
+            // Refresh display
+            const assignedHours = calculateAssignedHours(schedule);
+            const lowHours = workers.filter(w => !w.work_study && assignedHours[w.email] < 4).map(w => `${w.first_name} ${w.last_name}`);
+            const unassigned = workers.filter(w => assignedHours[w.email] === 0).map(w => `${w.first_name} ${w.last_name}`);
+            
+            displaySchedule(schedule, assignedHours, lowHours, unassigned, true);
+            
+            // Close modal
+            document.querySelector('.modal').remove();
+            
+            alert('✅ Shift updated successfully!');
+        };
+
+        window.deleteShift = function(day, shiftIndex) {
+            if (!confirm('Are you sure you want to delete this shift?')) return;
+            
+            schedule[day].splice(shiftIndex, 1);
+            
+            // Clean up empty days
+            if (schedule[day].length === 0) {
+                delete schedule[day];
+            }
+            
+            // Save to Firebase
+            saveScheduleChanges(schedule);
+            
+            // Refresh display
+            const assignedHours = calculateAssignedHours(schedule);
+            const lowHours = workers.filter(w => !w.work_study && assignedHours[w.email] < 4).map(w => `${w.first_name} ${w.last_name}`);
+            const unassigned = workers.filter(w => assignedHours[w.email] === 0).map(w => `${w.first_name} ${w.last_name}`);
+            
+            displaySchedule(schedule, assignedHours, lowHours, unassigned, true);
+            
+            // Close modal
+            document.querySelector('.modal').remove();
+            
+            alert('✅ Shift deleted successfully!');
+        };
+
+        // Add New Shift Functionality
+        window.addNewShift = function() {
+            if (!user.isAdmin) {
+                alert('Admin access required to add shifts');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>➕ Add New Shift</h3>
+                        <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+                    </div>
+                    <div class="form-section" style="display: block;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newShiftDay">Day</label>
+                                <select id="newShiftDay">
+                                    ${DAYS.map(day => `<option value="${day}">${day}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newShiftStart">Start Time</label>
+                                <input type="time" id="newShiftStart" value="09:00">
+                            </div>
+                            <div class="form-group">
+                                <label for="newShiftEnd">End Time</label>
+                                <input type="time" id="newShiftEnd" value="17:00">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Assign Workers (select up to 2):</label>
+                            <div id="newShiftWorkerSelection" style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 0.5rem;">
+                                <!-- Worker checkboxes will be populated here -->
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                            <button class="btn btn-success" onclick="saveNewShift()">➕ Add Shift</button>
+                            <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            // Populate worker selection for new shift
+            populateNewShiftWorkerSelection();
+            
+            // Update worker selection when day or times change
+            document.getElementById('newShiftDay').addEventListener('change', populateNewShiftWorkerSelection);
+            document.getElementById('newShiftStart').addEventListener('change', populateNewShiftWorkerSelection);
+            document.getElementById('newShiftEnd').addEventListener('change', populateNewShiftWorkerSelection);
+        };
+
+        function populateNewShiftWorkerSelection() {
+            const day = document.getElementById('newShiftDay').value;
+            const startTime = document.getElementById('newShiftStart').value;
+            const endTime = document.getElementById('newShiftEnd').value;
+            const startHour = timeToHour(startTime);
+            const endHour = timeToHour(endTime);
+            
+            let html = '';
+            workers.forEach(worker => {
+                const available = isWorkerAvailable(worker, day, startHour, endHour);
+                const wsIndicator = worker.work_study ? ' (WS)' : '';
+                
+                html += `
+                    <div style="padding: 0.5rem; border-bottom: 1px solid #e9ecef;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" 
+                                   value="${worker.email}" 
+                                   ${!available ? 'disabled' : ''}
+                                   style="margin-right: 0.5rem;">
+                            <span style="color: ${available ? '#000' : '#999'};">
+                                ${worker.first_name} ${worker.last_name}${wsIndicator}
+                                ${!available ? ' (Not Available)' : ''}
+                            </span>
+                        </label>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('newShiftWorkerSelection').innerHTML = html;
+        }
+
+        window.saveNewShift = function() {
+            const day = document.getElementById('newShiftDay').value;
+            const start = document.getElementById('newShiftStart').value;
+            const end = document.getElementById('newShiftEnd').value;
+            const selectedWorkers = Array.from(document.querySelectorAll('#newShiftWorkerSelection input:checked')).map(cb => cb.value);
+            
+            if (timeToHour(end) <= timeToHour(start)) {
+                alert('End time must be after start time');
+                return;
+            }
+            
+            if (selectedWorkers.length > 2) {
+                alert('Cannot assign more than 2 workers to a shift');
+                return;
+            }
+            
+            // Create new shift
+            const newShift = {
+                start: start,
+                end: end,
+                assigned: selectedWorkers.length === 0 ? ['Unfilled'] : selectedWorkers.map(email => {
+                    const worker = workers.find(w => w.email === email);
+                    return `${worker.first_name} ${worker.last_name}`;
+                }),
+                raw_assigned: selectedWorkers,
+                all_available: workers.filter(w => isWorkerAvailable(w, day, timeToHour(start), timeToHour(end)))
+            };
+            
+            // Add to schedule
+            if (!schedule[day]) schedule[day] = [];
+            schedule[day].push(newShift);
+            
+            // Sort shifts by start time
+            schedule[day].sort((a, b) => timeToHour(a.start) - timeToHour(b.start));
+            
+            // Save to Firebase
+            saveScheduleChanges(schedule);
+            
+            // Refresh display
+            const assignedHours = calculateAssignedHours(schedule);
+            const lowHours = workers.filter(w => !w.work_study && assignedHours[w.email] < 4).map(w => `${w.first_name} ${w.last_name}`);
+            const unassigned = workers.filter(w => assignedHours[w.email] === 0).map(w => `${w.first_name} ${w.last_name}`);
+            
+            displaySchedule(schedule, assignedHours, lowHours, unassigned, true);
+            
+            // Close modal
+            document.querySelector('.modal').remove();
+            
+            alert('✅ New shift added successfully!');
+        };
+
+        // Helper functions for schedule management
+        async function saveScheduleChanges(updatedSchedule) {
+            try {
+                const scheduleData = {
+                    days: updatedSchedule,
+                    createdAt: new Date().toISOString(),
+                    workplaceId: selectedWorkplace,
+                    name: `${selectedWorkplace} Schedule (Edited)`,
+                    variation: 'manual_edit',
+                    generatedBy: user.email
+                };
+                
+                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'schedules'), scheduleData);
+                
+                // Update global schedule variable
+                schedule = updatedSchedule;
+                
+            } catch (error) {
+                console.error('Error saving schedule changes:', error);
+                alert('❌ Error saving changes to Firebase');
+            }
+        }
+
         // Utility functions
         window.contactWorker = function(email) {
             window.open(`mailto:${email}?subject=Work Schedule&body=Hello! We have a shift available.`);
         };
 
         window.saveCurrentSchedule = function() {
-            alert('Save functionality - integrated with Firebase automatically');
+            alert('✅ Schedule changes are automatically saved to Firebase');
         };
 
         window.emailSchedule = function() {
@@ -2097,15 +2573,9 @@
             alert('Excel export functionality - to be implemented');
         };
 
-        // Utility function to shuffle array
-        function shuffleArray(array) {
-            const shuffled = [...array];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            return shuffled;
-        }
+        window.suggestAlternatives = function(day, shiftIndex) {
+            alert('Alternative suggestions - feature coming soon');
+        };
 
         // Test connection and initialize
         async function testConnection() {
@@ -2122,4 +2592,3 @@
     </script>
 </body>
 </html>
-
