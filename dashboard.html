@@ -666,6 +666,45 @@
             <h2 class="section-title">👤 User Dashboard</h2>
             <div id="userWelcome" style="font-size:1.1rem; margin-bottom:1.5rem;"></div>
             <div class="form-section" style="margin-bottom:1.5rem;">
+                <h3>⚙️ My Account</h3>
+                <form id="userAccountForm" style="max-width: 500px; margin: 0 auto;">
+                    <div class="form-group">
+                        <label for="accountFirstName">First Name</label>
+                        <input type="text" id="accountFirstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="accountLastName">Last Name</label>
+                        <input type="text" id="accountLastName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="accountEmail">Email</label>
+                        <input type="email" id="accountEmail" disabled style="background:#f1f3f4;">
+                    </div>
+                    <div class="form-group">
+                        <label for="accountPhone">Phone Number <span style="color:#888;">(optional)</span></label>
+                        <input type="tel" id="accountPhone" pattern="[0-9\-\+\(\) ]*">
+                    </div>
+                    <button type="button" class="btn btn-success" id="saveAccountBtn" style="margin-top:0.5rem;">Save Changes</button>
+                </form>
+                <hr style="margin:2rem 0;">
+                <form id="userPasswordForm" style="max-width: 500px; margin: 0 auto;">
+                    <h4 style="margin-bottom:1rem;">🔒 Change Password</h4>
+                    <div class="form-group">
+                        <label for="oldPassword">Current Password</label>
+                        <input type="password" id="oldPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">New Password</label>
+                        <input type="password" id="newPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmNewPassword">Confirm New Password</label>
+                        <input type="password" id="confirmNewPassword" required>
+                    </div>
+                    <button type="button" class="btn btn-info" id="changePasswordBtn" style="margin-top:0.5rem;">Change Password</button>
+                </form>
+            </div>
+            <div class="form-section" style="margin-bottom:1.5rem;">
                 <h3>📅 My Assigned Shifts</h3>
                 <div id="userShiftsPlaceholder" style="color:#888;">(Your assigned shifts will appear here.)</div>
             </div>
@@ -3397,6 +3436,11 @@
                 welcomeName = user.email || 'User';
             }
             document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+            // Pre-fill account form fields
+            document.getElementById('accountFirstName').value = user.firstName || '';
+            document.getElementById('accountLastName').value = user.lastName || '';
+            document.getElementById('accountEmail').value = user.email || '';
+            document.getElementById('accountPhone').value = user.phone || '';
         }
     </script>
 </body>
