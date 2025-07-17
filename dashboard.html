@@ -660,6 +660,29 @@
                 </div>
             </div>
         </div>
+
+        <!-- User Dashboard (non-admin) -->
+        <div id="userDashboard" class="workplace-section" style="display:none; margin-bottom:2rem;">
+            <h2 class="section-title">👤 User Dashboard</h2>
+            <div id="userWelcome" style="font-size:1.1rem; margin-bottom:1.5rem;"></div>
+            <div class="form-section" style="margin-bottom:1.5rem;">
+                <h3>📅 My Assigned Shifts</h3>
+                <div id="userShiftsPlaceholder" style="color:#888;">(Your assigned shifts will appear here.)</div>
+            </div>
+            <div class="form-section" style="margin-bottom:1.5rem;">
+                <h3>⏰ Total Hours This Week</h3>
+                <div id="userHoursPlaceholder" style="color:#888;">(Your total hours will appear here.)</div>
+            </div>
+            <div class="form-section" style="margin-bottom:1.5rem;">
+                <h3>🗓️ My Availability</h3>
+                <div id="userAvailabilityPlaceholder" style="color:#888;">(Your availability will appear here.)</div>
+            </div>
+            <div class="form-section">
+                <h3>✉️ Send a Message to Admins</h3>
+                <textarea id="userMessageInput" rows="3" style="width:100%;border-radius:8px;padding:1rem;" placeholder="Type your message or question here..."></textarea>
+                <button class="btn btn-info" id="sendUserMessageBtn" style="margin-top:0.5rem;">Send Message</button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal for Manage Hours -->
@@ -3359,6 +3382,15 @@
                 if (m) m.style.display = 'none';
             };
         };
+
+        // In the script, show/hide user dashboard for non-admins
+        if (!user.isAdmin) {
+            document.getElementById('userDashboard').style.display = 'block';
+            document.getElementById('adminSection').style.display = 'none';
+            // Set welcome message
+            let welcomeName = user.firstName || user.email || 'User';
+            document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+        }
     </script>
 </body>
 </html>
