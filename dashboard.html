@@ -2885,17 +2885,47 @@
             }
             // Build day options
             let dayOptions = DAYS.map(day => `<option value='${day}'>${day}</option>`).join('');
-            // Build worker options
-            function formatAvail(w) {
-                return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
-            }
-            let workerOptions = workers.map(w => `<option value='${w.email}'>${w.first_name} ${w.last_name} (${formatAvail(w)})</option>`).join('');
-            let html = `<div class='form-group'><label>Day</label><select id='addShiftDay'>${dayOptions}</select></div>`;
+            let html = `<div class='form-group'><label>Day</label><select id='addShiftDay'><option value=''>Select Day</option>${dayOptions}</select></div>`;
             html += `<div class='form-row'><div class='form-group'><label>Start Time</label><input type='time' id='addShiftStart'></div><div class='form-group'><label>End Time</label><input type='time' id='addShiftEnd'></div></div>`;
-            html += `<div class='form-group'><label>Assign Worker(s)</label><select id='addShiftWorkers' multiple size='5'>${workerOptions}</select></div>`;
+            html += `<div class='form-group'><label><input type='checkbox' id='addShiftShowUnavailable'> Show unavailable workers</label></div>`;
+            html += `<div class='form-group' id='addShiftWorkersGroup' style='display:none;'><label>Assign Worker(s)</label><select id='addShiftWorkers' multiple size='5'></select></div>`;
             html += `<div style='margin-top:1rem;'><button class='btn btn-success' id='saveAddShiftBtn'>Add Shift</button> <button class='btn btn-secondary' onclick="closeModal('addShiftModal')">Cancel</button></div>`;
             document.getElementById('addShiftModalBody').innerHTML = html;
             document.getElementById('addShiftModal').style.display = 'block';
+            // Helper to update worker list
+            function updateWorkerList() {
+                const day = document.getElementById('addShiftDay').value;
+                const start = document.getElementById('addShiftStart').value;
+                const end = document.getElementById('addShiftEnd').value;
+                const showUnavailable = document.getElementById('addShiftShowUnavailable').checked;
+                const group = document.getElementById('addShiftWorkersGroup');
+                const select = document.getElementById('addShiftWorkers');
+                if (!day || !start || !end) {
+                    group.style.display = 'none';
+                    select.innerHTML = '';
+                    return;
+                }
+                // Filter workers
+                let filtered = workers;
+                if (!showUnavailable) {
+                    filtered = workers.filter(w => isWorkerAvailable(w, day, timeToHour(start), timeToHour(end)));
+                }
+                // Build options
+                function formatAvail(w) {
+                    return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
+                }
+                select.innerHTML = workers.map(w => {
+                    const available = isWorkerAvailable(w, day, timeToHour(start), timeToHour(end));
+                    if (!showUnavailable && !available) return '';
+                    return `<option value='${w.email}'${!available ? ' style="color:#aaa;"' : ''}>${w.first_name} ${w.last_name} (${formatAvail(w)}${!available ? ' - Unavailable' : ''})</option>`;
+                }).join('');
+                group.style.display = 'block';
+            }
+            document.getElementById('addShiftDay').onchange = updateWorkerList;
+            document.getElementById('addShiftStart').oninput = updateWorkerList;
+            document.getElementById('addShiftEnd').oninput = updateWorkerList;
+            document.getElementById('addShiftShowUnavailable').onchange = updateWorkerList;
+            // Save logic (unchanged)
             document.getElementById('saveAddShiftBtn').onclick = async function() {
                 const day = document.getElementById('addShiftDay').value;
                 const start = document.getElementById('addShiftStart').value;
