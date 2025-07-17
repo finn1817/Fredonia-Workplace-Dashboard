@@ -612,22 +612,6 @@
                             <label for="minHours">Min Hours per Worker</label>
                             <input type="number" id="minHours" value="3" min="0" max="20">
                         </div>
-                        <div class="form-group">
-                            <label for="scheduleVariation">Schedule Variation</label>
-                            <select id="scheduleVariation">
-                                <option value="balanced">Balanced Distribution</option>
-                                <option value="random">Random Assignment</option>
-                                <option value="work_study_first">Work Study Priority</option>
-                                <option value="fair_rotation">Fair Rotation</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="shiftLength">Preferred Shift Length</label>
-                        <select id="shiftLength">
-                            <option value="short">Short (2-4 hours)</option>
-                            <option value="long">Long (3-5 hours)</option>
-                        </select>
                     </div>
                     <div class="form-group">
                         <label>
@@ -2029,77 +2013,47 @@
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
-
             if (!selectedWorkplace) {
                 showNotification('⚠️ Please select a workplace first', 'warning');
                 return;
             }
-
             if (workers.length === 0) {
                 showNotification('❌ No workers found. Add workers before generating a schedule.', 'error');
                 return;
             }
-
             if (Object.keys(hours).length === 0) {
                 showNotification('❌ No operating hours configured. Set up hours of operation first.', 'error');
                 return;
             }
-
             // Validate worker availability
             const workersWithAvailability = workers.filter(w => w.availability_text && Object.keys(w.availability).length > 0);
             if (workersWithAvailability.length === 0) {
                 showNotification('❌ No workers have availability set. Add worker availability before generating schedules.', 'error');
                 return;
             }
-
             const maxHours = parseInt(document.getElementById('maxHours').value);
             const workersPerShift = parseInt(document.getElementById('workersPerShift').value);
             const minHours = parseInt(document.getElementById('minHours').value);
-            const variation = document.getElementById('scheduleVariation').value;
             const ensureFullCoverage = document.getElementById('ensureFullCoverage').checked;
-            
             // Validation
             if (maxHours < 5 || maxHours > 40) {
                 showNotification('❌ Max hours must be between 5 and 40', 'error');
                 return;
             }
-
             if (workersPerShift < 1 || workersPerShift > 5) {
                 showNotification('❌ Workers per shift must be between 1 and 5', 'error');
                 return;
             }
-
             setLoading('generateScheduleBtn', true);
             document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">🔄 Generating optimized schedule...</div>';
-            
             try {
-                // Apply variation-specific processing
-                let processedWorkers = [...workersWithAvailability];
-                
-                switch (variation) {
-                    case 'random':
-                        processedWorkers = shuffleArray(processedWorkers);
-                        break;
-                    case 'work_study_first':
-                        processedWorkers.sort((a, b) => {
-                            if (a.work_study && !b.work_study) return -1;
-                            if (!a.work_study && b.work_study) return 1;
-                            return 0;
-                        });
-                        break;
-                    case 'fair_rotation':
-                        processedWorkers.sort((a, b) => {
-                            return calculateAvailabilityHours(a) - calculateAvailabilityHours(b);
-                        });
-                        break;
-                    default: // balanced
-                        processedWorkers.sort((a, b) => {
-                            if (a.work_study && !b.work_study) return -1;
-                            if (!a.work_study && b.work_study) return 1;
-                            return calculateAvailabilityHours(a) - calculateAvailabilityHours(b);
-                        });
-                }
-                
+                // Always use the best/fair logic: shuffle, prioritize work study, fair distribution
+                let processedWorkers = shuffleArray([...workersWithAvailability]);
+                processedWorkers.sort((a, b) => {
+                    if (a.work_study && !b.work_study) return -1;
+                    if (!a.work_study && b.work_study) return 1;
+                    return calculateAvailabilityHours(a) - calculateAvailabilityHours(b);
+                });
                 // Generate schedule
                 const result = createShiftsFromAvailability(
                     hours, 
@@ -2109,7 +2063,6 @@
                     minHours,
                     ensureFullCoverage
                 );
-                
                 const {
                     schedule: generatedSchedule,
                     assignedHours,
@@ -2122,20 +2075,14 @@
                     coverageGaps,
                     forcedAssignments
                 } = result;
-
-                // Update global schedule
                 schedule = generatedSchedule;
-
-                // Save to Firebase
-                await saveSchedule(schedule, variation, {
+                await saveSchedule(schedule, 'default', {
                     maxHours,
                     workersPerShift,
                     minHours,
                     ensureFullCoverage,
                     workersCount: processedWorkers.length
                 });
-                
-                // Show comprehensive issues dialog if needed
                 if (unfilledShifts.length > 0 || wsIssues.length > 0 || minHoursIssues.length > 0 || coverageGaps.length > 0) {
                     showEnhancedIssuesDialog({
                         unfilledShifts,
@@ -2146,13 +2093,9 @@
                         forcedAssignments
                     });
                 }
-
-                // Display the generated schedule
                 displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, false, coverageGaps);
                 hideAllForms();
-                
                 showNotification('✅ Schedule generated successfully!', 'success');
-                
             } catch (error) {
                 console.error('Error generating schedule:', error);
                 document.getElementById('scheduleDisplay').innerHTML = `<div class="error">❌ Error generating schedule: ${error.message}</div>`;
