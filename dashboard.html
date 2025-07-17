@@ -2888,19 +2888,29 @@
             }
             const maxWorkers = shift.raw_assigned ? shift.raw_assigned.length : 1;
             const assignedEmails = new Set(shift.raw_assigned || []);
-            const availableWorkers = workers.filter(w => isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end)));
-            const unavailableWorkers = workers.filter(w => !isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end)));
-            let html = `<div><strong>Shift:</strong> ${day} ${formatTime(shift.start)} - ${formatTime(shift.end)}</div>`;
+            // Editable time fields
+            const startVal = shift.start;
+            const endVal = shift.end;
+            // Get workplace operating hours for this day
+            const opHours = (hours[day] && hours[day][0]) ? hours[day][0] : { start: '00:00', end: '23:59' };
+            // Build worker lists
+            const availableWorkers = workers.filter(w => isWorkerAvailable(w, day, timeToHour(startVal), timeToHour(endVal)));
+            const unavailableWorkers = workers.filter(w => !isWorkerAvailable(w, day, timeToHour(startVal), timeToHour(endVal)));
+            // Format availability in AM/PM
+            function formatAvail(w) {
+                return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
+            }
+            let html = `<div><strong>Shift:</strong> ${day} <input type='time' id='editShiftStart' value='${startVal}'> - <input type='time' id='editShiftEnd' value='${endVal}'> <span style='font-size:0.9em;color:#888;'>(AM/PM shown below)</span></div>`;
             html += `<div style='margin: 1rem 0;'><strong>Assigned:</strong> <span id='editShiftAssignedCount'></span> / ${maxWorkers}</div>`;
             html += `<div><strong>Available Workers</strong></div><div>`;
             availableWorkers.forEach(w => {
                 const checked = assignedEmails.has(w.email) ? 'checked' : '';
-                html += `<label><input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}> ${w.first_name} ${w.last_name} <small>(${Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => s.start + '-' + s.end).join(', ')}`).join('; ')})</small></label><br>`;
+                html += `<label><input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}> ${w.first_name} ${w.last_name} <small>(${formatAvail(w)})</small></label><br>`;
             });
             html += `</div><div style='margin-top:0.5rem;'><strong>Unavailable Workers</strong></div><div>`;
             unavailableWorkers.forEach(w => {
                 const checked = assignedEmails.has(w.email) ? 'checked' : '';
-                html += `<label><input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}> ${w.first_name} ${w.last_name} <small>(${Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => s.start + '-' + s.end).join(', ')}`).join('; ')})</small></label><br>`;
+                html += `<label><input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}> ${w.first_name} ${w.last_name} <small>(${formatAvail(w)})</small></label><br>`;
             });
             html += `</div><div style='margin-top:1rem;'>
                 <button class='btn btn-success' id='saveEditShiftBtn'>Save</button>
@@ -2929,6 +2939,22 @@
                     showNotification('❌ At least one worker must be assigned', 'error');
                     return;
                 }
+                // Get new times
+                const newStart = document.getElementById('editShiftStart').value;
+                const newEnd = document.getElementById('editShiftEnd').value;
+                if (!newStart || !newEnd) {
+                    showNotification('❌ Start and end times are required', 'error');
+                    return;
+                }
+                if (newEnd <= newStart) {
+                    showNotification('❌ End time must be after start time', 'error');
+                    return;
+                }
+                // Validate within operating hours
+                if (newStart < opHours.start || newEnd > opHours.end) {
+                    showNotification(`❌ Shift must be within operating hours: ${formatTime(opHours.start)} - ${formatTime(opHours.end)}`, 'error');
+                    return;
+                }
                 // Update in-memory schedule
                 const newAssigned = checked.map(email => {
                     const w = workers.find(x => x.email === email);
@@ -2937,6 +2963,8 @@
                 shift.assigned = newAssigned;
                 shift.raw_assigned = checked;
                 shift.all_available = workers.filter(w => checked.includes(w.email));
+                shift.start = newStart;
+                shift.end = newEnd;
                 showNotification('✅ Shift updated (not yet saved to database)', 'success');
                 closeModal('editShiftModal');
                 displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
