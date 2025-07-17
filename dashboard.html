@@ -583,7 +583,7 @@
                     <button class="btn btn-success" onclick="viewCurrentSchedule()">👁️ View Current Schedule</button>
                     <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
                     <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
-                    <button class="btn btn-secondary" onclick="viewWorkers()">👥 View Workers</button>
+                    <button class="btn btn-secondary" onclick="viewWorkers()" id="viewWorkersBtn">👥 View Workers</button>
                     <button class="btn btn-warning" onclick="showLastMinuteCheck()" id="lastMinuteBtn">🚨 Last Minute</button>
                 </div>
 
@@ -763,6 +763,12 @@
             </div>
             <div id="addShiftModalBody"></div>
         </div>
+    </div>
+
+    <!-- Add Workplace Notes section below Schedule Management -->
+    <div id="workplaceNotesSection" class="form-section" style="margin-top:1.5rem; display:none;">
+        <h3>�� Workplace Notes</h3>
+        <div id="workplaceNotesContent"></div>
     </div>
 
     <script type="module">
@@ -1575,8 +1581,10 @@
             
             try {
                 await loadWorkplaceData();
+                await loadWorkplaceNotes();
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">✅ Ready! Select an option above to get started.</div>';
                 hideAllForms();
+                document.getElementById('workplaceNotesSection').style.display = 'block';
             } catch (error) {
                 console.error('Error loading workplace:', error);
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="error">❌ Error loading workplace data. Please try again.</div>';
@@ -1634,6 +1642,27 @@
                 hours = {};
                 showNotification('❌ Error loading workplace data', 'error');
                 throw error;
+            }
+        }
+
+        // Load and display workplace notes
+        async function loadWorkplaceNotes() {
+            const notesDiv = document.getElementById('workplaceNotesContent');
+            if (!selectedWorkplace) {
+                notesDiv.innerHTML = '<div class="info">No workplace selected.</div>';
+                return;
+            }
+            const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace));
+            const notes = docSnap.exists() && docSnap.data().notes ? docSnap.data().notes : '';
+            if (user.isAdmin) {
+                notesDiv.innerHTML = `<textarea id='workplaceNotesTextarea' rows='4' style='width:100%;border-radius:8px;padding:1rem;'>${notes}</textarea><button class='btn btn-success' id='saveNotesBtn' style='margin-top:0.5rem;'>💾 Save Notes</button>`;
+                document.getElementById('saveNotesBtn').onclick = async function() {
+                    const newNotes = document.getElementById('workplaceNotesTextarea').value;
+                    await updateDoc(doc(db, 'workplaces', selectedWorkplace), { notes: newNotes, updated_at: new Date().toISOString(), updated_by: user.email });
+                    showNotification('✅ Notes updated!', 'success');
+                };
+            } else {
+                notesDiv.innerHTML = `<div style='background:#f8f9fa;padding:1rem;border-radius:8px;'>${notes ? notes.replace(/\n/g, '<br>') : '<span style="color:#888;">No notes for this workplace.</span>'}</div>`;
             }
         }
 
@@ -3250,6 +3279,11 @@
                 showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
             }
         };
+
+        // On page load or user check, hide View Workers for non-admins
+        if (!user.isAdmin) {
+            document.getElementById('viewWorkersBtn').style.display = 'none';
+        }
     </script>
 </body>
 </html>
