@@ -3445,11 +3445,7 @@
                 welcomeName = user.email || 'User';
             }
             document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
-            // Pre-fill account form fields
-            document.getElementById('accountFirstName').value = user.firstName || '';
-            document.getElementById('accountLastName').value = user.lastName || '';
-            document.getElementById('accountEmail').value = user.email || '';
-            document.getElementById('accountPhone').value = user.phone || '';
+            // Removed pre-fill of old account form fields (no longer present)
         }
 
         // My Account modal logic for all users
