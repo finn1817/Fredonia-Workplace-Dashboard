@@ -804,6 +804,7 @@
         let editingWorkerId = null;
         let schedule = {};
         const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        let currentScheduleId = null; // <-- Track the current schedule doc ID
 
         // Enhanced utility functions
         const timeToHour = (timeStr) => {
@@ -2566,6 +2567,7 @@
                 
                 if (!snapshot.empty) {
                     const doc = snapshot.docs[0];
+                    currentScheduleId = doc.id; // <-- Track the ID
                     const scheduleData = doc.data();
                     schedule = scheduleData.days;
                     
@@ -2678,6 +2680,7 @@
             try {
                 const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleId));
                 if (docSnap.exists()) {
+                    currentScheduleId = docSnap.id; // <-- Track the ID
                     const scheduleData = docSnap.data();
                     schedule = scheduleData.days;
                     
@@ -2894,6 +2897,22 @@
                 showNotification('✅ Shift updated (not yet saved to database)', 'success');
                 closeModal('editShiftModal');
                 displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                // Save to Firestore
+                if (currentScheduleId) {
+                    const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
+                    updateDoc(scheduleRef, {
+                        days: schedule,
+                        updated_at: new Date().toISOString(),
+                        updated_by: user.email
+                    }).then(() => {
+                        showNotification('✅ Shift changes saved to database!', 'success');
+                    }).catch((err) => {
+                        showNotification('❌ Failed to save shift changes to database', 'error');
+                        console.error('Error saving shift edit:', err);
+                    });
+                } else {
+                    showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
+                }
             };
         };
 
