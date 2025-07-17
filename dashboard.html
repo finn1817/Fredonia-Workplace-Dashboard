@@ -1233,6 +1233,10 @@
                             let cur = gapStart;
                             while (cur < gapEnd) {
                                 const remainingTime = gapEnd - cur;
+                                if (remainingTime < 2) {
+                                    // Leave as a coverage gap, do not create a shift
+                                    break;
+                                }
                                 const shiftLength = Math.min(Math.max(2, remainingTime), 4); // 2-4 hour shifts
                                 const endShift = Math.min(cur + shiftLength, gapEnd);
                                 const shiftDuration = endShift - cur;
