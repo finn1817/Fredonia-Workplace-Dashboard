@@ -504,6 +504,30 @@
             .stats { grid-template-columns: 1fr; }
             .modal-content { margin: 10% auto; width: 95%; }
         }
+
+        .shift.forced-shift {
+            border: 2.5px solid #e53935 !important;
+            box-shadow: 0 0 0 2px #e5393533 !important;
+            position: relative;
+        }
+        .shift.forced-shift::after {
+            content: "!";
+            color: #e53935;
+            font-weight: bold;
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 1.2rem;
+            background: #fff;
+            border-radius: 50%;
+            border: 1.5px solid #e53935;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
     </style>
 </head>
 
@@ -2130,6 +2154,15 @@
                 html += '</ul><p><strong>Action needed:</strong> These time periods have no worker coverage during operating hours.</p></div>';
             }
             
+            // Forced assignments section
+            if (forcedAssignments && forcedAssignments.length > 0) {
+                html += '<div class="error"><h4>❗ Forced Assignments (Closest Worker Assigned):</h4><ul>';
+                forcedAssignments.forEach(fa => {
+                    html += `<li><strong>${fa.day}</strong> ${formatTime(fa.start)} - ${formatTime(fa.end)}: ${fa.worker} <span style=\"color:#e53935;font-weight:bold;\">(FORCED)</span></li>`;
+                });
+                html += '</ul><p><strong>Warning:</strong> These shifts were filled by assigning the closest available worker (least hours, prioritized for fairness). Please review these assignments as they may not match worker preferences or may be less ideal.</p></div>';
+            }
+            
             // Work study issues
             if (wsIssues.length > 0) {
                 html += '<div class="warning"><h4>🎓 Work Study Issues:</h4><ul>';
@@ -2245,11 +2278,13 @@
                     const unfilled = shift.assigned.includes('Unfilled');
                     const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
                     const workStudy = shift.is_work_study || false;
+                    const isForced = shift.forced === true;
                     
                     let shiftClass = 'shift';
                     if (isGap) shiftClass += ' coverage-gap';
                     else if (unfilled) shiftClass += ' unfilled';
                     else if (workStudy) shiftClass += ' work-study';
+                    if (isForced) shiftClass += ' forced-shift';
                     
                     html += `
                         <div class="${shiftClass}">
@@ -2257,6 +2292,7 @@
                                 <strong>${formatTime(shift.start)} - ${formatTime(shift.end)}</strong>
                                 ${workStudy ? '<span style="color: #ffc107; margin-left: 0.5rem;">(Work Study)</span>' : ''}
                                 ${isGap ? '<span style="color: #ff5722; margin-left: 0.5rem;">(CRITICAL GAP)</span>' : ''}
+                                ${isForced ? '<span style="color: #e53935; margin-left: 0.5rem; font-weight: bold;">(FORCED)</span>' : ''}
                                 <div style="margin-top: 0.25rem; font-size: 0.9rem;">
                                     ${shift.assigned.join(', ')}
                                 </div>
