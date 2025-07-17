@@ -2823,16 +2823,91 @@
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
-            showNotification('✏️ Edit shift feature - Enhanced implementation coming soon!', 'info');
-        };
-
-        window.suggestAlternatives = function(day, shiftIndex) {
-            if (!user.isAdmin) {
-                showNotification('❌ Admin access required', 'error');
+            // Find the shift
+            const shift = (schedule[day] || [])[shiftIndex];
+            if (!shift) {
+                showNotification('❌ Shift not found', 'error');
                 return;
             }
-            showNotification('💡 Alternative suggestions feature - Enhanced implementation coming soon!', 'info');
-        };
+            // Determine max workers for this shift (based on current assigned count)
+            const maxWorkers = shift.raw_assigned ? shift.raw_assigned.length : 1;
+            // Build worker lists
+            const assignedEmails = new Set(shift.raw_assigned || []);
+            const availableWorkers = workers.filter(w => isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end)));
+            const unavailableWorkers = workers.filter(w => !isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end)));
+            // Modal HTML
+            let html = `<div><strong>Shift:</strong> ${day} ${formatTime(shift.start)} - ${formatTime(shift.end)}</div>`;
+            html += `<div style='margin: 1rem 0;'><strong>Assigned:</strong> <span id='editShiftAssignedCount'></span> / ${maxWorkers}</div>`;
+            html += `<div><strong>Available Workers</strong></div>`;
+            html += `<div id='editShiftAvailableList' style='display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;'>`;
+            availableWorkers.forEach(w => {
+                const checked = assignedEmails.has(w.email) ? 'checked' : '';
+                html += `<label class='edit-shift-worker' style='border:2px solid #28a745; border-radius:8px; padding:0.5rem 1rem; display:inline-block; cursor:pointer; background:#f8fff8;'>
+            <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked} style='margin-right:0.5rem;'>
+            <strong>${w.first_name} ${w.last_name}</strong><br>
+            <small>Availability: ${Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => s.start + '-' + s.end).join(', ')}`).join('; ')}</small>
+        </label>`;
+    });
+    html += `</div>`;
+    html += `<div><strong>Unavailable Workers</strong></div>`;
+    html += `<div id='editShiftUnavailableList' style='display: flex; flex-wrap: wrap; gap: 0.5rem;'>`;
+    unavailableWorkers.forEach(w => {
+        const checked = assignedEmails.has(w.email) ? 'checked' : '';
+        html += `<label class='edit-shift-worker' style='border:2px solid #e53935; border-radius:8px; padding:0.5rem 1rem; display:inline-block; cursor:pointer; background:#fff8f8;'>
+            <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked} style='margin-right:0.5rem;'>
+            <strong>${w.first_name} ${w.last_name}</strong><br>
+            <small>Availability: ${Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => s.start + '-' + s.end).join(', ')}`).join('; ')}</small>
+        </label>`;
+    });
+    html += `</div>`;
+    html += `<div style='margin-top:1rem; display:flex; gap:1rem;'>
+        <button class='btn btn-success' id='saveEditShiftBtn'>💾 Save</button>
+        <button class='btn btn-secondary' onclick="closeModal('editShiftModal')">Cancel</button>
+    </div>`;
+    // Create modal if not exists
+    let modal = document.getElementById('editShiftModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'editShiftModal';
+        modal.className = 'modal';
+        modal.innerHTML = `<div class='modal-content' style='max-width: 500px;'><div class='modal-header'><h3>Edit Shift</h3><span class='close' onclick="closeModal('editShiftModal')">&times;</span></div><div id='editShiftModalBody'></div></div>`;
+        document.body.appendChild(modal);
+    }
+    document.getElementById('editShiftModalBody').innerHTML = html;
+    modal.style.display = 'block';
+    // Selection logic
+    function updateAssignedCount() {
+        const checked = document.querySelectorAll('#editShiftModal input[name="editShiftWorker"]:checked');
+        document.getElementById('editShiftAssignedCount').textContent = checked.length;
+        // Enforce max
+        document.querySelectorAll('#editShiftModal input[name="editShiftWorker"]').forEach(input => {
+            if (!input.checked && checked.length >= maxWorkers) input.disabled = true;
+            else input.disabled = false;
+        });
+    }
+    document.querySelectorAll('#editShiftModal input[name="editShiftWorker"]').forEach(input => {
+        input.addEventListener('change', updateAssignedCount);
+    });
+    updateAssignedCount();
+    // Save logic
+    document.getElementById('saveEditShiftBtn').onclick = function() {
+        const checked = Array.from(document.querySelectorAll('#editShiftModal input[name="editShiftWorker"]:checked')).map(i => i.value);
+        if (checked.length === 0) {
+            showNotification('❌ At least one worker must be assigned', 'error');
+            return;
+        }
+        // Update in-memory schedule
+        const newAssigned = checked.map(email => {
+            const w = workers.find(x => x.email === email);
+            return w ? `${w.first_name} ${w.last_name}` : email;
+        });
+        shift.assigned = newAssigned;
+        shift.raw_assigned = checked;
+        shift.all_available = workers.filter(w => checked.includes(w.email));
+        showNotification('✅ Shift updated (not yet saved to database)', 'success');
+        closeModal('editShiftModal');
+        displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+    };
 
         // Test Firebase connection
         async function testConnection() {
