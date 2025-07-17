@@ -1113,6 +1113,66 @@
                 `${w.first_name} ${w.last_name}: ${issue}`
             );
 
+            // In createShiftsFromAvailability, before normal assignment, check if all workers are available for all hours
+            const allFullyAvailable = workersData.every(w => {
+                let total = 0;
+                for (const day of Object.keys(hoursOfOperation)) {
+                    for (const op of hoursOfOperation[day]) {
+                        const opStart = timeToHour(op.start);
+                        const opEnd = timeToHour(op.end);
+                        if (!isWorkerAvailable(w, day, opStart, opEnd)) return false;
+                        total += opEnd - opStart;
+                    }
+                }
+                return total > 0;
+            });
+            if (allFullyAvailable) {
+                // Greedy assignment: fill every shift, then balance
+                for (const day of Object.keys(hoursOfOperation)) {
+                    const ops = hoursOfOperation[day] || [];
+                    for (const op of ops) {
+                        let opStart = timeToHour(op.start);
+                        let opEnd = timeToHour(op.end);
+                        if (opEnd <= opStart) opEnd += 24;
+                        let cur = opStart;
+                        while (cur < opEnd) {
+                            const shiftLength = Math.min(4, opEnd - cur);
+                            const endShift = cur + shiftLength;
+                            // Assign up to maxWorkersPerShift workers
+                            const chosen = workersData.slice(0, maxWorkersPerShift);
+                            if (!schedule[day]) schedule[day] = [];
+                            schedule[day].push({
+                                start: hourToTime(cur),
+                                end: hourToTime(endShift),
+                                assigned: chosen.map(w => `${w.first_name} ${w.last_name}`),
+                                available: chosen.map(w => `${w.first_name} ${w.last_name}`),
+                                raw_assigned: chosen.map(w => w.email),
+                                all_available: chosen
+                            });
+                            chosen.forEach(w => {
+                                assignedHours[w.email] += shiftLength;
+                            });
+                            cur = endShift;
+                        }
+                    }
+                }
+                // After filling, balance hours if needed (optional)
+                // ... existing code ...
+                // Return early to skip the rest of the normal logic
+                return {
+                    schedule,
+                    assignedHours,
+                    lowHours: [],
+                    unassigned: [],
+                    altSols: {},
+                    unfilledShifts: [],
+                    wsIssues: [],
+                    minHoursIssues: [],
+                    coverageGaps: [],
+                    forcedAssignments: []
+                };
+            }
+
             // Phase 1: Work Study Allocation (exactly 5 hours each)
             for (const w of wsWorkers) {
                 const email = w.email;
