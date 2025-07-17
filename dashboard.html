@@ -1066,6 +1066,7 @@
             const assignedHours = {};
             const wsStatus = {};
             const availabilityHours = {};
+            const forcedAssignments = [];
             
             workersData.forEach(w => {
                 assignedHours[w.email] = 0;
@@ -1293,6 +1294,59 @@
                 }
             }
 
+            // After normal assignment and before validation/reporting:
+            // Attempt to fill every unfilled shift with the closest available worker (least hours, prioritize zero hours)
+            for (const us of unfilledShifts) {
+                // Find eligible workers: have availability for this shift, not double-booked, not over max hours
+                const eligible = workersData.filter(w => {
+                    // Must have availability for this shift
+                    if (!isWorkerAvailable(w, us.day, us.start_hour, us.end_hour)) return false;
+                    // Not already assigned to an overlapping or adjacent shift
+                    const assignedShifts = Object.values(schedule).flat().filter(s => (s.raw_assigned||[]).includes(w.email));
+                    for (const s of assignedShifts) {
+                        const sDay = s.day || Object.keys(schedule).find(d => schedule[d].includes(s));
+                        if (sDay !== us.day) continue;
+                        const sStart = timeToHour(s.start);
+                        const sEnd = timeToHour(s.end);
+                        // Overlap or adjacent
+                        if (!(us.end_hour <= sStart || us.start_hour >= sEnd)) return false;
+                        if (Math.abs(us.start_hour - sEnd) < 0.01 || Math.abs(us.end_hour - sStart) < 0.01) return false;
+                    }
+                    // Not over max hours
+                    if ((assignedHours[w.email] || 0) + (us.end_hour - us.start_hour) > maxHoursPerWorker) return false;
+                    return true;
+                });
+                // Prioritize workers with zero hours, then least hours
+                eligible.sort((a, b) => {
+                    const aHours = assignedHours[a.email] || 0;
+                    const bHours = assignedHours[b.email] || 0;
+                    if (aHours === 0 && bHours > 0) return -1;
+                    if (bHours === 0 && aHours > 0) return 1;
+                    return aHours - bHours;
+                });
+                if (eligible.length > 0) {
+                    const chosen = eligible[0];
+                    assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
+                    if (!schedule[us.day]) schedule[us.day] = [];
+                    schedule[us.day].push({
+                        start: us.start,
+                        end: us.end,
+                        assigned: [`${chosen.first_name} ${chosen.last_name}`],
+                        available: eligible.map(w => `${w.first_name} ${w.last_name}`),
+                        raw_assigned: [chosen.email],
+                        all_available: eligible,
+                        forced: true
+                    });
+                    forcedAssignments.push({
+                        day: us.day,
+                        start: us.start,
+                        end: us.end,
+                        worker: `${chosen.first_name} ${chosen.last_name}`,
+                        email: chosen.email
+                    });
+                }
+            }
+
             console.log('Enhanced schedule generation complete with coverage analysis');
             
             return {
@@ -1304,7 +1358,8 @@
                 unfilledShifts,
                 wsIssues,
                 minHoursIssues,
-                coverageGaps
+                coverageGaps,
+                forcedAssignments
             };
         };
 
@@ -1988,7 +2043,8 @@
                     unfilledShifts,
                     wsIssues,
                     minHoursIssues,
-                    coverageGaps
+                    coverageGaps,
+                    forcedAssignments
                 } = result;
 
                 // Update global schedule
@@ -2010,7 +2066,8 @@
                         wsIssues,
                         minHoursIssues,
                         coverageGaps,
-                        altSols
+                        altSols,
+                        forcedAssignments
                     });
                 }
 
@@ -2060,7 +2117,7 @@
 
         // Enhanced issues dialog with coverage gaps
         function showEnhancedIssuesDialog(issues) {
-            const { unfilledShifts, wsIssues, minHoursIssues, coverageGaps, altSols } = issues;
+            const { unfilledShifts, wsIssues, minHoursIssues, coverageGaps, altSols, forcedAssignments } = issues;
             
             let html = '<div class="modal-content"><div class="modal-header"><h3>⚠️ Schedule Analysis & Issues</h3><span class="close" onclick="closeIssuesDialog()">&times;</span></div>';
             
