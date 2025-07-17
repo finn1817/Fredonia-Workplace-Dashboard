@@ -143,6 +143,14 @@
         <button class="btn" id="showRegisterBtn" style="margin-top:1rem;background:#eee;color:#333;">Create Account</button>
         <form id="registerForm" style="display:none;">
             <div class="form-group">
+                <label for="regFirstName">First Name</label>
+                <input type="text" id="regFirstName" required>
+            </div>
+            <div class="form-group">
+                <label for="regLastName">Last Name</label>
+                <input type="text" id="regLastName" required>
+            </div>
+            <div class="form-group">
                 <label for="regEmail">Email Address</label>
                 <input type="email" id="regEmail" required>
             </div>
@@ -153,6 +161,10 @@
             <div class="form-group">
                 <label for="regConfirmPassword">Confirm Password</label>
                 <input type="password" id="regConfirmPassword" required>
+            </div>
+            <div class="form-group">
+                <label for="regPhone">Phone Number <span style="color:#888;">(optional)</span></label>
+                <input type="tel" id="regPhone" pattern="[0-9\-\+\(\) ]*">
             </div>
             <button type="submit" class="btn" id="registerBtn">Create Account</button>
             <button type="button" class="btn" id="backToLoginBtn" style="background:#eee;color:#333;margin-top:0.5rem;">Back to Login</button>
@@ -292,9 +304,17 @@
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             errorMsg.style.display = 'none';
+            const firstName = document.getElementById('regFirstName').value.trim();
+            const lastName = document.getElementById('regLastName').value.trim();
             const email = document.getElementById('regEmail').value.trim();
             const password = document.getElementById('regPassword').value;
             const confirmPassword = document.getElementById('regConfirmPassword').value;
+            const phone = document.getElementById('regPhone').value.trim();
+            if (!firstName || !lastName) {
+                errorMsg.textContent = 'First and last name are required.';
+                errorMsg.style.display = 'block';
+                return;
+            }
             if (!email || !password || !confirmPassword) {
                 errorMsg.textContent = 'All fields are required.';
                 errorMsg.style.display = 'block';
@@ -322,6 +342,9 @@
                 }
                 // Add user
                 await addDoc(usersRef, {
+                    firstName,
+                    lastName,
+                    phone,
                     email,
                     password,
                     isAdmin: 0
