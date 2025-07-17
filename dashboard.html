@@ -754,6 +754,17 @@
       </div>
     </div>
 
+    <!-- Add modal for Add Shift if not present -->
+    <div id="addShiftModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Add New Shift</h3>
+                <span class="close" onclick="closeModal('addShiftModal')">&times;</span>
+            </div>
+            <div id="addShiftModalBody"></div>
+        </div>
+    </div>
+
     <script type="module">
         // Enhanced auth check and setup
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -2872,7 +2883,72 @@
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
-            showNotification('➕ Add new shift feature - Enhanced implementation coming soon!', 'info');
+            // Build day options
+            let dayOptions = DAYS.map(day => `<option value='${day}'>${day}</option>`).join('');
+            // Build worker options
+            function formatAvail(w) {
+                return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
+            }
+            let workerOptions = workers.map(w => `<option value='${w.email}'>${w.first_name} ${w.last_name} (${formatAvail(w)})</option>`).join('');
+            let html = `<div class='form-group'><label>Day</label><select id='addShiftDay'>${dayOptions}</select></div>`;
+            html += `<div class='form-row'><div class='form-group'><label>Start Time</label><input type='time' id='addShiftStart'></div><div class='form-group'><label>End Time</label><input type='time' id='addShiftEnd'></div></div>`;
+            html += `<div class='form-group'><label>Assign Worker(s)</label><select id='addShiftWorkers' multiple size='5'>${workerOptions}</select></div>`;
+            html += `<div style='margin-top:1rem;'><button class='btn btn-success' id='saveAddShiftBtn'>Add Shift</button> <button class='btn btn-secondary' onclick="closeModal('addShiftModal')">Cancel</button></div>`;
+            document.getElementById('addShiftModalBody').innerHTML = html;
+            document.getElementById('addShiftModal').style.display = 'block';
+            document.getElementById('saveAddShiftBtn').onclick = async function() {
+                const day = document.getElementById('addShiftDay').value;
+                const start = document.getElementById('addShiftStart').value;
+                const end = document.getElementById('addShiftEnd').value;
+                const selected = Array.from(document.getElementById('addShiftWorkers').selectedOptions).map(o => o.value);
+                if (!day || !start || !end) {
+                    showNotification('❌ All fields are required', 'error');
+                    return;
+                }
+                if (end <= start) {
+                    showNotification('❌ End time must be after start time', 'error');
+                    return;
+                }
+                if (selected.length === 0) {
+                    showNotification('❌ At least one worker must be assigned', 'error');
+                    return;
+                }
+                // Validate within operating hours
+                const opHours = (hours[day] && hours[day][0]) ? hours[day][0] : { start: '00:00', end: '23:59' };
+                if (start < opHours.start || end > opHours.end) {
+                    showNotification(`❌ Shift must be within operating hours: ${formatTime(opHours.start)} - ${formatTime(opHours.end)}`, 'error');
+                    return;
+                }
+                // Add to in-memory schedule
+                if (!schedule[day]) schedule[day] = [];
+                const newAssigned = selected.map(email => {
+                    const w = workers.find(x => x.email === email);
+                    return w ? `${w.first_name} ${w.last_name}` : email;
+                });
+                schedule[day].push({
+                    start,
+                    end,
+                    assigned: newAssigned,
+                    available: newAssigned,
+                    raw_assigned: selected,
+                    all_available: workers.filter(w => selected.includes(w.email))
+                });
+                showNotification('✅ Shift added (not yet saved to database)', 'success');
+                closeModal('addShiftModal');
+                displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                // Save to Firestore
+                if (currentScheduleId) {
+                    const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
+                    await updateDoc(scheduleRef, {
+                        days: schedule,
+                        updated_at: new Date().toISOString(),
+                        updated_by: user.email
+                    });
+                    showNotification('✅ Shift added and saved to database!', 'success');
+                } else {
+                    showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
+                }
+            };
         };
 
         window.editShift = function(day, shiftIndex) {
