@@ -2366,6 +2366,7 @@
                             ${user.isAdmin ? `
                             <div class="shift-actions no-print">
                                 <button class="btn btn-warning" onclick="editShift('${day}', ${index})">✏️ Edit</button>
+                                <button class="btn btn-danger" onclick="removeShift('${day}', ${index})">🗑️ Remove</button>
                                 ${(unfilled || isGap) ? '<button class="btn btn-info" onclick="suggestAlternatives(\'' + day + '\', ' + index + ')">💡 Fix</button>' : ''}
                             </div>
                             ` : ''}
@@ -3217,6 +3218,37 @@
             };
             reader.readAsBinaryString(file);
           };
+        };
+
+        // Add removeShift function
+        window.removeShift = async function(day, shiftIndex) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            const shift = (schedule[day] || [])[shiftIndex];
+            if (!shift) {
+                showNotification('❌ Shift not found', 'error');
+                return;
+            }
+            const confirmMsg = `Are you sure you want to delete the shift on ${day} from ${formatTime(shift.start)} to ${formatTime(shift.end)}?`;
+            if (!confirm(confirmMsg)) return;
+            // Remove from in-memory schedule
+            schedule[day].splice(shiftIndex, 1);
+            showNotification('🗑️ Shift removed (not yet saved to database)', 'success');
+            displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+            // Save to Firestore
+            if (currentScheduleId) {
+                const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
+                await updateDoc(scheduleRef, {
+                    days: schedule,
+                    updated_at: new Date().toISOString(),
+                    updated_by: user.email
+                });
+                showNotification('🗑️ Shift removed and saved to database!', 'success');
+            } else {
+                showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
+            }
         };
     </script>
 </body>
