@@ -2083,7 +2083,8 @@
                         <td>${availabilityStatus}</td>
                         <td>
                             <button class="btn btn-primary" onclick="contactWorker('${worker.email}')">📧 Contact</button>
-                            ${user.isAdmin ? `<button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="margin-left: 0.5rem;">✏️ Edit</button>` : ''}
+                            ${user.isAdmin ? `<button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="margin-left: 0.5rem;">✏️ Edit</button>
+                            <button class="btn btn-danger" onclick="removeWorker('${worker.id}')" style="margin-left: 0.5rem;">🗑️ Remove</button>` : ''}
                         </td>
                     </tr>
                 `;
@@ -3284,6 +3285,26 @@
         if (!user.isAdmin) {
             document.getElementById('viewWorkersBtn').style.display = 'none';
         }
+
+        // Add removeWorker function
+        window.removeWorker = async function(workerId) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            const worker = workers.find(w => w.id === workerId);
+            if (!worker) return;
+            if (!confirm(`Are you sure you want to delete ${worker.first_name} ${worker.last_name} (${worker.email})? This cannot be undone.`)) return;
+            try {
+                await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId));
+                showNotification('✅ Worker deleted successfully!', 'success');
+                await loadWorkplaceData();
+                viewWorkers();
+            } catch (error) {
+                console.error('Error deleting worker:', error);
+                showNotification('❌ Error deleting worker', 'error');
+            }
+        };
     </script>
 </body>
 </html>
