@@ -584,6 +584,7 @@
                     <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
                     <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
                     <button class="btn btn-secondary" onclick="viewWorkers()" id="viewWorkersBtn">👥 View Workers</button>
+                    <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
@@ -3302,6 +3303,61 @@
                 console.error('Error deleting worker:', error);
                 showNotification('❌ Error deleting worker', 'error');
             }
+        };
+
+        // Show/hide Who's Working Now button for admins
+        if (user.isAdmin) {
+            document.getElementById('whosWorkingNowBtn').style.display = 'inline-block';
+        }
+
+        // Add showWhosWorkingNow function
+        window.showWhosWorkingNow = function() {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            if (!schedule || Object.keys(schedule).length === 0) {
+                showNotification('❌ No schedule loaded. View the current schedule first.', 'error');
+                return;
+            }
+            // Get current day and time
+            const now = new Date();
+            const day = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]; // JS: 0=Sunday, our DAYS: 0=Monday
+            const curHour = now.getHours() + now.getMinutes() / 60;
+            const shifts = (schedule[day] || []).filter(shift => {
+                const start = timeToHour(shift.start);
+                const end = timeToHour(shift.end);
+                return start <= curHour && curHour < end && shift.assigned && shift.assigned.length > 0 && !shift.assigned.includes('Unfilled') && !shift.assigned.includes('COVERAGE GAP');
+            });
+            let html = `<div class='modal-content'><div class='modal-header'><h3>🕒 Who's Working Now?</h3><span class='close' onclick="closeModal('whosWorkingNowModal')">&times;</span></div>`;
+            if (shifts.length === 0) {
+                html += `<div class='info'>No one is currently scheduled to work right now (${day}, ${formatTime(hourToTime(curHour))}).</div>`;
+            } else {
+                html += `<table class='worker-table'><thead><tr><th>Name</th><th>Shift Time</th><th>Actions</th></tr></thead><tbody>`;
+                shifts.forEach(shift => {
+                    shift.assigned.forEach(name => {
+                        // Find worker email for contact button
+                        const email = (workers.find(w => `${w.first_name} ${w.last_name}` === name) || {}).email || '';
+                        html += `<tr><td><strong>${name}</strong></td><td>${formatTime(shift.start)} - ${formatTime(shift.end)}</td><td><button class='btn btn-primary' onclick="contactWorker('${email}')">📧 Contact</button></td></tr>`;
+                    });
+                });
+                html += `</tbody></table>`;
+            }
+            html += `<div style='margin-top:1rem;'><button class='btn btn-secondary' onclick="closeModal('whosWorkingNowModal')">Close</button></div></div>`;
+            // Show modal
+            let modal = document.getElementById('whosWorkingNowModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'whosWorkingNowModal';
+                modal.className = 'modal';
+                document.body.appendChild(modal);
+            }
+            modal.innerHTML = html;
+            modal.style.display = 'block';
+            window.closeModal = function(id) {
+                const m = document.getElementById(id);
+                if (m) m.style.display = 'none';
+            };
         };
     </script>
 </body>
