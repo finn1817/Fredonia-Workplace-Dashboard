@@ -550,6 +550,7 @@
                 <button class="btn btn-admin" onclick="showManageHours()">⏰ Manage Hours</button>
                 <button class="btn btn-admin" onclick="showManageWorkers()">👥 Manage Workers</button>
                 <button class="btn btn-admin" onclick="showAddWorker()">➕ Add Worker</button>
+                <button class="btn btn-admin" onclick="showImportWorkers()">📥 Import Workers</button>
             </div>
         </div>
 
@@ -757,6 +758,17 @@
             </div>
             <div id="editShiftModalBody"></div>
         </div>
+    </div>
+
+    <!-- Add modal for import feedback -->
+    <div id="importWorkersModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3>Import Workers</h3>
+          <span class="close" onclick="closeModal('importWorkersModal')">&times;</span>
+        </div>
+        <div id="importWorkersModalBody"></div>
+      </div>
     </div>
 
     <script type="module">
@@ -2938,6 +2950,109 @@
         }
 
         testConnection();
+
+        // Add SheetJS via CDN
+        if (!window.XLSX) {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+          document.head.appendChild(script);
+        }
+
+        window.showImportWorkers = function() {
+          if (!user.isAdmin) {
+            showNotification('❌ Admin access required', 'error');
+            return;
+          }
+          if (!selectedWorkplace) {
+            showNotification('⚠️ Please select a workplace first', 'warning');
+            return;
+          }
+          document.getElementById('importWorkersModalBody').innerHTML = `
+            <div style='margin-bottom:1rem;'>
+              <strong>Select an Excel file (.xlsx) with columns: First Name, Last Name, Email, Work Study, Days & Time Available.</strong>
+            </div>
+            <input type='file' id='importWorkersFile' accept='.xlsx,.xls,.csv'>
+            <div id='importWorkersProgress' style='margin-top:1rem;'></div>
+          `;
+          document.getElementById('importWorkersModal').style.display = 'block';
+          document.getElementById('importWorkersFile').onchange = async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            document.getElementById('importWorkersProgress').innerHTML = '🔄 Reading file...';
+            // Wait for SheetJS to load
+            function waitForSheetJS() {
+              return new Promise(resolve => {
+                if (window.XLSX) resolve();
+                else setTimeout(() => resolve(waitForSheetJS()), 100);
+              });
+            }
+            await waitForSheetJS();
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+              const data = evt.target.result;
+              let workbook;
+              try {
+                workbook = XLSX.read(data, { type: 'binary' });
+              } catch (err) {
+                document.getElementById('importWorkersProgress').innerHTML = '❌ Failed to read file.';
+                return;
+              }
+              const sheet = workbook.Sheets[workbook.SheetNames[0]];
+              const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+              if (!rows.length) {
+                document.getElementById('importWorkersProgress').innerHTML = '❌ No data found in file.';
+                return;
+              }
+              document.getElementById('importWorkersProgress').innerHTML = '🔄 Checking for duplicates...';
+              // Get existing worker emails
+              const existingSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+              const existingEmails = new Set();
+              existingSnapshot.forEach(doc => {
+                const data = doc.data();
+                if (data['Email']) existingEmails.add(data['Email'].toLowerCase());
+              });
+              // Prepare new workers
+              const newWorkers = [];
+              const skipped = [];
+              for (const row of rows) {
+                const email = (row['Email'] || '').toLowerCase();
+                if (!email || existingEmails.has(email)) {
+                  skipped.push(email);
+                  continue;
+                }
+                newWorkers.push({
+                  'First Name': row['First Name'] || '',
+                  'Last Name': row['Last Name'] || '',
+                  'Email': row['Email'] || '',
+                  'Work Study': (row['Work Study'] || '').toUpperCase() === 'Y' ? 'Yes' : 'No',
+                  'Days & Times Available': row['Days & Time Available'] || '',
+                  created_at: new Date().toISOString(),
+                  created_by: user.email
+                });
+              }
+              document.getElementById('importWorkersProgress').innerHTML = `Found ${newWorkers.length} new workers, ${skipped.length} duplicates.`;
+              if (newWorkers.length === 0) {
+                document.getElementById('importWorkersProgress').innerHTML += '<br>Nothing to import.';
+                return;
+              }
+              document.getElementById('importWorkersProgress').innerHTML += '<br>Importing...';
+              // Add to Firestore
+              let added = 0;
+              for (const worker of newWorkers) {
+                try {
+                  await addDoc(collection(db, 'workplaces', selectedWorkplace, 'workers'), worker);
+                  added++;
+                } catch (err) {
+                  // skip
+                }
+              }
+              document.getElementById('importWorkersProgress').innerHTML += `<br>✅ Imported ${added} workers!`;
+              showNotification(`✅ Imported ${added} workers, skipped ${skipped.length} duplicates.`, 'success');
+              await loadWorkplaceData();
+            };
+            reader.readAsBinaryString(file);
+          };
+        };
     </script>
 </body>
 </html>
