@@ -3388,7 +3388,14 @@
             document.getElementById('userDashboard').style.display = 'block';
             document.getElementById('adminSection').style.display = 'none';
             // Set welcome message
-            let welcomeName = user.firstName || user.email || 'User';
+            let welcomeName = '';
+            if (user.firstName && user.lastName) {
+                welcomeName = `${user.firstName} ${user.lastName}`;
+            } else if (user.firstName) {
+                welcomeName = user.firstName;
+            } else {
+                welcomeName = user.email || 'User';
+            }
             document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
         }
     </script>
