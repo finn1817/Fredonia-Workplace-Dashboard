@@ -3550,6 +3550,9 @@
                 console.log('User UID:', user.uid);
                 console.log('Document path:', `users/${user.uid}`);
                 
+                // Create document reference first
+                const userDocRef = doc(db, 'users', user.uid);
+                
                 // Check if we can read the document first
                 try {
                     const userDoc = await getDoc(userDocRef);
@@ -3562,7 +3565,6 @@
                 }
                 
                 // Update password in Firestore
-                const userDocRef = doc(db, 'users', user.uid);
                 await updateDoc(userDocRef, {
                     password: newPassword
                 });
