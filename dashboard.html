@@ -552,6 +552,7 @@
                 <button class="btn btn-admin" onclick="showManageWorkers()">👥 Manage Workers</button>
                 <button class="btn btn-admin" onclick="showAddWorker()">➕ Add Worker</button>
                 <button class="btn btn-admin" onclick="showImportWorkers()">📥 Import Workers</button>
+                <button class="btn btn-warning" id="hourRequestsBtn" style="position:relative;">⏰ Hour Requests <span id="hourRequestsBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
             </div>
         </div>
 
@@ -666,6 +667,8 @@
         <div id="userDashboard" class="workplace-section" style="display:none; margin-bottom:2rem;">
             <h2 class="section-title">👤 User Dashboard</h2>
             <div id="userWelcome" style="font-size:1.1rem; margin-bottom:1.5rem;"></div>
+            <!-- Request Availability Change Button -->
+            <button class="btn btn-info" id="requestAvailabilityBtn" style="margin-bottom:1.5rem;">✏️ Request Availability Change</button>
             <!-- Removed My Account section from here -->
             <div class="form-section" style="margin-bottom:1.5rem;">
                 <h3>📅 My Assigned Shifts</h3>
@@ -683,6 +686,43 @@
                 <h3>✉️ Send a Message to Admins</h3>
                 <textarea id="userMessageInput" rows="3" style="width:100%;border-radius:8px;padding:1rem;" placeholder="Type your message or question here..."></textarea>
                 <button class="btn btn-info" id="sendUserMessageBtn" style="margin-top:0.5rem;">Send Message</button>
+            </div>
+        </div>
+        <!-- Modal for Request Availability Change -->
+        <div id="availabilityRequestModal" class="modal">
+            <div class="modal-content" style="max-width: 400px;">
+                <div class="modal-header">
+                    <h3>✏️ Request Availability Change</h3>
+                    <span class="close" onclick="closeModal('availabilityRequestModal')">&times;</span>
+                </div>
+                <form id="availabilityRequestForm">
+                    <div class="form-group">
+                        <label for="requestName">Name</label>
+                        <input type="text" id="requestName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="requestEmail">Email</label>
+                        <input type="email" id="requestEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="requestAvailability">Requested Availability</label>
+                        <textarea id="requestAvailability" rows="3" required placeholder="e.g. Monday 9am-2pm, Tuesday 1pm-5pm"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success" id="submitAvailabilityRequestBtn">Submit Request</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('availabilityRequestModal')" style="margin-top:0.5rem;">Cancel</button>
+                </form>
+            </div>
+        </div>
+        <!-- Modal for Admin Hour Requests -->
+        <div id="hourRequestsModal" class="modal">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3>⏰ Hour Change Requests</h3>
+                    <span class="close" onclick="closeModal('hourRequestsModal')">&times;</span>
+                </div>
+                <div id="hourRequestsList">
+                    <div class="loading">Loading requests...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -3633,6 +3673,110 @@
                 console.error('Error changing password:', error);
                 showNotification('❌ Failed to change password', 'error');
             }
+        };
+
+        // --- AVAILABILITY REQUESTS FEATURE ---
+        // User: Open modal
+        if (!user.isAdmin) {
+            document.getElementById('requestAvailabilityBtn').onclick = function() {
+                document.getElementById('requestName').value = user.firstName || '';
+                document.getElementById('requestEmail').value = user.email || '';
+                document.getElementById('requestAvailability').value = '';
+                document.getElementById('availabilityRequestModal').style.display = 'block';
+            };
+        }
+        // User: Submit request
+        const availabilityRequestForm = document.getElementById('availabilityRequestForm');
+        availabilityRequestForm.onsubmit = async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('requestName').value.trim();
+            const email = document.getElementById('requestEmail').value.trim();
+            const requestedAvailability = document.getElementById('requestAvailability').value.trim();
+            if (!selectedWorkplace) {
+                showNotification('❌ Please select a workplace first', 'error');
+                return;
+            }
+            if (!name || !email || !requestedAvailability) {
+                showNotification('❌ All fields are required', 'error');
+                return;
+            }
+            try {
+                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'availability_requests'), {
+                    name,
+                    email,
+                    requestedAvailability,
+                    status: 'pending',
+                    submittedAt: new Date().toISOString(),
+                });
+                showNotification('✅ Request submitted! Admins will review your request.', 'success');
+                closeModal('availabilityRequestModal');
+            } catch (error) {
+                showNotification('❌ Failed to submit request', 'error');
+            }
+        };
+        // Admin: Hour Requests button logic
+        if (user.isAdmin) {
+            document.getElementById('hourRequestsBtn').onclick = async function() {
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                document.getElementById('hourRequestsModal').style.display = 'block';
+                loadHourRequests();
+            };
+        }
+        // Function to load hour requests for admin
+        async function loadHourRequests() {
+            const listDiv = document.getElementById('hourRequestsList');
+            listDiv.innerHTML = '<div class="loading">Loading requests...</div>';
+            try {
+                const snapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'availability_requests'),
+                    where('status', '==', 'pending')
+                ));
+                if (snapshot.empty) {
+                    listDiv.innerHTML = '<div class="info">No pending requests.</div>';
+                    document.getElementById('hourRequestsBadge').style.display = 'none';
+                    return;
+                }
+                let html = '<table class="worker-table"><thead><tr><th>Name</th><th>Email</th><th>Requested Availability</th><th>Submitted</th><th>Action</th></tr></thead><tbody>';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    html += `<tr><td>${data.name}</td><td>${data.email}</td><td>${data.requestedAvailability}</td><td>${new Date(data.submittedAt).toLocaleString()}</td><td><button class='btn btn-success' onclick='markRequestReviewed("${doc.id}")'>Mark as Reviewed</button></td></tr>`;
+                });
+                html += '</tbody></table>';
+                listDiv.innerHTML = html;
+                document.getElementById('hourRequestsBadge').style.display = 'inline-block';
+            } catch (error) {
+                listDiv.innerHTML = '<div class="error">Failed to load requests.</div>';
+            }
+        }
+        // Mark request as reviewed
+        window.markRequestReviewed = async function(requestId) {
+            try {
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'availability_requests', requestId), { status: 'resolved', reviewedAt: new Date().toISOString(), reviewedBy: user.email });
+                showNotification('✅ Request marked as reviewed.', 'success');
+                loadHourRequests();
+            } catch (error) {
+                showNotification('❌ Failed to update request', 'error');
+            }
+        };
+        // Badge update on workplace select
+        async function updateHourRequestsBadge() {
+            if (!user.isAdmin || !selectedWorkplace) return;
+            try {
+                const snapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'availability_requests'),
+                    where('status', '==', 'pending')
+                ));
+                document.getElementById('hourRequestsBadge').style.display = snapshot.empty ? 'none' : 'inline-block';
+            } catch {}
+        }
+        // Call badge update on workplace select
+        const origSelectWorkplace = window.selectWorkplace;
+        window.selectWorkplace = async function(id) {
+            await origSelectWorkplace(id);
+            updateHourRequestsBadge();
         };
     </script>
 </body>
