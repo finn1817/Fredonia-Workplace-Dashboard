@@ -1738,7 +1738,9 @@
                 if (scheduleData && scheduleData.days) {
                     for (const day of DAYS) {
                         const shifts = scheduleData.days[day] || [];
-                        myShiftsByDay[day] = shifts.filter(shift => (shift.raw_assigned||[]).includes(userEmail));
+                        myShiftsByDay[day] = shifts.filter(shift =>
+                            (shift.raw_assigned||[]).some(e => e && e.trim().toLowerCase() === userEmail.trim().toLowerCase())
+                        );
                     }
                     // Calculate total hours
                     for (const day of DAYS) {
