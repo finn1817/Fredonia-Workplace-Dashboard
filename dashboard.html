@@ -903,6 +903,9 @@
         </div>
     </div>
 
+    <!-- Add zod for schema validation -->
+    <script src="https://cdn.jsdelivr.net/npm/zod@3.22.4/lib/index.umd.min.js"></script>
+
     <script type="module">
         // Enhanced auth check and setup
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -2312,6 +2315,15 @@
                     coverageGaps,
                     forcedAssignments
                 } = result;
+                // Validate all shifts before saving
+                for (const day of DAYS) {
+                    for (const shift of (generatedSchedule[day] || [])) {
+                        if (!validateShift(shift)) {
+                            setLoading('generateScheduleBtn', false);
+                            return;
+                        }
+                    }
+                }
                 schedule = generatedSchedule;
                 await saveSchedule(schedule, 'default', {
                     maxHours,
@@ -4140,6 +4152,36 @@
                     showNotification('❌ Failed to clean up old schedules', 'error');
                 }
             };
+        }
+
+        // Zod schema for a shift
+        const ShiftSchema = window.zod.object({
+            start: window.zod.string().regex(/^\d{2}:\d{2}$/),
+            end: window.zod.string().regex(/^\d{2}:\d{2}$/),
+            assigned: window.zod.array(window.zod.string()).min(1),
+            raw_assigned: window.zod.array(window.zod.string()).min(1),
+            // Optional fields
+            available: window.zod.array(window.zod.string()).optional(),
+            all_available: window.zod.array(window.zod.any()).optional(),
+            is_work_study: window.zod.boolean().optional(),
+            isGap: window.zod.boolean().optional(),
+            forced: window.zod.boolean().optional(),
+        });
+
+        function validateShift(shift) {
+            try {
+                ShiftSchema.parse(shift);
+                // Check that end is after start
+                const startHour = timeToHour(shift.start);
+                const endHour = timeToHour(shift.end);
+                if (endHour <= startHour) {
+                    throw new Error('End time must be after start time');
+                }
+                return true;
+            } catch (err) {
+                showNotification('❌ Invalid shift: ' + (err.errors ? err.errors[0].message : err.message), 'error');
+                return false;
+            }
         }
     </script>
 </body>
