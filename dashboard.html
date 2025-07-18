@@ -3545,6 +3545,11 @@
                     return;
                 }
                 
+                // Debug: Log the user object and document path
+                console.log('User object:', user);
+                console.log('User UID:', user.uid);
+                console.log('Document path:', `users/${user.uid}`);
+                
                 // Update password in Firestore
                 const userDocRef = doc(db, 'users', user.uid);
                 await updateDoc(userDocRef, {
