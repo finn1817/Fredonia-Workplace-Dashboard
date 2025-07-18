@@ -3510,12 +3510,9 @@
         
         // Change password handler
         document.getElementById('changePasswordBtnModal').onclick = async function() {
-            console.log('Password change button clicked');
             const oldPassword = document.getElementById('oldPasswordModal').value;
             const newPassword = document.getElementById('newPasswordModal').value;
             const confirmNewPassword = document.getElementById('confirmNewPasswordModal').value;
-            
-            console.log('Password values:', { oldPassword, newPassword, confirmNewPassword });
             
             // Validation
             if (!oldPassword || !newPassword || !confirmNewPassword) {
@@ -3534,45 +3531,38 @@
             }
             
             try {
-                // Debug: Log the password comparison
-                console.log('Entered password:', oldPassword);
-                console.log('Stored password:', user.password);
-                console.log('Passwords match:', oldPassword === user.password);
-                
-                // First verify the old password by checking against stored password
+                // Verify old password
                 if (oldPassword !== user.password) {
                     showNotification('❌ Current password is incorrect', 'error');
                     return;
                 }
                 
-                // Debug: Log the user object and document path
-                console.log('User object:', user);
-                console.log('User UID:', user.uid);
-                console.log('Document path:', `users/${user.uid}`);
+                // Import the auth database configuration using dynamic imports
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
                 
-                // Create document reference first
-                const userDocRef = doc(db, 'users', user.uid);
+                // Use the AUTH database config (not workplace config)
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "workplace-scheduler-ace38.firebaseapp.com",
+                    projectId: "workplace-scheduler-ace38",
+                    storageBucket: "workplace-scheduler-ace38.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
                 
-                // Check if we can read the document first
-                try {
-                    const userDoc = await getDoc(userDocRef);
-                    console.log('Document exists:', userDoc.exists());
-                    if (userDoc.exists()) {
-                        console.log('Document data:', userDoc.data());
-                    }
-                } catch (readError) {
-                    console.log('Error reading document:', readError);
-                }
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
                 
-                // Update password in Firestore
+                // Update password in AUTH database using correct document ID
+                const userDocRef = doc(authDb, 'users', user.uid);
                 await updateDoc(userDocRef, {
                     password: newPassword
                 });
                 
                 // Update local user object
                 user.password = newPassword;
-                
-                // Update localStorage
                 localStorage.setItem('user', JSON.stringify(user));
                 
                 // Clear password fields
