@@ -3457,17 +3457,109 @@
             document.getElementById('accountPhoneModal').value = user.phone || '';
             document.getElementById('myAccountModal').style.display = 'block';
         };
-        // Save changes handler (implement Firestore update as needed)
+        
+        // Save account changes handler
         document.getElementById('saveAccountBtnModal').onclick = async function() {
-            // TODO: Implement Firestore update for user profile fields
-            showNotification('✅ Account changes saved (demo only)', 'success');
-            document.getElementById('myAccountModal').style.display = 'none';
+            const firstName = document.getElementById('accountFirstNameModal').value.trim();
+            const lastName = document.getElementById('accountLastNameModal').value.trim();
+            const phone = document.getElementById('accountPhoneModal').value.trim();
+            
+            // Validation
+            if (!firstName || !lastName) {
+                showNotification('❌ First name and last name are required', 'error');
+                return;
+            }
+            
+            try {
+                // Update user document in Firestore
+                const userDocRef = doc(db, 'users', user.uid);
+                await updateDoc(userDocRef, {
+                    firstName: firstName,
+                    lastName: lastName,
+                    phone: phone
+                });
+                
+                // Update local user object
+                user.firstName = firstName;
+                user.lastName = lastName;
+                user.phone = phone;
+                
+                // Update localStorage
+                localStorage.setItem('user', JSON.stringify(user));
+                
+                // Update welcome message if user is non-admin
+                if (!user.isAdmin) {
+                    let welcomeName = '';
+                    if (user.firstName && user.lastName) {
+                        welcomeName = `${user.firstName} ${user.lastName}`;
+                    } else if (user.firstName) {
+                        welcomeName = user.firstName;
+                    } else {
+                        welcomeName = user.email || 'User';
+                    }
+                    document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+                }
+                
+                showNotification('✅ Account information updated successfully', 'success');
+                document.getElementById('myAccountModal').style.display = 'none';
+            } catch (error) {
+                console.error('Error updating account:', error);
+                showNotification('❌ Failed to update account information', 'error');
+            }
         };
-        // Change password handler (implement Firestore update as needed)
+        
+        // Change password handler
         document.getElementById('changePasswordBtnModal').onclick = async function() {
-            // TODO: Implement Firestore update for password change
-            showNotification('✅ Password changed (demo only)', 'success');
-            document.getElementById('myAccountModal').style.display = 'none';
+            const oldPassword = document.getElementById('oldPasswordModal').value;
+            const newPassword = document.getElementById('newPasswordModal').value;
+            const confirmNewPassword = document.getElementById('confirmNewPasswordModal').value;
+            
+            // Validation
+            if (!oldPassword || !newPassword || !confirmNewPassword) {
+                showNotification('❌ All password fields are required', 'error');
+                return;
+            }
+            
+            if (newPassword !== confirmNewPassword) {
+                showNotification('❌ New passwords do not match', 'error');
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                showNotification('❌ New password must be at least 6 characters', 'error');
+                return;
+            }
+            
+            try {
+                // First verify the old password by checking against stored password
+                if (oldPassword !== user.password) {
+                    showNotification('❌ Current password is incorrect', 'error');
+                    return;
+                }
+                
+                // Update password in Firestore
+                const userDocRef = doc(db, 'users', user.uid);
+                await updateDoc(userDocRef, {
+                    password: newPassword
+                });
+                
+                // Update local user object
+                user.password = newPassword;
+                
+                // Update localStorage
+                localStorage.setItem('user', JSON.stringify(user));
+                
+                // Clear password fields
+                document.getElementById('oldPasswordModal').value = '';
+                document.getElementById('newPasswordModal').value = '';
+                document.getElementById('confirmNewPasswordModal').value = '';
+                
+                showNotification('✅ Password changed successfully', 'success');
+                document.getElementById('myAccountModal').style.display = 'none';
+            } catch (error) {
+                console.error('Error changing password:', error);
+                showNotification('❌ Failed to change password', 'error');
+            }
         };
     </script>
 </body>
