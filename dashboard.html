@@ -1771,6 +1771,8 @@
                 }
                 document.getElementById('userShiftsPlaceholder').innerHTML = html;
                 document.getElementById('userHoursPlaceholder').innerHTML = `<strong>${totalHours.toFixed(2)}</strong> hours assigned this week.`;
+                document.getElementById('userDashboard').style.display = 'block';
+                document.getElementById('adminSection').style.display = 'none';
             }
         };
 
