@@ -3531,6 +3531,11 @@
             }
             
             try {
+                // Debug: Log the password comparison
+                console.log('Entered password:', oldPassword);
+                console.log('Stored password:', user.password);
+                console.log('Passwords match:', oldPassword === user.password);
+                
                 // First verify the old password by checking against stored password
                 if (oldPassword !== user.password) {
                     showNotification('❌ Current password is incorrect', 'error');
