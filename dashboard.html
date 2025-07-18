@@ -554,6 +554,8 @@
                 <button class="btn btn-admin" onclick="showImportWorkers()">📥 Import Workers</button>
                 <button class="btn btn-warning" id="hourRequestsBtn" style="position:relative;">⏰ Hour Requests <span id="hourRequestsBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
                 <button class="btn btn-info" id="viewMessagesBtn" style="position:relative;">📥 View Messages <span id="messagesBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
+                <button class="btn btn-danger" id="removeAllWorkersBtn">🗑️ Remove All Workers</button>
+                <button class="btn btn-danger" id="cleanupSchedulesBtn">🧹 Clean Up Old Schedules</button>
             </div>
         </div>
 
@@ -4087,6 +4089,58 @@
             updateHourRequestsBadge();
             updateMessagesBadge();
         };
+
+        // Remove All Workers button logic (admin only)
+        if (user.isAdmin) {
+            document.getElementById('removeAllWorkersBtn').onclick = async function() {
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                if (!confirm('Are you sure you want to delete ALL workers from this workplace? This cannot be undone!')) return;
+                try {
+                    const workersSnap = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                    let deleteCount = 0;
+                    for (const docSnap of workersSnap.docs) {
+                        await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', docSnap.id));
+                        deleteCount++;
+                    }
+                    showNotification(`✅ Deleted ${deleteCount} workers from ${selectedWorkplace}.`, 'success');
+                    await loadWorkplaceData();
+                } catch (error) {
+                    showNotification('❌ Failed to delete all workers', 'error');
+                }
+            };
+        }
+        // Clean Up Old Schedules button logic (admin only)
+        if (user.isAdmin) {
+            document.getElementById('cleanupSchedulesBtn').onclick = async function() {
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                if (!confirm('WARNING: This will permanently delete all schedules older than 6 months (unless they have a retainUntil date in the future). Are you sure you want to continue?')) return;
+                try {
+                    const now = new Date();
+                    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+                    const schedulesSnap = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'schedules'));
+                    let deleteCount = 0;
+                    for (const docSnap of schedulesSnap.docs) {
+                        const data = docSnap.data();
+                        const createdAt = data.createdAt ? new Date(data.createdAt) : null;
+                        const retainUntil = data.retainUntil ? new Date(data.retainUntil) : null;
+                        if (createdAt && createdAt < sixMonthsAgo && (!retainUntil || retainUntil < now)) {
+                            await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', docSnap.id));
+                            deleteCount++;
+                        }
+                    }
+                    showNotification(`✅ Deleted ${deleteCount} old schedules from ${selectedWorkplace}.`, 'success');
+                    viewHistory();
+                } catch (error) {
+                    showNotification('❌ Failed to clean up old schedules', 'error');
+                }
+            };
+        }
     </script>
 </body>
 </html>
