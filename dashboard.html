@@ -864,7 +864,7 @@
         // Firebase setup
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
         import { 
-            getFirestore, collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc
+            getFirestore, collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc, where
         } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
         const workplaceConfig = {
@@ -2266,7 +2266,7 @@
                 }
                 displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, false, coverageGaps);
                 hideAllForms();
-                showNotification('✅ Schedule generated successfully!', 'success');
+                showNotification('✅ Schedule generated successfully! Use "Schedule History" to set it as current for workers.', 'success');
             } catch (error) {
                 console.error('Error generating schedule:', error);
                 document.getElementById('scheduleDisplay').innerHTML = `<div class="error">❌ Error generating schedule: ${error.message}</div>`;
@@ -2286,6 +2286,7 @@
                     name: `${selectedWorkplace} Schedule ${new Date().toLocaleDateString()}`,
                     variation: variation,
                     generatedBy: user.email,
+                    isCurrent: false, // New schedules are not automatically set as current
                     metadata: {
                         ...metadata,
                         version: '2.0',
@@ -2397,7 +2398,9 @@
             html += '<div class="print-only"><h2>📅 Schedule for ' + selectedWorkplace.replace('_', ' ').toUpperCase() + '</h2><p>Generated: ' + new Date().toLocaleDateString() + '</p></div>';
             
             if (isCurrent) {
-                html += '<div class="success">✅ This is the current active schedule</div>';
+                html += '<div class="success">✅ This is the current active schedule that workers can see</div>';
+            } else {
+                html += '<div class="info">ℹ️ This is a historical schedule. Use "Schedule History" to set a schedule as current for workers.</div>';
             }
             
             // Enhanced stats
@@ -2715,15 +2718,30 @@
             try {
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading current schedule...</div>';
                 
-                const snapshot = await getDocs(query(
+                // First try to find a schedule marked as current
+                const currentSnapshot = await getDocs(query(
                     collection(db, 'workplaces', selectedWorkplace, 'schedules'),
-                    orderBy('createdAt', 'desc')
+                    where('isCurrent', '==', true)
                 ));
                 
-                if (!snapshot.empty) {
-                    const doc = snapshot.docs[0];
-                    currentScheduleId = doc.id; // <-- Track the ID
-                    const scheduleData = doc.data();
+                let currentDoc = null;
+                if (!currentSnapshot.empty) {
+                    currentDoc = currentSnapshot.docs[0];
+                } else {
+                    // Fallback to most recent schedule if no current is set
+                    const snapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                        orderBy('createdAt', 'desc')
+                    ));
+                    
+                    if (!snapshot.empty) {
+                        currentDoc = snapshot.docs[0];
+                    }
+                }
+                
+                if (currentDoc) {
+                    currentScheduleId = currentDoc.id; // <-- Track the ID
+                    const scheduleData = currentDoc.data();
                     schedule = scheduleData.days;
                     
                     const assignedHours = calculateAssignedHours(schedule);
@@ -2801,6 +2819,7 @@
                         
                         const actionButtons = user.isAdmin ? `
                             <button class="btn btn-secondary" onclick="viewScheduleById('${doc.id}')">👁️ View</button>
+                            <button class="btn btn-success" onclick="setAsCurrentSchedule('${doc.id}')" ${data.isCurrent ? 'disabled' : ''}>${data.isCurrent ? '✅ Current' : '🎯 Set as Current'}</button>
                             <button class="btn btn-danger" onclick="deleteSchedule('${doc.id}')">🗑️ Delete</button>
                         ` : `
                             <button class="btn btn-secondary" onclick="viewScheduleById('${doc.id}')">👁️ View</button>
@@ -2810,7 +2829,7 @@
                             <div style="padding: 1rem; border: 1px solid #dee2e6; margin-bottom: 0.5rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
                                 <div>
                                     <strong>${data.name || 'Schedule'}</strong>
-                                    ${index === 0 ? '<span style="color: #28a745; font-weight: bold;"> (Current)</span>' : ''}<br>
+                                    ${data.isCurrent ? '<span style="color: #28a745; font-weight: bold;"> (Current)</span>' : ''}<br>
                                     <small>📅 ${date} at ${time} | 👤 ${data.generatedBy || 'Unknown'}</small><br>
                                     <small>📊 ${totalShifts} shifts | 👥 ${workersUsed} workers | 🔄 ${data.variation || 'balanced'}</small>
                                 </div>
@@ -2848,7 +2867,7 @@
                         .map(w => `${w.first_name} ${w.last_name}`);
                     
                     const { coverageGaps } = validateScheduleCoverage(schedule, hours);
-                    displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, false, coverageGaps);
+                    displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, scheduleData.isCurrent || false, coverageGaps);
                 }
             } catch (error) {
                 console.error('Error viewing schedule:', error);
@@ -2871,6 +2890,44 @@
                 } catch (error) {
                     console.error('Error deleting schedule:', error);
                     showNotification('❌ Error deleting schedule', 'error');
+                }
+            }
+        };
+
+        // Set schedule as current (admin only)
+        window.setAsCurrentSchedule = async function(scheduleId) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            
+            if (confirm('Set this schedule as the current schedule for workers? This will replace any existing current schedule.')) {
+                try {
+                    // First, unset any existing current schedules
+                    const existingCurrentSnapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                        where('isCurrent', '==', true)
+                    ));
+                    
+                    const batch = [];
+                    existingCurrentSnapshot.forEach(doc => {
+                        batch.push(updateDoc(doc.ref, { isCurrent: false }));
+                    });
+                    
+                    // Set the new schedule as current
+                    batch.push(updateDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleId), {
+                        isCurrent: true,
+                        setAsCurrentAt: new Date().toISOString(),
+                        setAsCurrentBy: user.email
+                    }));
+                    
+                    await Promise.all(batch);
+                    
+                    showNotification('✅ Schedule set as current successfully!', 'success');
+                    viewHistory(); // Refresh the history view
+                } catch (error) {
+                    console.error('Error setting schedule as current:', error);
+                    showNotification('❌ Error setting schedule as current', 'error');
                 }
             }
         };
