@@ -2084,18 +2084,48 @@
             }
             // Validate availability format if provided
             if (availability) {
-                let parsed = {};
-                try {
-                    parsed = parseAvailability(availability);
-                } catch (error) {
-                    parsed = {};
+                // Split and check each block
+                const blocks = availability.split(',').map(s => s.trim()).filter(Boolean);
+                let errorMsg = '';
+                const dayMap = {
+                    'sunday': 'Sunday', 'sun': 'Sunday',
+                    'monday': 'Monday', 'mon': 'Monday',
+                    'tuesday': 'Tuesday', 'tue': 'Tuesday',
+                    'wednesday': 'Wednesday', 'wed': 'Wednesday',
+                    'thursday': 'Thursday', 'thu': 'Thursday',
+                    'friday': 'Friday', 'fri': 'Friday',
+                    'saturday': 'Saturday', 'sat': 'Saturday'
+                };
+                for (const block of blocks) {
+                    const match = block.match(/(\w+)\s+(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/i);
+                    if (!match) {
+                        errorMsg = `Block "${block}" is not in the format Day HH:MM-HH:MM.`;
+                        break;
+                    }
+                    const [, dayRaw, sh, sm, eh, em] = match;
+                    const day = dayMap[dayRaw.toLowerCase()];
+                    if (!day) {
+                        errorMsg = `Block "${block}" has an invalid day.`;
+                        break;
+                    }
+                    const startHour = parseInt(sh, 10), startMin = parseInt(sm, 10);
+                    const endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
+                    if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 || startMin < 0 || startMin > 59 || endMin < 0 || endMin > 59) {
+                        errorMsg = `Block "${block}" has invalid hour or minute values.`;
+                        break;
+                    }
+                    const startTotal = startHour * 60 + startMin;
+                    const endTotal = endHour * 60 + endMin;
+                    if (endTotal <= startTotal) {
+                        errorMsg = `Block "${block}": end time must be after start time.`;
+                        break;
+                    }
                 }
-                if (Object.keys(parsed).length === 0) {
-                    // Show modal for re-entry
+                if (errorMsg) {
                     showAvailabilityFormatModal(availability, (newVal) => {
                         document.getElementById('workerAvailability').value = newVal;
                         workerForm.dispatchEvent(new Event('submit', {cancelable: true, bubbles: false}));
-                    });
+                    }, errorMsg);
                     return;
                 }
             }
@@ -2130,24 +2160,55 @@
             }
         });
         // Modal logic for availability format error
-        function showAvailabilityFormatModal(lastAttempt, onSuccess) {
+        function showAvailabilityFormatModal(lastAttempt, onSuccess, errorMsg) {
             const modal = document.getElementById('availabilityFormatModal');
             const input = document.getElementById('availabilityFormatModalInput');
             const errorDiv = document.getElementById('availabilityFormatModalError');
             input.value = lastAttempt || '';
-            errorDiv.textContent = '';
+            errorDiv.textContent = errorMsg || '';
             modal.style.display = 'block';
             input.focus();
             document.getElementById('availabilityFormatModalTryBtn').onclick = function() {
                 const val = input.value.trim();
-                let parsed = {};
-                try {
-                    parsed = parseAvailability(val);
-                } catch (error) {
-                    parsed = {};
+                // Repeat the same validation as above
+                const blocks = val.split(',').map(s => s.trim()).filter(Boolean);
+                let errorMsg2 = '';
+                const dayMap = {
+                    'sunday': 'Sunday', 'sun': 'Sunday',
+                    'monday': 'Monday', 'mon': 'Monday',
+                    'tuesday': 'Tuesday', 'tue': 'Tuesday',
+                    'wednesday': 'Wednesday', 'wed': 'Wednesday',
+                    'thursday': 'Thursday', 'thu': 'Thursday',
+                    'friday': 'Friday', 'fri': 'Friday',
+                    'saturday': 'Saturday', 'sat': 'Saturday'
+                };
+                for (const block of blocks) {
+                    const match = block.match(/(\w+)\s+(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/i);
+                    if (!match) {
+                        errorMsg2 = `Block "${block}" is not in the format Day HH:MM-HH:MM.`;
+                        break;
+                    }
+                    const [, dayRaw, sh, sm, eh, em] = match;
+                    const day = dayMap[dayRaw.toLowerCase()];
+                    if (!day) {
+                        errorMsg2 = `Block "${block}" has an invalid day.`;
+                        break;
+                    }
+                    const startHour = parseInt(sh, 10), startMin = parseInt(sm, 10);
+                    const endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
+                    if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 || startMin < 0 || startMin > 59 || endMin < 0 || endMin > 59) {
+                        errorMsg2 = `Block "${block}" has invalid hour or minute values.`;
+                        break;
+                    }
+                    const startTotal = startHour * 60 + startMin;
+                    const endTotal = endHour * 60 + endMin;
+                    if (endTotal <= startTotal) {
+                        errorMsg2 = `Block "${block}": end time must be after start time.`;
+                        break;
+                    }
                 }
-                if (Object.keys(parsed).length === 0) {
-                    errorDiv.textContent = 'Still not valid. Please use the format: Mon 09:00-17:00, Tue 10:00-16:00';
+                if (errorMsg2) {
+                    errorDiv.textContent = errorMsg2;
                     input.focus();
                     return;
                 }
