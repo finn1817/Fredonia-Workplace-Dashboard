@@ -1704,6 +1704,74 @@
                 console.error('Error loading workplace:', error);
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="error">❌ Error loading workplace data. Please try again.</div>';
             }
+
+            // At the end of selectWorkplace, after loading data and notes:
+            if (!user.isAdmin) {
+                // Load current schedule for this workplace
+                const userEmail = user.email;
+                // Helper to format time
+                function formatTime12(timeStr) {
+                    if (!timeStr) return '';
+                    let [h, m] = timeStr.split(':').map(Number);
+                    const period = h >= 12 ? 'PM' : 'AM';
+                    h = h % 12 || 12;
+                    return `${h}:${m.toString().padStart(2, '0')} ${period}`;
+                }
+                // Find current schedule doc
+                const schedulesSnap = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                    where('isCurrent', '==', true)
+                ));
+                let scheduleData = null;
+                if (!schedulesSnap.empty) {
+                    scheduleData = schedulesSnap.docs[0].data();
+                } else {
+                    // fallback to most recent
+                    const snap = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                        orderBy('createdAt', 'desc')
+                    ));
+                    if (!snap.empty) scheduleData = snap.docs[0].data();
+                }
+                let myShiftsByDay = {};
+                let totalHours = 0;
+                if (scheduleData && scheduleData.days) {
+                    for (const day of DAYS) {
+                        const shifts = scheduleData.days[day] || [];
+                        myShiftsByDay[day] = shifts.filter(shift => (shift.raw_assigned||[]).includes(userEmail));
+                    }
+                    // Calculate total hours
+                    for (const day of DAYS) {
+                        for (const shift of myShiftsByDay[day]) {
+                            const start = shift.start;
+                            const end = shift.end;
+                            if (start && end) {
+                                const hours = (parseInt(end.split(':')[0]) + parseInt(end.split(':')[1])/60) - (parseInt(start.split(':')[0]) + parseInt(start.split(':')[1])/60);
+                                totalHours += hours;
+                            }
+                        }
+                    }
+                }
+                // Build HTML for shifts
+                let html = '';
+                let hasShifts = false;
+                for (const day of DAYS) {
+                    const shifts = myShiftsByDay[day] || [];
+                    if (shifts.length > 0) {
+                        hasShifts = true;
+                        html += `<div style='margin-bottom:0.5rem;'><strong>${day}</strong><ul style='margin:0.5em 0 0 1.5em;padding:0;'>`;
+                        shifts.forEach(shift => {
+                            html += `<li>${formatTime12(shift.start)} - ${formatTime12(shift.end)}</li>`;
+                        });
+                        html += '</ul></div>';
+                    }
+                }
+                if (!hasShifts) {
+                    html = '<div style="color:#888;">You have no assigned shifts for the current schedule.</div>';
+                }
+                document.getElementById('userShiftsPlaceholder').innerHTML = html;
+                document.getElementById('userHoursPlaceholder').innerHTML = `<strong>${totalHours.toFixed(2)}</strong> hours assigned this week.`;
+            }
         };
 
         // Enhanced data loading with better error handling
