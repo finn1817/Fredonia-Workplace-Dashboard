@@ -2109,13 +2109,14 @@
                         break;
                     }
                     const startHour = parseInt(sh, 10), startMin = parseInt(sm, 10);
-                    const endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
+                    let endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
                     if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 || startMin < 0 || startMin > 59 || endMin < 0 || endMin > 59) {
                         errorMsg = `Block "${block}" has invalid hour or minute values.`;
                         break;
                     }
                     const startTotal = startHour * 60 + startMin;
-                    const endTotal = endHour * 60 + endMin;
+                    let endTotal = endHour * 60 + endMin;
+                    if (endHour === 0 && endMin === 0) endTotal = 24 * 60; // Treat 00:00 as 24:00
                     if (endTotal <= startTotal) {
                         errorMsg = `Block "${block}": end time must be after start time.`;
                         break;
@@ -2195,13 +2196,14 @@
                         break;
                     }
                     const startHour = parseInt(sh, 10), startMin = parseInt(sm, 10);
-                    const endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
+                    let endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
                     if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 || startMin < 0 || startMin > 59 || endMin < 0 || endMin > 59) {
                         errorMsg2 = `Block "${block}" has invalid hour or minute values.`;
                         break;
                     }
                     const startTotal = startHour * 60 + startMin;
-                    const endTotal = endHour * 60 + endMin;
+                    let endTotal = endHour * 60 + endMin;
+                    if (endHour === 0 && endMin === 0) endTotal = 24 * 60; // Treat 00:00 as 24:00
                     if (endTotal <= startTotal) {
                         errorMsg2 = `Block "${block}": end time must be after start time.`;
                         break;
