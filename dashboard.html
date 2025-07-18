@@ -3510,9 +3510,12 @@
         
         // Change password handler
         document.getElementById('changePasswordBtnModal').onclick = async function() {
+            console.log('Password change button clicked');
             const oldPassword = document.getElementById('oldPasswordModal').value;
             const newPassword = document.getElementById('newPasswordModal').value;
             const confirmNewPassword = document.getElementById('confirmNewPasswordModal').value;
+            
+            console.log('Password values:', { oldPassword, newPassword, confirmNewPassword });
             
             // Validation
             if (!oldPassword || !newPassword || !confirmNewPassword) {
