@@ -906,6 +906,29 @@
     <!-- Add zod for schema validation -->
     <script src="https://cdn.jsdelivr.net/npm/zod@3.22.4/lib/index.umd.min.js"></script>
 
+    <!-- Modal for Availability Format Error -->
+    <div id="availabilityFormatModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3>⚠️ Invalid Availability Format</h3>
+          <span class="close" onclick="closeModal('availabilityFormatModal')">&times;</span>
+        </div>
+        <div id="availabilityFormatModalBody">
+          <div style="margin-bottom:1rem;">
+            <strong>Please enter availability in the correct format:</strong><br>
+            <span style="color:#333;">Day HH:MM-HH:MM, Day HH:MM-HH:MM</span><br>
+            <span style="color:#888;">Examples: <br>Mon 09:00-17:00, Tue 10:00-16:00<br>Monday 08:00-12:00, Wednesday 13:00-17:00</span>
+          </div>
+          <textarea id="availabilityFormatModalInput" rows="3" style="width:100%;border-radius:8px;padding:1rem;"></textarea>
+          <div id="availabilityFormatModalError" style="color:#c33;margin-top:0.5rem;"></div>
+          <div style="margin-top:1rem;display:flex;gap:1rem;">
+            <button class="btn btn-success" id="availabilityFormatModalTryBtn">Try Again</button>
+            <button class="btn btn-secondary" onclick="closeModal('availabilityFormatModal')">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module">
         // Enhanced auth check and setup
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -2029,58 +2052,55 @@
         };
 
         // Enhanced worker form validation and submission
-        document.getElementById('workerForm').addEventListener('submit', async (e) => {
+        const workerForm = document.getElementById('workerForm');
+        workerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             if (!user.isAdmin) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
-
             const firstName = document.getElementById('workerFirstName').value.trim();
             const lastName = document.getElementById('workerLastName').value.trim();
             const email = document.getElementById('workerEmail').value.trim();
             const workStudy = document.getElementById('workerWorkStudy').value;
-            const availability = document.getElementById('workerAvailability').value.trim();
-
+            let availability = document.getElementById('workerAvailability').value.trim();
             // Enhanced validation
             if (!firstName || !lastName) {
                 showNotification('❌ First and last name are required', 'error');
                 return;
             }
-
             if (!email || !email.includes('@')) {
                 showNotification('❌ Valid email address is required', 'error');
                 return;
             }
-
             // Check for duplicate email (excluding current worker if editing)
             const duplicateWorker = workers.find(w => 
                 w.email.toLowerCase() === email.toLowerCase() && 
                 w.id !== editingWorkerId
             );
-            
             if (duplicateWorker) {
                 showNotification('❌ A worker with this email already exists', 'error');
                 return;
             }
-
             // Validate availability format if provided
             if (availability) {
+                let parsed = {};
                 try {
-                    const parsed = parseAvailability(availability);
-                    if (Object.keys(parsed).length === 0) {
-                        showNotification('⚠️ No valid availability detected. Please check the format: "Mon 09:00-17:00, Tue 10:00-16:00"', 'warning');
-                    }
+                    parsed = parseAvailability(availability);
                 } catch (error) {
-                    showNotification('❌ Invalid availability format. Use: "Day HH:MM-HH:MM"', 'error');
+                    parsed = {};
+                }
+                if (Object.keys(parsed).length === 0) {
+                    // Show modal for re-entry
+                    showAvailabilityFormatModal(availability, (newVal) => {
+                        document.getElementById('workerAvailability').value = newVal;
+                        workerForm.dispatchEvent(new Event('submit', {cancelable: true, bubbles: false}));
+                    });
                     return;
                 }
             }
-
             const submitBtn = document.querySelector('#workerForm button[type="submit"]');
             setLoading(submitBtn.id || 'submitBtn', true);
-
             const workerData = {
                 'First Name': firstName,
                 'Last Name': lastName,
@@ -2090,7 +2110,6 @@
                 'updated_at': new Date().toISOString(),
                 'updated_by': user.email
             };
-
             try {
                 if (editingWorkerId) {
                     await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', editingWorkerId), workerData);
@@ -2101,10 +2120,8 @@
                     await addDoc(collection(db, 'workplaces', selectedWorkplace, 'workers'), workerData);
                     showNotification('✅ Worker added successfully!', 'success');
                 }
-                
                 closeModal('workerFormModal');
                 await loadWorkplaceData();
-                
             } catch (error) {
                 console.error('Error saving worker:', error);
                 showNotification('❌ Error saving worker', 'error');
@@ -2112,6 +2129,32 @@
                 setLoading(submitBtn.id || 'submitBtn', false);
             }
         });
+        // Modal logic for availability format error
+        function showAvailabilityFormatModal(lastAttempt, onSuccess) {
+            const modal = document.getElementById('availabilityFormatModal');
+            const input = document.getElementById('availabilityFormatModalInput');
+            const errorDiv = document.getElementById('availabilityFormatModalError');
+            input.value = lastAttempt || '';
+            errorDiv.textContent = '';
+            modal.style.display = 'block';
+            input.focus();
+            document.getElementById('availabilityFormatModalTryBtn').onclick = function() {
+                const val = input.value.trim();
+                let parsed = {};
+                try {
+                    parsed = parseAvailability(val);
+                } catch (error) {
+                    parsed = {};
+                }
+                if (Object.keys(parsed).length === 0) {
+                    errorDiv.textContent = 'Still not valid. Please use the format: Mon 09:00-17:00, Tue 10:00-16:00';
+                    input.focus();
+                    return;
+                }
+                modal.style.display = 'none';
+                onSuccess(val);
+            };
+        }
 
         // Form display functions
         window.showGenerateForm = function() {
