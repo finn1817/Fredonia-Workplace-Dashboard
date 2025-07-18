@@ -3537,8 +3537,26 @@
                     return;
                 }
                 
-                // Update password in Firestore
-                const userDocRef = doc(db, 'users', user.uid);
+                // Import the auth database configuration using dynamic imports
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                // Use the AUTH database config (where user accounts are stored)
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                // Update password in AUTH database using correct document ID
+                const userDocRef = doc(authDb, 'users', user.uid);
                 await updateDoc(userDocRef, {
                     password: newPassword
                 });
