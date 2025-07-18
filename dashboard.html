@@ -3531,32 +3531,14 @@
             }
             
             try {
-                // Verify old password
+                // First verify the old password by checking against stored password
                 if (oldPassword !== user.password) {
                     showNotification('❌ Current password is incorrect', 'error');
                     return;
                 }
                 
-                // Import the auth database configuration using dynamic imports
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                // Use the AUTH database config (not workplace config)
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "workplace-scheduler-ace38.firebaseapp.com",
-                    projectId: "workplace-scheduler-ace38",
-                    storageBucket: "workplace-scheduler-ace38.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
-                
-                // Update password in AUTH database using correct document ID
-                const userDocRef = doc(authDb, 'users', user.uid);
+                // Update password in Firestore
+                const userDocRef = doc(db, 'users', user.uid);
                 await updateDoc(userDocRef, {
                     password: newPassword
                 });
