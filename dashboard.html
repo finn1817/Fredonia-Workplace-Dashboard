@@ -553,6 +553,7 @@
                 <button class="btn btn-admin" onclick="showAddWorker()">➕ Add Worker</button>
                 <button class="btn btn-admin" onclick="showImportWorkers()">📥 Import Workers</button>
                 <button class="btn btn-warning" id="hourRequestsBtn" style="position:relative;">⏰ Hour Requests <span id="hourRequestsBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
+                <button class="btn btn-info" id="viewMessagesBtn" style="position:relative;">📥 View Messages <span id="messagesBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
             </div>
         </div>
 
@@ -884,6 +885,19 @@
                 </div>
                 <button type="button" class="btn btn-info" id="changePasswordBtnModal" style="margin-top:0.5rem;">Change Password</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal for Admin Messages -->
+    <div id="adminMessagesModal" class="modal">
+        <div class="modal-content" style="max-width: 900px; max-height: 80vh;">
+            <div class="modal-header">
+                <h3>📥 Messages to Admins</h3>
+                <span class="close" onclick="closeModal('adminMessagesModal')">&times;</span>
+            </div>
+            <div id="adminMessagesList" style="max-height: 60vh; overflow-y: auto;">
+                <div class="loading">Loading messages...</div>
+            </div>
         </div>
     </div>
 
@@ -3960,6 +3974,119 @@
                 document.getElementById('userDashboard').style.display = 'block';
             }
         }
+
+        // 3. Send message to admins (non-admins only)
+        if (!user.isAdmin) {
+            document.getElementById('sendUserMessageBtn').onclick = async function() {
+                const message = document.getElementById('userMessageInput').value.trim();
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                if (!message) {
+                    showNotification('❌ Please enter a message', 'error');
+                    return;
+                }
+                try {
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'admin_messages'), {
+                        fromEmail: user.email,
+                        fromName: (user.firstName && user.lastName) ? `${user.firstName} ${user.lastName}` : user.email,
+                        message,
+                        sentAt: new Date().toISOString(),
+                        status: 'unread'
+                    });
+                    showNotification('✅ Message sent to admins!', 'success');
+                    document.getElementById('userMessageInput').value = '';
+                } catch (error) {
+                    showNotification('❌ Failed to send message', 'error');
+                }
+            };
+        }
+        // 4. Admin: View Messages button logic
+        if (user.isAdmin) {
+            document.getElementById('viewMessagesBtn').onclick = async function() {
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                document.getElementById('adminMessagesModal').style.display = 'block';
+                loadAdminMessages();
+            };
+        }
+        // 5. Load admin messages for admin
+        async function loadAdminMessages() {
+            const listDiv = document.getElementById('adminMessagesList');
+            listDiv.innerHTML = '<div class="loading">Loading messages...</div>';
+            try {
+                const snapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'admin_messages'),
+                    orderBy('sentAt', 'desc')
+                ));
+                if (snapshot.empty) {
+                    listDiv.innerHTML = '<div class="info">No messages found.</div>';
+                    document.getElementById('messagesBadge').style.display = 'none';
+                    return;
+                }
+                let html = `<table class="worker-table"><thead><tr><th>From</th><th>Email</th><th>Message</th><th>Sent</th><th>Status</th><th>Actions</th></tr></thead><tbody>`;
+                let unreadCount = 0;
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const sentDate = new Date(data.sentAt).toLocaleString();
+                    const statusBadge = data.status === 'unread' ? '<span style="background:#ffc107;color:#000;padding:2px 8px;border-radius:4px;font-size:0.8em;">Unread</span>' : '<span style="background:#28a745;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;">Read</span>';
+                    if (data.status === 'unread') unreadCount++;
+                    html += `<tr><td><strong>${data.fromName || ''}</strong></td><td>${data.fromEmail || ''}</td><td style="max-width: 350px; word-wrap: break-word;">${data.message || ''}</td><td><small>${sentDate}</small></td><td>${statusBadge}</td><td>`;
+                    if (data.status === 'unread') {
+                        html += `<button class='btn btn-success' onclick='markMessageRead("${doc.id}")' style='margin-right:0.5rem;'>Mark as Read</button>`;
+                    }
+                    html += `<button class='btn btn-danger' onclick='deleteAdminMessage("${doc.id}")'>Delete</button></td></tr>`;
+                });
+                html += '</tbody></table>';
+                listDiv.innerHTML = html;
+                document.getElementById('messagesBadge').style.display = unreadCount > 0 ? 'inline-block' : 'none';
+            } catch (error) {
+                listDiv.innerHTML = '<div class="error">Failed to load messages.</div>';
+            }
+        }
+        // 6. Mark message as read
+        window.markMessageRead = async function(messageId) {
+            try {
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'admin_messages', messageId), { status: 'read' });
+                showNotification('✅ Message marked as read.', 'success');
+                loadAdminMessages();
+            } catch (error) {
+                showNotification('❌ Failed to update message', 'error');
+            }
+        };
+        // 7. Delete admin message
+        window.deleteAdminMessage = async function(messageId) {
+            if (confirm('Are you sure you want to delete this message? This cannot be undone.')) {
+                try {
+                    await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'admin_messages', messageId));
+                    showNotification('✅ Message deleted.', 'success');
+                    loadAdminMessages();
+                } catch (error) {
+                    showNotification('❌ Failed to delete message', 'error');
+                }
+            }
+        };
+        // 8. Badge update on workplace select
+        async function updateMessagesBadge() {
+            if (!user.isAdmin || !selectedWorkplace) return;
+            try {
+                const snapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'admin_messages'),
+                    where('status', '==', 'unread')
+                ));
+                document.getElementById('messagesBadge').style.display = snapshot.empty ? 'none' : 'inline-block';
+            } catch {}
+        }
+        // 9. Call badge update on workplace select
+        const origSelectWorkplaceMsgs = window.selectWorkplace;
+        window.selectWorkplace = async function(id) {
+            await origSelectWorkplaceMsgs(id);
+            updateHourRequestsBadge();
+            updateMessagesBadge();
+        };
     </script>
 </body>
 </html>
