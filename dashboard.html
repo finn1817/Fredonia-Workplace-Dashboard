@@ -3885,6 +3885,8 @@
         async function loadUserDashboard() {
             if (user.isAdmin || !selectedWorkplace) return;
             const userEmail = user.email.trim().toLowerCase();
+            console.log('DEBUG: userEmail:', userEmail);
+            console.log('DEBUG: selectedWorkplace:', selectedWorkplace);
             try {
                 // Find current schedule
                 let scheduleData = null;
@@ -3904,6 +3906,7 @@
                         scheduleData = recentSnapshot.docs[0].data();
                     }
                 }
+                console.log('DEBUG: scheduleData:', scheduleData);
                 let myShiftsByDay = {};
                 let totalHours = 0;
                 if (scheduleData && scheduleData.days) {
@@ -3926,6 +3929,8 @@
                         });
                     }
                 }
+                console.log('DEBUG: myShiftsByDay:', myShiftsByDay);
+                console.log('DEBUG: totalHours:', totalHours);
                 // Build shifts display
                 let shiftsHtml = '';
                 let hasShifts = false;
