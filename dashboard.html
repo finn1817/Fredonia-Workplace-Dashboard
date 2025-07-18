@@ -3550,6 +3550,17 @@
                 console.log('User UID:', user.uid);
                 console.log('Document path:', `users/${user.uid}`);
                 
+                // Check if we can read the document first
+                try {
+                    const userDoc = await getDoc(userDocRef);
+                    console.log('Document exists:', userDoc.exists());
+                    if (userDoc.exists()) {
+                        console.log('Document data:', userDoc.data());
+                    }
+                } catch (readError) {
+                    console.log('Error reading document:', readError);
+                }
+                
                 // Update password in Firestore
                 const userDocRef = doc(db, 'users', user.uid);
                 await updateDoc(userDocRef, {
