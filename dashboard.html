@@ -5326,10 +5326,13 @@
                 console.log('Starting email change request submission...');
                 console.log('AuthDb:', authDb);
                 
+                // Use email as userId if uid is not available
+                const userId = user.uid || user.email;
+                
                 // Check if user already has 2 pending requests
                 const pendingRequestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
-                    where('userId', '==', user.uid),
+                    where('userId', '==', userId),
                     where('status', '==', 'pending')
                 );
                 console.log('Pending requests query created');
@@ -5345,7 +5348,7 @@
                 // Check if this exact request already exists
                 const existingRequestQuery = query(
                     collection(authDb, 'emailChangeRequests'),
-                    where('userId', '==', user.uid),
+                    where('userId', '==', userId),
                     where('requestedEmail', '==', newEmail),
                     where('status', '==', 'pending')
                 );
@@ -5360,7 +5363,7 @@
                 
                 // Create email change request
                 await addDoc(collection(authDb, 'emailChangeRequests'), {
-                    userId: user.uid,
+                    userId: userId,
                     currentEmail: user.email,
                     requestedEmail: newEmail,
                     reason: reason,
@@ -5406,9 +5409,13 @@
             try {
                 console.log('AuthDb:', authDb);
                 
+                // Use email as userId if uid is not available
+                const userId = user.uid || user.email;
+                console.log('Using userId:', userId);
+                
                 const requestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
-                    where('userId', '==', user.uid),
+                    where('userId', '==', userId),
                     orderBy('createdAt', 'desc')
                 );
                 console.log('Requests query created');
