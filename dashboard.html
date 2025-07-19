@@ -5390,6 +5390,9 @@
             listDiv.innerHTML = '<div class="loading">Loading shift swap requests...</div>';
             
             try {
+                // Clean up expired requests first
+                await cleanupExpiredShiftSwapRequests();
+                
                 const snapshot = await getDocs(query(
                     collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'),
                     orderBy('createdAt', 'desc')
@@ -5466,6 +5469,8 @@
                             </div>
                             
                             ${data.reason ? `<div class="swap-reason">💬 Reason: ${data.reason}</div>` : ''}
+                            
+                            ${data.deleteAfter ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;">🗑️ Will be deleted on ${new Date(data.deleteAfter).toLocaleDateString()}</div>` : ''}
                             
                             ${user.isAdmin && data.status === 'pending' ? `
                                 <div class="swap-actions">
@@ -5560,10 +5565,11 @@
                 await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shiftSwaps', swapId), {
                     status: 'approved',
                     updatedAt: new Date().toISOString(),
-                    updatedBy: user.email
+                    updatedBy: user.email,
+                    deleteAfter: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // Delete in 7 days
                 });
                 
-                showNotification('✅ Shift swap approved and schedule updated!', 'success');
+                showNotification('✅ Shift swap approved and schedule updated! Request will be automatically deleted in 7 days.', 'success');
                 loadShiftSwapRequests();
                 
             } catch (error) {
@@ -5579,10 +5585,11 @@
                 await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shiftSwaps', swapId), {
                     status: 'denied',
                     updatedAt: new Date().toISOString(),
-                    updatedBy: user.email
+                    updatedBy: user.email,
+                    deleteAfter: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // Delete in 7 days
                 });
                 
-                showNotification('❌ Shift swap request denied', 'info');
+                showNotification('❌ Shift swap request denied. Request will be automatically deleted in 7 days.', 'info');
                 loadShiftSwapRequests();
                 
             } catch (error) {
@@ -5622,6 +5629,9 @@
             listDiv.innerHTML = '<div class="loading">Loading your shift swap requests...</div>';
             
             try {
+                // Clean up expired requests first
+                await cleanupExpiredShiftSwapRequests();
+                
                 let snapshot;
                 if (filter === 'pending') {
                     snapshot = await getDocs(query(
@@ -5717,6 +5727,8 @@
                             
                             ${data.reason ? `<div class="swap-reason">💬 Reason: ${data.reason}</div>` : ''}
                             
+                            ${data.deleteAfter ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;">🗑️ Will be deleted on ${new Date(data.deleteAfter).toLocaleDateString()}</div>` : ''}
+                            
                             ${data.status !== 'pending' && data.updatedBy ? 
                                 `<div class="swap-review">Reviewed by: ${data.updatedBy} on ${new Date(data.updatedAt).toLocaleDateString()}</div>` : ''}
                         </div>
@@ -5744,12 +5756,41 @@
             loadUserShiftSwapRequests(status);
         };
 
-        // 15. Update badge when workplace is selected
+        // 15. Cleanup expired shift swap requests
+        async function cleanupExpiredShiftSwapRequests() {
+            if (!selectedWorkplace) return;
+            
+            try {
+                const now = new Date().toISOString();
+                const expiredSnapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'),
+                    where('deleteAfter', '<=', now)
+                ));
+                
+                if (!expiredSnapshot.empty) {
+                    const deletePromises = expiredSnapshot.docs.map(doc => deleteDoc(doc.ref));
+                    await Promise.all(deletePromises);
+                    console.log(`Cleaned up ${expiredSnapshot.size} expired shift swap requests`);
+                }
+            } catch (error) {
+                console.error('Error cleaning up expired shift swap requests:', error);
+            }
+        }
+
+        // 16. Update badge when workplace is selected
         const origSelectWorkplaceSwap = window.selectWorkplace;
         window.selectWorkplace = async function(id) {
             await origSelectWorkplaceSwap(id);
+            await cleanupExpiredShiftSwapRequests(); // Clean up expired requests
             updateShiftSwapRequestsBadge();
         };
+
+        // 17. Set up periodic cleanup (every hour)
+        setInterval(async () => {
+            if (selectedWorkplace) {
+                await cleanupExpiredShiftSwapRequests();
+            }
+        }, 60 * 60 * 1000); // Run every hour
     </script>
 </body>
 </html>
