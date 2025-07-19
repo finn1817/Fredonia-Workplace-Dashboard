@@ -4386,6 +4386,19 @@
                 document.getElementById('timeOffReason').value = '';
                 document.getElementById('timeOffRequestModal').style.display = 'block';
             };
+            
+            // User: Open shift swap request modal
+            document.getElementById('requestShiftSwapBtn').onclick = function() {
+                console.log('Shift swap button clicked!');
+                console.log('Selected workplace:', selectedWorkplace);
+                console.log('User:', user);
+                
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                openShiftSwapRequestModal();
+            };
         }
         // User: Submit request
         const availabilityRequestForm = document.getElementById('availabilityRequestForm');
@@ -4816,6 +4829,98 @@
             } catch {}
         }
 
+        // Open shift swap request modal and populate data
+        async function openShiftSwapRequestModal() {
+            console.log('openShiftSwapRequestModal called');
+            console.log('selectedWorkplace:', selectedWorkplace);
+            
+            if (!selectedWorkplace) return;
+            
+            try {
+                // Load current schedule to get available shifts
+                const scheduleSnap = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                    orderBy('createdAt', 'desc'),
+                    where('isCurrent', '==', true)
+                ));
+                
+                if (scheduleSnap.empty) {
+                    showNotification('❌ No current schedule found. Please generate a schedule first.', 'error');
+                    return;
+                }
+                
+                const currentSchedule = scheduleSnap.docs[0].data();
+                currentScheduleId = scheduleSnap.docs[0].id;
+                
+                // Populate requester's shifts (shifts assigned to current user)
+                const requesterShifts = [];
+                for (const [day, shifts] of Object.entries(currentSchedule.days)) {
+                    shifts.forEach((shift, index) => {
+                        if (shift.raw_assigned && shift.raw_assigned.includes(user.email)) {
+                            requesterShifts.push({
+                                day,
+                                date: getDateForDay(day),
+                                time: `${shift.start}-${shift.end}`,
+                                shiftIndex: index
+                            });
+                        }
+                    });
+                }
+                
+                // Populate target workers (all workers except current user)
+                const targetWorkers = workers.filter(w => w.email !== user.email);
+                
+                // Populate form dropdowns
+                const requesterTimeSelect = document.getElementById('swapRequesterShiftTime');
+                const targetWorkerSelect = document.getElementById('swapTargetWorker');
+                
+                requesterTimeSelect.innerHTML = '<option value="">Select your shift time...</option>';
+                requesterShifts.forEach(shift => {
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify(shift);
+                    option.textContent = `${shift.day} ${shift.date} - ${shift.time}`;
+                    requesterTimeSelect.appendChild(option);
+                });
+                
+                targetWorkerSelect.innerHTML = '<option value="">Select worker to swap with...</option>';
+                targetWorkers.forEach(worker => {
+                    const option = document.createElement('option');
+                    option.value = worker.email;
+                    option.textContent = `${worker.first_name} ${worker.last_name} (${worker.email})`;
+                    targetWorkerSelect.appendChild(option);
+                });
+                
+                // Set default dates
+                const today = new Date();
+                document.getElementById('swapRequesterShiftDate').value = today.toISOString().split('T')[0];
+                document.getElementById('swapTargetShiftDate').value = today.toISOString().split('T')[0];
+                
+                document.getElementById('shiftSwapRequestModal').style.display = 'block';
+                
+            } catch (error) {
+                showNotification('❌ Failed to load schedule data', 'error');
+            }
+        }
+
+        // Helper function to get date for a day of the week
+        function getDateForDay(dayName) {
+            const today = new Date();
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const targetDay = days.indexOf(dayName);
+            const currentDay = today.getDay();
+            const daysToAdd = (targetDay - currentDay + 7) % 7;
+            const targetDate = new Date(today);
+            targetDate.setDate(today.getDate() + daysToAdd);
+            return targetDate.toISOString().split('T')[0];
+        }
+
+        // Helper function to get day name from date
+        function getDayFromDate(dateString) {
+            const date = new Date(dateString);
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            return days[date.getDay()];
+        }
+
         // After loadWorkplaceData, add:
         async function loadUserDashboard() {
             if (user.isAdmin || !selectedWorkplace) return;
@@ -5095,21 +5200,6 @@
 
         // --- SHIFT SWAP REQUEST SYSTEM ---
 
-        // 1. Request Shift Swap button (non-admin users)
-        if (!user.isAdmin) {
-            document.getElementById('requestShiftSwapBtn').onclick = function() {
-                console.log('Shift swap button clicked!');
-                console.log('Selected workplace:', selectedWorkplace);
-                console.log('User:', user);
-                
-                if (!selectedWorkplace) {
-                    showNotification('❌ Please select a workplace first', 'error');
-                    return;
-                }
-                openShiftSwapRequestModal();
-            };
-        }
-
         // 2. Admin: Shift Swap Requests button
         if (user.isAdmin) {
             document.getElementById('shiftSwapRequestsBtn').onclick = async function() {
@@ -5122,78 +5212,7 @@
             };
         }
 
-        // 3. Open shift swap request modal and populate data
-        async function openShiftSwapRequestModal() {
-            console.log('openShiftSwapRequestModal called');
-            console.log('selectedWorkplace:', selectedWorkplace);
-            
-            if (!selectedWorkplace) return;
-            
-            try {
-                // Load current schedule to get available shifts
-                const scheduleSnap = await getDocs(query(
-                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
-                    orderBy('createdAt', 'desc'),
-                    where('isCurrent', '==', true)
-                ));
-                
-                if (scheduleSnap.empty) {
-                    showNotification('❌ No current schedule found. Please generate a schedule first.', 'error');
-                    return;
-                }
-                
-                const currentSchedule = scheduleSnap.docs[0].data();
-                currentScheduleId = scheduleSnap.docs[0].id;
-                
-                // Populate requester's shifts (shifts assigned to current user)
-                const requesterShifts = [];
-                for (const [day, shifts] of Object.entries(currentSchedule.days)) {
-                    shifts.forEach((shift, index) => {
-                        if (shift.raw_assigned && shift.raw_assigned.includes(user.email)) {
-                            requesterShifts.push({
-                                day,
-                                date: getDateForDay(day),
-                                time: `${shift.start}-${shift.end}`,
-                                shiftIndex: index
-                            });
-                        }
-                    });
-                }
-                
-                // Populate target workers (all workers except current user)
-                const targetWorkers = workers.filter(w => w.email !== user.email);
-                
-                // Populate form dropdowns
-                const requesterTimeSelect = document.getElementById('swapRequesterShiftTime');
-                const targetWorkerSelect = document.getElementById('swapTargetWorker');
-                
-                requesterTimeSelect.innerHTML = '<option value="">Select your shift time...</option>';
-                requesterShifts.forEach(shift => {
-                    const option = document.createElement('option');
-                    option.value = JSON.stringify(shift);
-                    option.textContent = `${shift.day} ${shift.date} - ${shift.time}`;
-                    requesterTimeSelect.appendChild(option);
-                });
-                
-                targetWorkerSelect.innerHTML = '<option value="">Select worker to swap with...</option>';
-                targetWorkers.forEach(worker => {
-                    const option = document.createElement('option');
-                    option.value = worker.email;
-                    option.textContent = `${worker.first_name} ${worker.last_name} (${worker.email})`;
-                    targetWorkerSelect.appendChild(option);
-                });
-                
-                // Set default dates
-                const today = new Date();
-                document.getElementById('swapRequesterShiftDate').value = today.toISOString().split('T')[0];
-                document.getElementById('swapTargetShiftDate').value = today.toISOString().split('T')[0];
-                
-                document.getElementById('shiftSwapRequestModal').style.display = 'block';
-                
-            } catch (error) {
-                showNotification('❌ Failed to load schedule data', 'error');
-            }
-        }
+
 
         // 4. Handle shift swap request form submission
         document.getElementById('shiftSwapRequestForm').addEventListener('submit', async function(e) {
@@ -5426,24 +5445,7 @@
             }
         };
 
-        // 9. Helper function to get date for a day of the week
-        function getDateForDay(dayName) {
-            const today = new Date();
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const targetDay = days.indexOf(dayName);
-            const currentDay = today.getDay();
-            const daysToAdd = (targetDay - currentDay + 7) % 7;
-            const targetDate = new Date(today);
-            targetDate.setDate(today.getDate() + daysToAdd);
-            return targetDate.toISOString().split('T')[0];
-        }
 
-        // 10. Helper function to get day name from date
-        function getDayFromDate(dateString) {
-            const date = new Date(dateString);
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            return days[date.getDay()];
-        }
 
         // 11. Update shift swap requests badge
         async function updateShiftSwapRequestsBadge() {
