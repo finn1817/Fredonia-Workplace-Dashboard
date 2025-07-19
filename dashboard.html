@@ -4016,8 +4016,8 @@
             await loadWorkplaceData();
             await loadAllUsers(); // Load users from auth database
             
-            // Load admin users if current user is super admin
-            if (window.currentUser && window.currentUser.isSuperAdmin) {
+            // Load admin users for all admins
+            if (window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin)) {
                 await loadAdminUsers();
             }
             
@@ -4220,13 +4220,7 @@
                 return;
             }
             
-            // Check if current user is workplace admin trying to view another admin
-            if (window.currentUser && window.currentUser.isAdmin && !window.currentUser.isSuperAdmin) {
-                if (user.isAdmin) {
-                    showNotification('❌ Workplace admins cannot view admin user details', 'error');
-                    return;
-                }
-            }
+            // All admins can view all users for now
             
             const linkedWorker = workers.find(w => w.email.toLowerCase() === user.email.toLowerCase());
             
@@ -4264,7 +4258,7 @@
                 <div class="management-tabs">
                     <button class="management-tab active" onclick="switchManagementTab('workers', event)">👥 Workers (${workers.length})</button>
                     <button class="management-tab" onclick="switchManagementTab('users', event)">👤 Users (${window.allUsers?.length || 0})</button>
-                    <button class="management-tab super-admin-only" onclick="switchManagementTab('admins', event)">🛡️ Admins</button>
+                    <button class="management-tab" onclick="switchManagementTab('admins', event)">🛡️ Admins</button>
                     <button class="management-tab" onclick="switchManagementTab('import', event)">📥 Import/Export</button>
                     <button class="management-tab" onclick="switchManagementTab('analytics', event)">📊 Analytics</button>
                 </div>
@@ -4408,17 +4402,9 @@
             
             workers.forEach(worker => {
                 const linkedUser = window.allUsers?.find(u => u.email.toLowerCase() === worker.email.toLowerCase());
-                let userLinkStatus;
-                if (linkedUser) {
-                    // Check if workplace admin is trying to view admin user
-                    if (window.currentUser && window.currentUser.isAdmin && !window.currentUser.isSuperAdmin && linkedUser.isAdmin) {
-                        userLinkStatus = `<span class="user-worker-link-disabled">✅ Linked (Admin) - No Access</span>`;
-                    } else {
-                        userLinkStatus = `<a href="#" class="user-worker-link" onclick="viewUserDetails('${linkedUser.id}')">✅ Linked (${linkedUser.isAdmin ? 'Admin' : 'User'})</a>`;
-                    }
-                } else {
-                    userLinkStatus = `<span class="no-link">❌ No User Account</span>`;
-                }
+                const userLinkStatus = linkedUser ? 
+                    `<a href="#" class="user-worker-link" onclick="viewUserDetails('${linkedUser.id}')">✅ Linked (${linkedUser.isAdmin ? 'Admin' : 'User'})</a>` :
+                    `<span class="no-link">❌ No User Account</span>`;
 
                 html += `
                     <tr>
@@ -6484,8 +6470,8 @@
                     console.log('✅ User role initialized:', currentUserRole);
                     console.log('🔍 Current user workplaces:', currentUserWorkplaces);
                     
-                    // Load admin users for super admin tab
-                    if (window.currentUser.isSuperAdmin) {
+                    // Load admin users for admin tab
+                    if (window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin)) {
                         await loadAdminUsers();
                     }
                 } else {
@@ -9107,11 +9093,8 @@
                     if (workplaceId && !currentUserWorkplaces.includes(workplaceId)) {
                         return false;
                     }
-                    // Workplace admins have access to most features, except admin management
-                    const restrictedActions = [
-                        'manage_admins', 'delete_admin', 'edit_admin', 'create_admin'
-                    ];
-                    return !restrictedActions.includes(action);
+                    // Workplace admins have the same permissions as super admins for now
+                    return true;
                 case USER_ROLES.USER:
                     // Regular user permissions
                     const userActions = ['view_schedule', 'view_own_profile'];
@@ -9171,7 +9154,7 @@
             });
             
             superAdminElements.forEach(el => {
-                const shouldShow = (currentUserRole === USER_ROLES.SUPER_ADMIN);
+                const shouldShow = (currentUserRole === USER_ROLES.SUPER_ADMIN || currentUserRole === USER_ROLES.WORKPLACE_ADMIN);
                 el.style.display = shouldShow ? '' : 'none';
                 console.log('🔍 Super admin element:', el.textContent, 'should show:', shouldShow, 'current role:', currentUserRole);
             });
@@ -9225,11 +9208,6 @@
 
         // Admin Management Functions
         window.showAdminManagement = function() {
-            if (!hasPermission('manage_admins')) {
-                showNotification('❌ You do not have permission to manage admins', 'error');
-                return;
-            }
-
             const modal = document.getElementById('adminManagementModal');
             if (modal) {
                 modal.style.display = 'block';
