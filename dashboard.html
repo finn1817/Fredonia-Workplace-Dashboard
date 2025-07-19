@@ -4129,6 +4129,9 @@
                             <button class="btn btn-info" onclick="exportUserData()" style="background: #17a2b8; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
                                 <span style="margin-right: 0.5rem;">📤</span>Export
                             </button>
+                            <button class="btn btn-warning" onclick="testFilter()" style="background: #ffc107; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: #212529; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">🔍</span>Debug Filter
+                            </button>
                         </div>
                     </div>
 
@@ -4482,22 +4485,30 @@
             const roleFilter = document.getElementById('userFilterRole')?.value || 'all';
             const statusFilter = document.getElementById('userFilterStatus')?.value || 'all';
             
+            console.log('Filtering with:', { searchTerm, roleFilter, statusFilter });
+            
             const rows = document.querySelectorAll('#workersModalContent tbody tr');
             
-            rows.forEach(row => {
+            rows.forEach((row, index) => {
                 const name = row.cells[1]?.textContent.toLowerCase() || '';
                 const email = row.cells[2]?.textContent.toLowerCase() || '';
                 const role = row.cells[3]?.textContent.toLowerCase() || '';
                 const authStatus = row.cells[4]?.textContent.toLowerCase() || '';
                 const schedulerStatus = row.cells[5]?.textContent.toLowerCase() || '';
                 
+                console.log(`Row ${index}:`, { name, email, role, authStatus, schedulerStatus });
+                
                 const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
                 const matchesRole = roleFilter === 'all' || role.includes(roleFilter);
+                
+                // Fixed status filtering to properly check for the actual text content
                 const matchesStatus = statusFilter === 'all' || 
                     (statusFilter === 'active' && (authStatus.includes('has account') || schedulerStatus.includes('in scheduler'))) ||
                     (statusFilter === 'inactive' && (authStatus.includes('no account') || schedulerStatus.includes('not in scheduler'))) ||
                     (statusFilter === 'connected' && authStatus.includes('has account') && schedulerStatus.includes('in scheduler')) ||
                     (statusFilter === 'disconnected' && (authStatus.includes('no account') || schedulerStatus.includes('not in scheduler')));
+                
+                console.log(`Row ${index} matches:`, { matchesSearch, matchesRole, matchesStatus });
                 
                 row.style.display = matchesSearch && matchesRole && matchesStatus ? '' : 'none';
             });
@@ -4564,6 +4575,21 @@
                 // TODO: Implement data import functionality
             } else {
                 showNotification('Please select a file to import', 'warning');
+            }
+        };
+
+        // Debug function to test filter
+        window.testFilter = function() {
+            const rows = document.querySelectorAll('#workersModalContent tbody tr');
+            console.log('Testing filter with first row:');
+            if (rows.length > 0) {
+                const row = rows[0];
+                const authStatus = row.cells[4]?.textContent || '';
+                const schedulerStatus = row.cells[5]?.textContent || '';
+                console.log('Auth status:', authStatus);
+                console.log('Scheduler status:', schedulerStatus);
+                console.log('Has "has account":', authStatus.toLowerCase().includes('has account'));
+                console.log('Has "in scheduler":', schedulerStatus.toLowerCase().includes('in scheduler'));
             }
         };
 
