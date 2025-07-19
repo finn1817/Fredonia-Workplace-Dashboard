@@ -5329,30 +5329,53 @@
                 // Use email as userId if uid is not available
                 const userId = user.uid || user.email;
                 
-                // Check if user already has 2 pending requests
-                const pendingRequestsQuery = query(
+                // Check if user already has 2 pending requests (try both userId and currentEmail)
+                let pendingRequestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
                     where('userId', '==', userId),
                     where('status', '==', 'pending')
                 );
-                console.log('Pending requests query created');
+                console.log('Pending requests query created for userId:', userId);
                 
-                const pendingSnapshot = await getDocs(pendingRequestsQuery);
-                console.log('Pending requests count:', pendingSnapshot.size);
+                let pendingSnapshot = await getDocs(pendingRequestsQuery);
+                console.log('Pending requests count by userId:', pendingSnapshot.size);
+                
+                // If no results by userId, try currentEmail
+                if (pendingSnapshot.empty && user.email) {
+                    console.log('No pending requests by userId, trying currentEmail...');
+                    pendingRequestsQuery = query(
+                        collection(authDb, 'emailChangeRequests'),
+                        where('currentEmail', '==', user.email),
+                        where('status', '==', 'pending')
+                    );
+                    pendingSnapshot = await getDocs(pendingRequestsQuery);
+                    console.log('Pending requests count by currentEmail:', pendingSnapshot.size);
+                }
                 
                 if (pendingSnapshot.size >= 2) {
                     showNotification('❌ You already have 2 pending email change requests. Please wait for admin approval.', 'error');
                     return;
                 }
                 
-                // Check if this exact request already exists
-                const existingRequestQuery = query(
+                // Check if this exact request already exists (try both userId and currentEmail)
+                let existingRequestQuery = query(
                     collection(authDb, 'emailChangeRequests'),
                     where('userId', '==', userId),
                     where('requestedEmail', '==', newEmail),
                     where('status', '==', 'pending')
                 );
-                const existingSnapshot = await getDocs(existingRequestQuery);
+                let existingSnapshot = await getDocs(existingRequestQuery);
+                
+                // If no results by userId, try currentEmail
+                if (existingSnapshot.empty && user.email) {
+                    existingRequestQuery = query(
+                        collection(authDb, 'emailChangeRequests'),
+                        where('currentEmail', '==', user.email),
+                        where('requestedEmail', '==', newEmail),
+                        where('status', '==', 'pending')
+                    );
+                    existingSnapshot = await getDocs(existingRequestQuery);
+                }
                 
                 if (!existingSnapshot.empty) {
                     showNotification('❌ You already have a pending request for this email address', 'error');
@@ -5397,6 +5420,8 @@
         async function loadEmailChangeRequestsHistory() {
             console.log('Loading email change requests history...');
             console.log('User:', user);
+            console.log('User email:', user.email);
+            console.log('User uid:', user.uid);
             
             const listDiv = document.getElementById('emailChangeRequestsList');
             if (!listDiv) {
@@ -5413,15 +5438,28 @@
                 const userId = user.uid || user.email;
                 console.log('Using userId:', userId);
                 
-                const requestsQuery = query(
+                // Also try querying by currentEmail as a fallback
+                let requestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
                     where('userId', '==', userId),
                     orderBy('createdAt', 'desc')
                 );
-                console.log('Requests query created');
+                console.log('Requests query created for userId:', userId);
                 
-                const snapshot = await getDocs(requestsQuery);
+                let snapshot = await getDocs(requestsQuery);
                 console.log('Snapshot received, size:', snapshot.size);
+                
+                // If no results found by userId, try searching by currentEmail
+                if (snapshot.empty && user.email) {
+                    console.log('No results by userId, trying currentEmail...');
+                    requestsQuery = query(
+                        collection(authDb, 'emailChangeRequests'),
+                        where('currentEmail', '==', user.email),
+                        orderBy('createdAt', 'desc')
+                    );
+                    snapshot = await getDocs(requestsQuery);
+                    console.log('Snapshot by currentEmail, size:', snapshot.size);
+                }
                 
                 if (snapshot.empty) {
                     listDiv.innerHTML = '<div class="info">No email change requests found.</div>';
