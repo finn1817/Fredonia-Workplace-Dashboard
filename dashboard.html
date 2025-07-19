@@ -4009,10 +4009,10 @@
             displayEnhancedManagementInterface();
         };
 
-        // Load all users from auth database
+        // Load all users from workplace database (where super admin data is stored)
         async function loadAllUsers() {
             try {
-                const usersSnapshot = await getDocs(collection(authDb, 'users'));
+                const usersSnapshot = await getDocs(collection(db, 'users'));
                 const allUsers = [];
                 usersSnapshot.forEach(doc => {
                     const userData = doc.data();
@@ -4022,13 +4022,16 @@
                         firstName: userData.firstName || '',
                         lastName: userData.lastName || '',
                         isAdmin: userData.isAdmin || false,
+                        isSuperAdmin: userData.isSuperAdmin || false, // Add super admin field
                         phone: userData.phone || '',
                         status: userData.status || 'active',
+                        assignedWorkplaces: userData.assignedWorkplaces || [],
                         createdAt: userData.createdAt || new Date().toISOString(),
                         lastLogin: userData.lastLogin || null
                     });
                 });
                 window.allUsers = allUsers;
+                console.log('🔍 Loaded users from workplace database:', allUsers);
             } catch (error) {
                 console.error('Error loading users:', error);
                 window.allUsers = [];
