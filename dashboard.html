@@ -176,7 +176,7 @@
         .btn-secondary { background: #6c757d; color: white; }
         .btn-admin { background: #28a745; color: white; }
 
-        /* Hide admin-only elements by default */
+        /* Admin-only elements hidden by default, shown by JavaScript for admins */
         .admin-only {
             display: none;
         }
@@ -1614,13 +1614,13 @@
                 
                 <div class="action-buttons">
                     <div class="admin-only">
-                        <button class="btn btn-primary" onclick="showGenerateForm()" id="generateBtn">📅 Generate New Schedule</button>
-                        <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
+                    <button class="btn btn-primary" onclick="showGenerateForm()" id="generateBtn">📅 Generate New Schedule</button>
+                    <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
                     </div>
                     <button class="btn btn-success" onclick="viewCurrentSchedule()">👁️ View Current Schedule</button>
                     <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
                     <div class="admin-only">
-                        <button class="btn btn-secondary" onclick="viewWorkers()" id="viewWorkersBtn">👥 View Workers</button>
+                    <button class="btn btn-secondary" onclick="viewWorkers()" id="viewWorkersBtn">👥 View Workers</button>
                     </div>
                     <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
                     <div class="admin-only">
@@ -4397,46 +4397,46 @@
 
             let html = `
                 <table class="enhanced-table">
-                    <thead>
-                        <tr>
+                        <thead>
+                            <tr>
                             <th><input type="checkbox" id="selectAllWorkersCheckbox" onchange="toggleSelectAllWorkers()"></th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Work Study</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Work Study</th>
                             <th>User Account</th>
-                            <th>Availability</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            
-            workers.forEach(worker => {
+                                <th>Availability</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                workers.forEach(worker => {
                 const linkedUser = window.allUsers?.find(u => u.email.toLowerCase() === worker.email.toLowerCase());
                 const userLinkStatus = linkedUser ? 
                     `<a href="#" class="user-worker-link" onclick="viewUserDetails('${linkedUser.id}')">✅ Linked (${linkedUser.isAdmin ? 'Admin' : 'User'})</a>` :
                     `<span class="no-link">❌ No User Account</span>`;
 
-                html += `
-                    <tr>
+                    html += `
+                        <tr>
                         <td><input type="checkbox" class="worker-checkbox" value="${worker.id}" onchange="updateBulkActions()"></td>
-                        <td><strong>${worker.first_name} ${worker.last_name}</strong></td>
-                        <td>${worker.email}</td>
+                            <td><strong>${worker.first_name} ${worker.last_name}</strong></td>
+                            <td>${worker.email}</td>
                         <td>${worker.work_study ? '<span class="work-study-badge">Work Study</span>' : 'Regular'}</td>
                         <td>${userLinkStatus}</td>
-                        <td><small>${worker.availability_text || 'No availability set'}</small></td>
-                        <td>
+                            <td><small>${worker.availability_text || 'No availability set'}</small></td>
+                            <td>
                             <div class="table-actions">
                                 <button class="btn btn-info" onclick="viewWorkerDetails('${worker.id}')">👁️ View</button>
-                                <button class="btn btn-warning" onclick="editWorker('${worker.id}')">✏️ Edit</button>
-                                <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')">🗑️ Delete</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            html += '</tbody></table>';
+                                    <button class="btn btn-warning" onclick="editWorker('${worker.id}')">✏️ Edit</button>
+                                    <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')">🗑️ Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table>';
             return html;
         }
 
@@ -6539,6 +6539,14 @@
         }
 
         testConnection();
+        
+        // Ensure UI is updated after everything loads
+        setTimeout(() => {
+            if (window.updateUIForUserRole) {
+                console.log('🔍 Manual UI update call');
+                window.updateUIForUserRole();
+            }
+        }, 1000);
 
         // Debug function to check current hours
         window.debugHours = function() {
@@ -6551,6 +6559,17 @@
                 console.log('Sunday end:', hours.Sunday[0].end);
             }
             console.log('==========================');
+        };
+        
+        // Debug function to manually show admin elements
+        window.debugShowAdminElements = function() {
+            console.log('🔍 Manually showing admin elements');
+            const adminElements = document.querySelectorAll('.admin-only');
+            console.log('🔍 Found admin elements:', adminElements.length);
+            adminElements.forEach((el, index) => {
+                el.style.display = 'block';
+                console.log(`🔍 Set element ${index} to block`);
+            });
         };
 
         // Add SheetJS via CDN
@@ -6771,7 +6790,7 @@
         if (user.isAdmin) {
             document.getElementById('adminSection').style.display = 'block';
             document.getElementById('userDashboard').style.display = 'none';
-        } else {
+            } else {
             document.getElementById('adminSection').style.display = 'none';
             document.getElementById('userDashboard').style.display = 'block';
         }
@@ -9197,23 +9216,29 @@
         // Update UI elements based on user role
         window.updateUIForUserRole = function() {
             const isAdmin = (currentUserRole === USER_ROLES.ADMIN);
+            console.log('🔍 updateUIForUserRole called, isAdmin:', isAdmin);
+            console.log('🔍 currentUserRole:', currentUserRole);
             
             // show/hide admin features
             const adminElements = document.querySelectorAll('.admin-only');
+            console.log('🔍 Found admin-only elements:', adminElements.length);
+            
             const superAdminElements = document.querySelectorAll('.super-admin-only');
             const workplaceAdminElements = document.querySelectorAll('.workplace-admin-only');
             
-            adminElements.forEach(el => {
-                el.style.display = isAdmin ? '' : 'none';
+            adminElements.forEach((el, index) => {
+                const newDisplay = isAdmin ? 'block' : 'none';
+                console.log(`🔍 Setting admin element ${index} display to: ${newDisplay}`);
+                el.style.display = newDisplay;
             });
             
             // All admin elements should be visible to admins
             superAdminElements.forEach(el => {
-                el.style.display = isAdmin ? '' : 'none';
+                el.style.display = isAdmin ? 'block' : 'none';
             });
             
             workplaceAdminElements.forEach(el => {
-                el.style.display = isAdmin ? '' : 'none';
+                el.style.display = isAdmin ? 'block' : 'none';
             });
 
             // Update workplace selector
