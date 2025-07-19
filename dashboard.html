@@ -5470,7 +5470,10 @@
                             
                             ${data.reason ? `<div class="swap-reason">💬 Reason: ${data.reason}</div>` : ''}
                             
-                            ${data.deleteAfter ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;">🗑️ Will be deleted on ${new Date(data.deleteAfter).toLocaleDateString()}</div>` : ''}
+                            ${data.deleteAfter ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;display:flex;justify-content:space-between;align-items:center;">
+                                <span>🗑️ Will be deleted on ${new Date(data.deleteAfter).toLocaleDateString()}</span>
+                                ${data.requesterEmail === user.email ? `<button class="btn btn-danger" style="font-size:0.8em;padding:0.25rem 0.5rem;margin-left:1rem;" onclick="deleteMyShiftSwapRequest('${doc.id}')">🗑️ Delete Now</button>` : ''}
+                            </div>` : ''}
                             
                             ${user.isAdmin && data.status === 'pending' ? `
                                 <div class="swap-actions">
@@ -5727,7 +5730,10 @@
                             
                             ${data.reason ? `<div class="swap-reason">💬 Reason: ${data.reason}</div>` : ''}
                             
-                            ${data.deleteAfter ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;">🗑️ Will be deleted on ${new Date(data.deleteAfter).toLocaleDateString()}</div>` : ''}
+                            ${data.deleteAfter ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;display:flex;justify-content:space-between;align-items:center;">
+                                <span>🗑️ Will be deleted on ${new Date(data.deleteAfter).toLocaleDateString()}</span>
+                                ${data.requesterEmail === user.email ? `<button class="btn btn-danger" style="font-size:0.8em;padding:0.25rem 0.5rem;margin-left:1rem;" onclick="deleteMyShiftSwapRequest('${doc.id}')">🗑️ Delete Now</button>` : ''}
+                            </div>` : ''}
                             
                             ${data.status !== 'pending' && data.updatedBy ? 
                                 `<div class="swap-review">Reviewed by: ${data.updatedBy} on ${new Date(data.updatedAt).toLocaleDateString()}</div>` : ''}
@@ -5785,7 +5791,30 @@
             updateShiftSwapRequestsBadge();
         };
 
-        // 17. Set up periodic cleanup (every hour)
+        // 17. Manual delete shift swap request (for requesters)
+        window.deleteMyShiftSwapRequest = async function(swapId) {
+            if (!confirm('Are you sure you want to delete this shift swap request? This will permanently remove it for both you and the worker you requested to swap with. This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'shiftSwaps', swapId));
+                showNotification('✅ Shift swap request deleted successfully', 'success');
+                
+                // Reload the appropriate list based on which modal is open
+                if (document.getElementById('userShiftSwapRequestsModal').style.display === 'block') {
+                    loadUserShiftSwapRequests();
+                } else if (document.getElementById('shiftSwapRequestsModal').style.display === 'block') {
+                    loadShiftSwapRequests();
+                }
+                
+            } catch (error) {
+                console.error('Error deleting shift swap request:', error);
+                showNotification('❌ Failed to delete shift swap request', 'error');
+            }
+        };
+
+        // 18. Set up periodic cleanup (every hour)
         setInterval(async () => {
             if (selectedWorkplace) {
                 await cleanupExpiredShiftSwapRequests();
