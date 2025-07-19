@@ -3450,7 +3450,7 @@
             }
 
             // At the end of selectWorkplace, after loading data and notes:
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 await loadUserDashboard();
             }
         };
@@ -3545,7 +3545,7 @@
 
             try {
                 // Show/hide add button for admins
-                if (user.isAdmin) {
+                if (window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin)) {
                     addBtn.style.display = 'inline-block';
                 } else {
                     addBtn.style.display = 'none';
@@ -3583,11 +3583,11 @@
                                 <div class="announcement-meta">
                                     <span class="priority-badge ${priorityBadge}">${priorityBadge}</span>
                                     <span>${createdDate}</span>
-                                    ${user.isAdmin ? `<span>by ${announcement.createdBy}</span>` : ''}
+                                    ${window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin) ? `<span>by ${announcement.createdBy}</span>` : ''}
                                 </div>
                             </div>
                             <div class="announcement-message">${announcement.message.replace(/\n/g, '<br>')}</div>
-                            ${user.isAdmin ? `
+                            ${window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin) ? `
                                 <div class="announcement-actions">
                                     <button class="btn btn-info" onclick="editAnnouncement('${announcement.id}')">✏️ Edit</button>
                                     <button class="btn btn-danger" onclick="deleteAnnouncement('${announcement.id}')">🗑️ Delete</button>
@@ -3607,7 +3607,7 @@
         }
 
         // Add announcement button handler
-        if (user.isAdmin) {
+        if (window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin)) {
             document.getElementById('addAnnouncementBtn').onclick = function() {
                 document.getElementById('announcementModalTitle').textContent = '📢 Add Announcement';
                 document.getElementById('announcementSubject').value = '';
@@ -3701,7 +3701,7 @@
 
         // Enhanced admin functions with permission checks
         window.showManageHours = async function() {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -3993,7 +3993,7 @@
 
         // Enhanced Worker & User Management System
         window.showManageWorkers = async function() {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -6013,7 +6013,7 @@
 
         // Placeholder implementations for remaining features
         window.showLastMinuteCheck = function() {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -6451,7 +6451,7 @@
         }
 
         window.showImportWorkers = function() {
-          if (!user.isAdmin) {
+          if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
             showNotification('❌ Admin access required', 'error');
             return;
           }
@@ -6609,7 +6609,7 @@
 
         // Add showWhosWorkingNow function
         window.showWhosWorkingNow = function() {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -6658,7 +6658,7 @@
         };
 
         // In the script, show/hide user dashboard for non-admins
-        if (!user.isAdmin) {
+        if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
             document.getElementById('userDashboard').style.display = 'block';
             document.getElementById('adminSection').style.display = 'none';
             // Set welcome message
