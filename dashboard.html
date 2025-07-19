@@ -2188,6 +2188,31 @@
         
         // Set current user for role-based access (will be updated with full data from database)
         window.currentUser = user;
+        
+        // Add super admin header if user is super admin
+        if (user.isSuperAdmin) {
+            const header = document.createElement('div');
+            header.id = 'superAdminHeader';
+            header.style.cssText = `
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-align: center;
+                padding: 1rem;
+                font-size: 1.5rem;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                margin-bottom: 1rem;
+            `;
+            header.textContent = '🛡️ SUPER ADMIN DASHBOARD 🛡️';
+            
+            // Insert after the main header
+            const mainContent = document.querySelector('.container');
+            if (mainContent) {
+                mainContent.insertBefore(header, mainContent.firstChild);
+            }
+        }
 
         // Firebase setup
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
@@ -4009,10 +4034,10 @@
             displayEnhancedManagementInterface();
         };
 
-        // Load all users from workplace database (where super admin data is stored)
+        // Load all users from auth database (for Users tab)
         async function loadAllUsers() {
             try {
-                const usersSnapshot = await getDocs(collection(db, 'users'));
+                const usersSnapshot = await getDocs(collection(authDb, 'users'));
                 const allUsers = [];
                 usersSnapshot.forEach(doc => {
                     const userData = doc.data();
@@ -4022,16 +4047,14 @@
                         firstName: userData.firstName || '',
                         lastName: userData.lastName || '',
                         isAdmin: userData.isAdmin || false,
-                        isSuperAdmin: userData.isSuperAdmin || false, // Add super admin field
                         phone: userData.phone || '',
                         status: userData.status || 'active',
-                        assignedWorkplaces: userData.assignedWorkplaces || [],
                         createdAt: userData.createdAt || new Date().toISOString(),
                         lastLogin: userData.lastLogin || null
                     });
                 });
                 window.allUsers = allUsers;
-                console.log('🔍 Loaded users from workplace database:', allUsers);
+                console.log('🔍 Loaded users from auth database:', allUsers);
             } catch (error) {
                 console.error('Error loading users:', error);
                 window.allUsers = [];
@@ -4415,10 +4438,10 @@
         }
 
         function generateAdminsTab() {
-            const superAdminCount = window.allUsers?.filter(u => u.isSuperAdmin).length || 0;
-            const workplaceAdminCount = window.allUsers?.filter(u => u.isAdmin && !u.isSuperAdmin).length || 0;
-            const pendingAdmins = window.allUsers?.filter(u => (u.isAdmin || u.isSuperAdmin) && u.status === 'pending').length || 0;
-            const activeAdmins = window.allUsers?.filter(u => (u.isAdmin || u.isSuperAdmin) && u.status === 'active').length || 0;
+            const superAdminCount = window.adminUsers?.filter(u => u.isSuperAdmin).length || 0;
+            const workplaceAdminCount = window.adminUsers?.filter(u => u.isAdmin && !u.isSuperAdmin).length || 0;
+            const pendingAdmins = window.adminUsers?.filter(u => (u.isAdmin || u.isSuperAdmin) && u.status === 'pending').length || 0;
+            const activeAdmins = window.adminUsers?.filter(u => (u.isAdmin || u.isSuperAdmin) && u.status === 'active').length || 0;
 
             return `
                 <div class="management-header">
@@ -4475,7 +4498,7 @@
         }
 
         function generateAdminsTable() {
-            const adminUsers = window.allUsers?.filter(user => user.isAdmin || user.isSuperAdmin) || [];
+            const adminUsers = window.adminUsers || [];
             
             if (adminUsers.length === 0) {
                 return '<div class="warning">No admin users found. Add your first admin to get started!</div>';
@@ -6318,6 +6341,38 @@
             }
         }
 
+        // Load admin users from workplace database (for Admins tab)
+        async function loadAdminUsers() {
+            try {
+                console.log('🔍 Loading admin users from workplace database...');
+                const usersSnapshot = await getDocs(collection(db, 'users'));
+                const adminUsers = [];
+                usersSnapshot.forEach(doc => {
+                    const userData = doc.data();
+                    if (userData.isAdmin || userData.isSuperAdmin) {
+                        adminUsers.push({
+                            id: doc.id,
+                            email: userData.email,
+                            firstName: userData.firstName || '',
+                            lastName: userData.lastName || '',
+                            isAdmin: userData.isAdmin || false,
+                            isSuperAdmin: userData.isSuperAdmin || false,
+                            phone: userData.phone || '',
+                            status: userData.status || 'active',
+                            assignedWorkplaces: userData.assignedWorkplaces || [],
+                            createdAt: userData.createdAt || new Date().toISOString(),
+                            lastLogin: userData.lastLogin || null
+                        });
+                    }
+                });
+                window.adminUsers = adminUsers;
+                console.log('🔍 Loaded admin users:', adminUsers);
+            } catch (error) {
+                console.error('Error loading admin users:', error);
+                window.adminUsers = [];
+            }
+        }
+
         // Test Firebase connection
         async function testConnection() {
             try {
@@ -6339,6 +6394,11 @@
                     initializeUserRole(window.currentUser);
                     console.log('✅ User role initialized:', currentUserRole);
                     console.log('🔍 Current user workplaces:', currentUserWorkplaces);
+                    
+                    // Load admin users for super admin tab
+                    if (window.currentUser.isSuperAdmin) {
+                        await loadAdminUsers();
+                    }
                 } else {
                     console.log('❌ Missing initializeUserRole or currentUser');
                     console.log('window.initializeUserRole exists:', !!window.initializeUserRole);
