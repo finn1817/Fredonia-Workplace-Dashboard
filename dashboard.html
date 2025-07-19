@@ -6504,7 +6504,7 @@
                     console.log('🔍 Current user data:', window.currentUser);
                     initializeUserRole(window.currentUser);
                     console.log('✅ User role initialized:', currentUserRole);
-                    console.log('🔍 Current user workplaces:', currentUserWorkplaces);
+                    console.log('🔍 Current user workplaces:', window.currentUserWorkplaces || 'Not defined');
                     
                     // Update UI for user role
                     if (window.updateUIForUserRole) {
