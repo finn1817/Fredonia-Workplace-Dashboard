@@ -897,6 +897,8 @@
             <button class="btn btn-warning" id="requestTimeOffBtn" style="margin-bottom:1.5rem;">🏖️ Request Time Off</button>
             <!-- Request Shift Swap Button -->
             <button class="btn btn-info" id="requestShiftSwapBtn" style="margin-bottom:1.5rem;">🔄 Request Shift Swap</button>
+            <!-- My Shift Swap Requests Button -->
+            <button class="btn btn-info" id="myShiftSwapRequestsBtn" style="margin-bottom:1.5rem;">📋 My Swap Requests</button>
             <!-- Removed My Account section from here -->
             <div class="form-section" style="margin-bottom:1.5rem;">
                 <h3>📅 My Assigned Shifts</h3>
@@ -1278,6 +1280,25 @@
             </div>
             <div id="shiftSwapRequestsList" style="max-height: 60vh; overflow-y: auto;">
                 <div class="loading">Loading shift swap requests...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for User Shift Swap Requests -->
+    <div id="userShiftSwapRequestsModal" class="modal">
+        <div class="modal-content" style="max-width: 900px; max-height: 80vh;">
+            <div class="modal-header">
+                <h3>📋 My Shift Swap Requests</h3>
+                <span class="close" onclick="closeModal('userShiftSwapRequestsModal')">&times;</span>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <button class="btn btn-info" onclick="filterUserShiftSwapRequests('all')" id="filterUserSwapAllBtn">All Requests</button>
+                <button class="btn btn-warning" onclick="filterUserShiftSwapRequests('pending')" id="filterUserSwapPendingBtn">Pending</button>
+                <button class="btn btn-success" onclick="filterUserShiftSwapRequests('approved')" id="filterUserSwapApprovedBtn">Approved</button>
+                <button class="btn btn-danger" onclick="filterUserShiftSwapRequests('denied')" id="filterUserSwapDeniedBtn">Denied</button>
+            </div>
+            <div id="userShiftSwapRequestsList" style="max-height: 60vh; overflow-y: auto;">
+                <div class="loading">Loading your shift swap requests...</div>
             </div>
         </div>
     </div>
@@ -5411,11 +5432,36 @@
                                 </div>
                                 <div class="swap-detail">
                                     <div class="swap-detail-label">Requester's Shift:</div>
-                                    <div class="swap-detail-value">${data.requesterShift.day} ${data.requesterShift.date} - ${data.requesterShift.time}</div>
+                                    <div class="swap-detail-value">${(() => {
+                                        try {
+                                            const [start, end] = data.requesterShift.time.split('-');
+                                            return `${data.requesterShift.day} ${data.requesterShift.date} - ${formatTime(start)} - ${formatTime(end)}`;
+                                        } catch (e) {
+                                            return `${data.requesterShift.day} ${data.requesterShift.date} - ${data.requesterShift.time}`;
+                                        }
+                                    })()}</div>
                                 </div>
                                 <div class="swap-detail">
                                     <div class="swap-detail-label">Target's Shift:</div>
-                                    <div class="swap-detail-value">${data.targetWorkerShift.date} - ${data.targetWorkerShift.time}</div>
+                                    <div class="swap-detail-value">${(() => {
+                                        try {
+                                            // Check if time is a JSON string and parse it
+                                            const timeData = typeof data.targetWorkerShift.time === 'string' && data.targetWorkerShift.time.startsWith('{') 
+                                                ? JSON.parse(data.targetWorkerShift.time) 
+                                                : data.targetWorkerShift.time;
+                                            
+                                            if (typeof timeData === 'object' && timeData.time) {
+                                                // Format the time properly
+                                                const [start, end] = timeData.time.split('-');
+                                                return `${timeData.day} ${timeData.date} - ${formatTime(start)} - ${formatTime(end)}`;
+                                            } else {
+                                                // Simple time string
+                                                return `${data.targetWorkerShift.date} - ${data.targetWorkerShift.time}`;
+                                            }
+                                        } catch (e) {
+                                            return `${data.targetWorkerShift.date} - ${data.targetWorkerShift.time}`;
+                                        }
+                                    })()}</div>
                                 </div>
                             </div>
                             
@@ -5558,7 +5604,147 @@
             } catch {}
         }
 
-        // 12. Update badge when workplace is selected
+        // 12. User: My Shift Swap Requests button logic
+        if (!user.isAdmin) {
+            document.getElementById('myShiftSwapRequestsBtn').onclick = async function() {
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                document.getElementById('userShiftSwapRequestsModal').style.display = 'block';
+                loadUserShiftSwapRequests();
+            };
+        }
+
+        // 13. Load user's own shift swap requests
+        async function loadUserShiftSwapRequests(filter = 'all') {
+            const listDiv = document.getElementById('userShiftSwapRequestsList');
+            listDiv.innerHTML = '<div class="loading">Loading your shift swap requests...</div>';
+            
+            try {
+                let snapshot;
+                if (filter === 'pending') {
+                    snapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'),
+                        where('requesterEmail', '==', user.email),
+                        where('status', '==', 'pending')
+                    ));
+                } else if (filter === 'approved') {
+                    snapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'),
+                        where('requesterEmail', '==', user.email),
+                        where('status', '==', 'approved')
+                    ));
+                } else if (filter === 'denied') {
+                    snapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'),
+                        where('requesterEmail', '==', user.email),
+                        where('status', '==', 'denied')
+                    ));
+                } else {
+                    // Load all user's requests
+                    snapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'),
+                        where('requesterEmail', '==', user.email)
+                    ));
+                }
+                
+                if (snapshot.empty) {
+                    listDiv.innerHTML = `<div class="info">No ${filter} shift swap requests found.</div>`;
+                    return;
+                }
+                
+                let html = '';
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const statusClass = data.status;
+                    const statusBadgeClass = data.status;
+                    
+                    html += `
+                        <div class="swap-request-card ${statusClass}">
+                            <div class="swap-request-header">
+                                <h4 class="swap-request-title">🔄 Shift Swap Request</h4>
+                                <div class="swap-request-meta">
+                                    <span class="status-badge ${statusBadgeClass}">${data.status}</span>
+                                    <small>${new Date(data.createdAt).toLocaleDateString()}</small>
+                                </div>
+                            </div>
+                            
+                            <div class="swap-details">
+                                <div class="swap-detail">
+                                    <div class="swap-detail-label">From:</div>
+                                    <div class="swap-detail-value">${data.requesterName}</div>
+                                </div>
+                                <div class="swap-detail">
+                                    <div class="swap-detail-label">To:</div>
+                                    <div class="swap-detail-value">${data.targetWorkerName}</div>
+                                </div>
+                                <div class="swap-detail">
+                                    <div class="swap-detail-label">Your Shift:</div>
+                                    <div class="swap-detail-value">${(() => {
+                                        try {
+                                            const [start, end] = data.requesterShift.time.split('-');
+                                            return `${data.requesterShift.day} ${data.requesterShift.date} - ${formatTime(start)} - ${formatTime(end)}`;
+                                        } catch (e) {
+                                            return `${data.requesterShift.day} ${data.requesterShift.date} - ${data.requesterShift.time}`;
+                                        }
+                                    })()}</div>
+                                </div>
+                                <div class="swap-detail">
+                                    <div class="swap-detail-label">Their Shift:</div>
+                                    <div class="swap-detail-value">${(() => {
+                                        try {
+                                            // Check if time is a JSON string and parse it
+                                            const timeData = typeof data.targetWorkerShift.time === 'string' && data.targetWorkerShift.time.startsWith('{') 
+                                                ? JSON.parse(data.targetWorkerShift.time) 
+                                                : data.targetWorkerShift.time;
+                                            
+                                            if (typeof timeData === 'object' && timeData.time) {
+                                                // Format the time properly
+                                                const [start, end] = timeData.time.split('-');
+                                                return `${timeData.day} ${timeData.date} - ${formatTime(start)} - ${formatTime(end)}`;
+                                            } else {
+                                                // Simple time string
+                                                return `${data.targetWorkerShift.date} - ${data.targetWorkerShift.time}`;
+                                            }
+                                        } catch (e) {
+                                            return `${data.targetWorkerShift.date} - ${data.targetWorkerShift.time}`;
+                                        }
+                                    })()}</div>
+                                </div>
+                            </div>
+                            
+                            ${data.reason ? `<div class="swap-reason">💬 Reason: ${data.reason}</div>` : ''}
+                            
+                            ${data.status !== 'pending' && data.updatedBy ? 
+                                `<div class="swap-review">Reviewed by: ${data.updatedBy} on ${new Date(data.updatedAt).toLocaleDateString()}</div>` : ''}
+                        </div>
+                    `;
+                });
+                
+                listDiv.innerHTML = html;
+                
+            } catch (error) {
+                listDiv.innerHTML = '<div class="error">Failed to load your shift swap requests.</div>';
+            }
+        }
+
+        // 14. Filter user shift swap requests
+        window.filterUserShiftSwapRequests = function(status) {
+            const buttons = ['filterUserSwapAllBtn', 'filterUserSwapPendingBtn', 'filterUserSwapApprovedBtn', 'filterUserSwapDeniedBtn'];
+            buttons.forEach(btnId => {
+                const btn = document.getElementById(btnId);
+                if (btn) btn.className = btn.className.replace(' btn-primary', ' btn-info');
+            });
+            
+            document.getElementById(`filterUserSwap${status.charAt(0).toUpperCase() + status.slice(1)}Btn`).className = 
+                document.getElementById(`filterUserSwap${status.charAt(0).toUpperCase() + status.slice(1)}Btn`).className.replace(' btn-info', ' btn-primary');
+            
+            loadUserShiftSwapRequests(status);
+        };
+
+        // 15. Update badge when workplace is selected
         const origSelectWorkplaceSwap = window.selectWorkplace;
         window.selectWorkplace = async function(id) {
             await origSelectWorkplaceSwap(id);
