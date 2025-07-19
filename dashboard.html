@@ -1393,7 +1393,9 @@
         const hourToTime = (hour) => {
             const h = Math.floor(hour);
             const m = Math.round((hour - h) * 60);
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            // Handle hours >= 24 (overnight shifts)
+            const adjustedHour = h >= 24 ? h - 24 : h;
+            return `${adjustedHour.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
         };
 
         const formatTime = (timeStr) => {
@@ -1963,6 +1965,8 @@
                     let opEnd = timeToHour(op.end);
                     if (opEnd <= opStart) opEnd += 24;
 
+                    console.log(`Processing ${day}: ${op.start}-${op.end} (${opStart}-${opEnd} hours)`);
+
                     // Create continuous coverage for entire operating period
                     if (ensureFullCoverage) {
                         // Calculate existing coverage
@@ -1998,6 +2002,7 @@
 
                         // Fill each gap
                         for (const [gapStart, gapEnd] of gaps) {
+                            console.log(`Filling gap: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} (${gapStart}-${gapEnd} hours)`);
                             let cur = gapStart;
                             while (cur < gapEnd) {
                                 const remainingTime = gapEnd - cur;
@@ -2074,9 +2079,12 @@
                                 // Assign shifts
                                 for (const x of chosen) {
                                     assignedHours[x.email] += shiftDuration;
+                                    const shiftStart = hourToTime(cur);
+                                    const shiftEnd = hourToTime(endShift);
+                                    console.log(`Creating shift: ${shiftStart}-${shiftEnd} for ${x.first_name} ${x.last_name}`);
                                     schedule[day].push({
-                                        start: hourToTime(cur),
-                                        end: hourToTime(endShift),
+                                        start: shiftStart,
+                                        end: shiftEnd,
                                         assigned: [`${x.first_name} ${x.last_name}`],
                                         available: availableWorkers.map(y => `${y.first_name} ${y.last_name}`),
                                         raw_assigned: [x.email],
