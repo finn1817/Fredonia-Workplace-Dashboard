@@ -252,6 +252,21 @@
             try {
                 console.log('Attempting login for:', email);
                 
+                // Log login attempt
+                const loginAttempt = {
+                    timestamp: new Date().toISOString(),
+                    email: email,
+                    ipAddress: 'Unknown', // Will be updated when we get IP
+                    userAgent: navigator.userAgent,
+                    action: 'login_attempt'
+                };
+                
+                // Store login attempt in localStorage for analytics
+                const loginAttempts = JSON.parse(localStorage.getItem('loginAttempts') || '[]');
+                loginAttempts.unshift(loginAttempt);
+                if (loginAttempts.length > 100) loginAttempts.pop();
+                localStorage.setItem('loginAttempts', JSON.stringify(loginAttempts));
+                
                 // Query users collection directly
                 const usersRef = collection(authDb, 'users');
                 const q = query(usersRef, where('email', '==', email));
@@ -284,6 +299,23 @@
                     loginTime: new Date().toISOString()
                 });
                 
+                // Log successful login
+                const successfulLogin = {
+                    timestamp: new Date().toISOString(),
+                    email: userData.email,
+                    userId: userData.id,
+                    isAdmin: userData.isAdmin === 1 || userData.isAdmin === true,
+                    ipAddress: 'Unknown',
+                    userAgent: navigator.userAgent,
+                    action: 'login_success'
+                };
+                
+                // Store successful login in localStorage for analytics
+                const successfulLogins = JSON.parse(localStorage.getItem('successfulLogins') || '[]');
+                successfulLogins.unshift(successfulLogin);
+                if (successfulLogins.length > 100) successfulLogins.pop();
+                localStorage.setItem('successfulLogins', JSON.stringify(successfulLogins));
+                
                 // Store user info including admin status and profile fields
                 const userInfo = {
                     email: userData.email,
@@ -307,6 +339,22 @@
                 loadingMsg.style.display = 'none';
                 loginBtn.disabled = false;
                 errorMsg.style.display = 'block';
+                
+                // Log failed login attempt
+                const failedLogin = {
+                    timestamp: new Date().toISOString(),
+                    email: email,
+                    error: error.message,
+                    ipAddress: 'Unknown',
+                    userAgent: navigator.userAgent,
+                    action: 'login_failed'
+                };
+                
+                // Store failed login in localStorage for analytics
+                const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
+                failedLogins.unshift(failedLogin);
+                if (failedLogins.length > 100) failedLogins.pop();
+                localStorage.setItem('failedLogins', JSON.stringify(failedLogins));
                 
                 console.error('Login error:', error);
                 
@@ -396,6 +444,25 @@
                     suspended: false,
                     loginTime: new Date().toISOString()
                 });
+                
+                // Log successful registration
+                const successfulRegistration = {
+                    timestamp: new Date().toISOString(),
+                    email: email,
+                    userId: newUserRef.id,
+                    firstName: firstName,
+                    lastName: lastName,
+                    ipAddress: 'Unknown',
+                    userAgent: navigator.userAgent,
+                    action: 'registration_success'
+                };
+                
+                // Store registration in localStorage for analytics
+                const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
+                registrations.unshift(successfulRegistration);
+                if (registrations.length > 100) registrations.pop();
+                localStorage.setItem('registrations', JSON.stringify(registrations));
+                
                 // Log in the user
                 localStorage.setItem('user', JSON.stringify({ 
                     email, 

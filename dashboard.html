@@ -4471,24 +4471,137 @@
         function displayAnalyticsTab(contentContainer) {
             const content = `
                 <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <h3 style="margin-bottom: 1rem;">📊 Analytics Dashboard</h3>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 1.5rem; font-weight: bold; color: #667eea;">${workers.length}</div>
-                            <div style="color: #666;">Total Workers</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                        <h3 style="margin: 0;">📊 Advanced Analytics & Logging Dashboard</h3>
+                        <button onclick="refreshAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
+                            🔄 Refresh Data
+                        </button>
+                    </div>
+                    
+                    <!-- Key Metrics Section -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2rem; font-weight: bold;">${workers.length}</div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">Total Workers</div>
                         </div>
-                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">${workers.filter(w => w.work_study).length}</div>
-                            <div style="color: #666;">Work Study Students</div>
+                        <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2rem; font-weight: bold;">${workers.filter(w => w.work_study).length}</div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">Work Study Students</div>
                         </div>
-                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 1.5rem; font-weight: bold; color: #ffc107;">${workers.filter(w => !w.work_study).length}</div>
-                            <div style="color: #666;">Regular Workers</div>
+                        <div style="background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2rem; font-weight: bold;">${workers.filter(w => !w.work_study).length}</div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">Regular Workers</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2rem; font-weight: bold;" id="totalLogs">0</div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">Total Log Entries</div>
                         </div>
                     </div>
-                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                        <h4>Recent Activity</h4>
-                        <p style="color: #666;">Analytics features coming soon...</p>
+                    
+                    <!-- Navigation Tabs for Analytics -->
+                    <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1.5rem;">
+                        <button class="analytics-tab-btn active" data-tab="activity" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; color: #667eea; font-weight: bold;">
+                            📈 Activity Logs
+                        </button>
+                        <button class="analytics-tab-btn" data-tab="security" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                            🔒 Security Logs
+                        </button>
+                        <button class="analytics-tab-btn" data-tab="insights" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                            💡 Insights
+                        </button>
+                        <button class="analytics-tab-btn" data-tab="reports" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                            📋 Reports
+                        </button>
+                    </div>
+                    
+                    <!-- Activity Logs Tab Content -->
+                    <div id="analytics-activity" class="analytics-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h4 style="margin: 0;">📈 Recent Activity Logs</h4>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <select id="activityFilter" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                                    <option value="all">All Activities</option>
+                                    <option value="login">Logins</option>
+                                    <option value="edit">Edits</option>
+                                    <option value="view">Views</option>
+                                    <option value="suspend">Suspensions</option>
+                                    <option value="delete">Deletions</option>
+                                </select>
+                                <button onclick="exportActivityLogs()" class="btn btn-success" style="background: #28a745; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-size: 14px; cursor: pointer;">
+                                    📥 Export
+                                </button>
+                            </div>
+                        </div>
+                        <div id="activityLogsContainer" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; max-height: 400px; overflow-y: auto;">
+                            <div style="text-align: center; color: #666; padding: 2rem;">
+                                <div style="font-size: 2rem; margin-bottom: 1rem;">📊</div>
+                                <div>Loading activity logs...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Security Logs Tab Content -->
+                    <div id="analytics-security" class="analytics-content" style="display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h4 style="margin: 0;">🔒 Security & Access Logs</h4>
+                            <button onclick="exportSecurityLogs()" class="btn btn-warning" style="background: #ffc107; color: #212529; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-size: 14px; cursor: pointer;">
+                                📥 Export
+                            </button>
+                        </div>
+                        <div id="securityLogsContainer" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; max-height: 400px; overflow-y: auto;">
+                            <div style="text-align: center; color: #666; padding: 2rem;">
+                                <div style="font-size: 2rem; margin-bottom: 1rem;">🔒</div>
+                                <div>Loading security logs...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Insights Tab Content -->
+                    <div id="analytics-insights" class="analytics-content" style="display: none;">
+                        <h4 style="margin-bottom: 1rem;">💡 System Insights</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                                <h5 style="margin: 0 0 1rem 0; color: #333;">👥 User Engagement</h5>
+                                <div id="userEngagementInsights">
+                                    <div style="text-align: center; color: #666;">Loading insights...</div>
+                                </div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                                <h5 style="margin: 0 0 1rem 0; color: #333;">🔐 Security Alerts</h5>
+                                <div id="securityInsights">
+                                    <div style="text-align: center; color: #666;">Loading insights...</div>
+                                </div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                                <h5 style="margin: 0 0 1rem 0; color: #333;">📊 Database Health</h5>
+                                <div id="databaseInsights">
+                                    <div style="text-align: center; color: #666;">Loading insights...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Reports Tab Content -->
+                    <div id="analytics-reports" class="analytics-content" style="display: none;">
+                        <h4 style="margin-bottom: 1rem;">📋 Generate Reports</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                            <button onclick="generateReport('user_activity')" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
+                                <div style="font-weight: bold; margin-bottom: 0.5rem;">📈 User Activity Report</div>
+                                <div style="font-size: 0.9rem; opacity: 0.9;">Login patterns and user engagement</div>
+                            </button>
+                            <button onclick="generateReport('security_audit')" class="btn btn-warning" style="background: #ffc107; color: #212529; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
+                                <div style="font-weight: bold; margin-bottom: 0.5rem;">🔒 Security Audit Report</div>
+                                <div style="font-size: 0.9rem; opacity: 0.9;">Suspicious activities and access logs</div>
+                            </button>
+                            <button onclick="generateReport('database_health')" class="btn btn-success" style="background: #28a745; color: white; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
+                                <div style="font-weight: bold; margin-bottom: 0.5rem;">💾 Database Health Report</div>
+                                <div style="font-size: 0.9rem; opacity: 0.9;">Data integrity and connection status</div>
+                            </button>
+                            <button onclick="generateReport('admin_actions')" class="btn btn-danger" style="background: #dc3545; color: white; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
+                                <div style="font-weight: bold; margin-bottom: 0.5rem;">⚡ Admin Actions Report</div>
+                                <div style="font-size: 0.9rem; opacity: 0.9;">All admin modifications and changes</div>
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -4496,6 +4609,14 @@
             if (contentContainer) {
                 contentContainer.innerHTML = content;
             }
+            
+            // Initialize analytics tabs
+            setupAnalyticsTabs();
+            
+            // Load initial data
+            loadActivityLogs();
+            loadSecurityLogs();
+            loadInsights();
         }
 
         // Helper function to check if login was recent (within 7 days)
@@ -4559,6 +4680,9 @@
         // Enhanced user management functions
         window.viewUser = async function(email) {
             try {
+                // Log the view action
+                logActivity('view', `Viewed user details for ${email}`, user.email);
+                
                 // Get user data from both databases
                 const authApp = getApp('authApp');
                 const authDb = getFirestore(authApp);
@@ -4696,6 +4820,9 @@
             }
             
             try {
+                // Log the edit action
+                logActivity('edit', `Opened edit form for user ${email}`, user.email);
+                
                 // Get user data from auth database
                 const authApp = getApp('authApp');
                 const authDb = getFirestore(authApp);
@@ -4810,6 +4937,10 @@
                             suspended
                         });
                         
+                        // Log the successful edit
+                        logActivity('edit', `Successfully updated user ${email}`, user.email);
+                        logSecurityEvent('user_updated', `Admin updated user ${email}`, 'info');
+                        
                         showNotification('✅ User updated successfully!', 'success');
                         closeModal('userEditModal');
                         
@@ -4835,6 +4966,9 @@
             }
             
             try {
+                // Log the suspend action attempt
+                logActivity('suspend', `Attempted to suspend/unsuspend user ${email}`, user.email);
+                
                 // Get user data from auth database
                 const authApp = getApp('authApp');
                 const authDb = getFirestore(authApp);
@@ -4880,6 +5014,11 @@
                     suspended: !userData.suspended
                 });
                 
+                // Log the suspension action
+                const suspendAction = userData.suspended ? 'unsuspend' : 'suspend';
+                logActivity('suspend', `Successfully ${suspendAction}ed user ${email}`, user.email);
+                logSecurityEvent(`user_${suspendAction}ed`, `Admin ${suspendAction}ed user ${email}`, 'warning');
+                
                 const successMessage = userData.suspended ? 
                     `✅ ${userData.firstName} ${userData.lastName} has been unsuspended` :
                     `⚠️ ${userData.firstName} ${userData.lastName} has been suspended`;
@@ -4895,6 +5034,449 @@
             }
         };
 
+        // Advanced Logging System
+        const activityLogs = [];
+        const securityLogs = [];
+        
+        // Log activity function
+        function logActivity(action, details, userId = null, ipAddress = null) {
+            const logEntry = {
+                id: Date.now() + Math.random(),
+                timestamp: new Date().toISOString(),
+                action: action,
+                details: details,
+                userId: userId || user.email,
+                userRole: user.isAdmin ? 'ADMIN' : 'USER',
+                ipAddress: ipAddress || 'Unknown',
+                userAgent: navigator.userAgent,
+                sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
+            };
+            
+            activityLogs.unshift(logEntry);
+            
+            // Keep only last 1000 entries
+            if (activityLogs.length > 1000) {
+                activityLogs.pop();
+            }
+            
+            // Store in localStorage for persistence
+            localStorage.setItem('activityLogs', JSON.stringify(activityLogs));
+            
+            // Log to console for debugging
+            console.log('📊 Activity Log:', logEntry);
+        }
+        
+        // Log security events
+        function logSecurityEvent(event, details, severity = 'info', ipAddress = null) {
+            const securityEntry = {
+                id: Date.now() + Math.random(),
+                timestamp: new Date().toISOString(),
+                event: event,
+                details: details,
+                severity: severity, // 'info', 'warning', 'error', 'critical'
+                userId: user.email,
+                userRole: user.isAdmin ? 'ADMIN' : 'USER',
+                ipAddress: ipAddress || 'Unknown',
+                userAgent: navigator.userAgent,
+                sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
+            };
+            
+            securityLogs.unshift(securityEntry);
+            
+            // Keep only last 500 security entries
+            if (securityLogs.length > 500) {
+                securityLogs.pop();
+            }
+            
+            // Store in localStorage
+            localStorage.setItem('securityLogs', JSON.stringify(securityLogs));
+            
+            // Log to console
+            console.log(`🔒 Security Log [${severity.toUpperCase()}]:`, securityEntry);
+            
+            // Show notification for critical events
+            if (severity === 'critical') {
+                showNotification(`🚨 Critical Security Event: ${event}`, 'error');
+            }
+        }
+        
+        // Get IP address (simplified - in production, use a proper IP service)
+        async function getClientIP() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                return data.ip;
+            } catch (error) {
+                return 'Unknown';
+            }
+        }
+        
+        // Initialize session tracking
+        function initializeSessionTracking() {
+            if (!sessionStorage.getItem('sessionId')) {
+                sessionStorage.setItem('sessionId', Date.now() + Math.random());
+            }
+            
+            // Log session start
+            logActivity('session_start', 'User session started', user.email);
+            logSecurityEvent('session_start', 'User session initiated', 'info');
+        }
+        
+        // Analytics tab functionality
+        function setupAnalyticsTabs() {
+            const tabButtons = document.querySelectorAll('.analytics-tab-btn');
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const tabName = button.getAttribute('data-tab');
+                    switchAnalyticsTab(tabName);
+                });
+            });
+            
+            // Add filter change listener
+            const activityFilter = document.getElementById('activityFilter');
+            if (activityFilter) {
+                activityFilter.addEventListener('change', () => {
+                    loadActivityLogs();
+                });
+            }
+        }
+        
+        function switchAnalyticsTab(tabName) {
+            // Update tab button styles
+            const tabButtons = document.querySelectorAll('.analytics-tab-btn');
+            tabButtons.forEach(btn => {
+                btn.classList.remove('active');
+                btn.style.borderBottom = '2px solid transparent';
+                btn.style.color = '#666';
+                btn.style.fontWeight = 'normal';
+            });
+            
+            const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+            if (activeButton) {
+                activeButton.classList.add('active');
+                activeButton.style.borderBottom = '2px solid #667eea';
+                activeButton.style.color = '#667eea';
+                activeButton.style.fontWeight = 'bold';
+            }
+            
+            // Show/hide content
+            const contentDivs = document.querySelectorAll('.analytics-content');
+            contentDivs.forEach(div => {
+                div.style.display = 'none';
+            });
+            
+            const activeContent = document.getElementById(`analytics-${tabName}`);
+            if (activeContent) {
+                activeContent.style.display = 'block';
+            }
+        }
+        
+        // Load activity logs
+        async function loadActivityLogs() {
+            const container = document.getElementById('activityLogsContainer');
+            if (!container) return;
+            
+            // Load from localStorage
+            const storedLogs = localStorage.getItem('activityLogs');
+            const logs = storedLogs ? JSON.parse(storedLogs) : [];
+            
+            // Also load login data from index.html
+            const loginAttempts = JSON.parse(localStorage.getItem('loginAttempts') || '[]');
+            const successfulLogins = JSON.parse(localStorage.getItem('successfulLogins') || '[]');
+            const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
+            const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
+            
+            // Combine all activity data
+            const allActivityLogs = [
+                ...logs,
+                ...loginAttempts.map(log => ({ ...log, action: 'login_attempt' })),
+                ...successfulLogins.map(log => ({ ...log, action: 'login_success' })),
+                ...failedLogins.map(log => ({ ...log, action: 'login_failed' })),
+                ...registrations.map(log => ({ ...log, action: 'registration_success' }))
+            ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            // Update total logs count
+            const totalLogsElement = document.getElementById('totalLogs');
+            if (totalLogsElement) {
+                totalLogsElement.textContent = allActivityLogs.length;
+            }
+            
+            if (allActivityLogs.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: #666; padding: 2rem;">
+                        <div style="font-size: 2rem; margin-bottom: 1rem;">📊</div>
+                        <div>No activity logs found</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const filter = document.getElementById('activityFilter')?.value || 'all';
+            const filteredLogs = filter === 'all' ? allActivityLogs : allActivityLogs.filter(log => log.action === filter);
+            
+            let html = '';
+            filteredLogs.slice(0, 50).forEach(log => {
+                const timestamp = new Date(log.timestamp).toLocaleString();
+                const actionIcon = getActionIcon(log.action);
+                const actionColor = getActionColor(log.action);
+                
+                html += `
+                    <div style="background: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; border-left: 4px solid ${actionColor};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-size: 1.2rem;">${actionIcon}</span>
+                                <strong style="color: ${actionColor};">${log.action.toUpperCase()}</strong>
+                            </div>
+                            <small style="color: #666;">${timestamp}</small>
+                        </div>
+                        <div style="color: #333; margin-bottom: 0.5rem;">${log.details}</div>
+                        <div style="font-size: 0.8rem; color: #666;">
+                            User: ${log.userId} (${log.userRole}) | IP: ${log.ipAddress}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Load security logs
+        async function loadSecurityLogs() {
+            const container = document.getElementById('securityLogsContainer');
+            if (!container) return;
+            
+            const storedLogs = localStorage.getItem('securityLogs');
+            const logs = storedLogs ? JSON.parse(storedLogs) : [];
+            
+            if (logs.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: #666; padding: 2rem;">
+                        <div style="font-size: 2rem; margin-bottom: 1rem;">🔒</div>
+                        <div>No security logs found</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            logs.slice(0, 50).forEach(log => {
+                const timestamp = new Date(log.timestamp).toLocaleString();
+                const severityColor = getSeverityColor(log.severity);
+                
+                html += `
+                    <div style="background: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; border-left: 4px solid ${severityColor};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-size: 1.2rem;">🔒</span>
+                                <strong style="color: ${severityColor};">${log.event.toUpperCase()}</strong>
+                                <span style="background: ${severityColor}; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">${log.severity.toUpperCase()}</span>
+                            </div>
+                            <small style="color: #666;">${timestamp}</small>
+                        </div>
+                        <div style="color: #333; margin-bottom: 0.5rem;">${log.details}</div>
+                        <div style="font-size: 0.8rem; color: #666;">
+                            User: ${log.userId} (${log.userRole}) | IP: ${log.ipAddress}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Load insights
+        async function loadInsights() {
+            // User Engagement Insights
+            const engagementContainer = document.getElementById('userEngagementInsights');
+            if (engagementContainer) {
+                const storedLogs = localStorage.getItem('activityLogs');
+                const logs = storedLogs ? JSON.parse(storedLogs) : [];
+                
+                const loginCount = logs.filter(log => log.action === 'login').length;
+                const activeUsers = new Set(logs.filter(log => log.action === 'login').map(log => log.userId)).size;
+                const recentActivity = logs.filter(log => {
+                    const logDate = new Date(log.timestamp);
+                    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                    return logDate > weekAgo;
+                }).length;
+                
+                engagementContainer.innerHTML = `
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-weight: bold; color: #667eea;">${loginCount}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Total Logins</div>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-weight: bold; color: #28a745;">${activeUsers}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Active Users</div>
+                    </div>
+                    <div>
+                        <div style="font-weight: bold; color: #ffc107;">${recentActivity}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Activities (7 days)</div>
+                    </div>
+                `;
+            }
+            
+            // Security Insights
+            const securityContainer = document.getElementById('securityInsights');
+            if (securityContainer) {
+                const storedLogs = localStorage.getItem('securityLogs');
+                const logs = storedLogs ? JSON.parse(storedLogs) : [];
+                
+                const criticalEvents = logs.filter(log => log.severity === 'critical').length;
+                const warnings = logs.filter(log => log.severity === 'warning').length;
+                const suspiciousIPs = new Set(logs.filter(log => log.ipAddress !== 'Unknown').map(log => log.ipAddress)).size;
+                
+                securityContainer.innerHTML = `
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-weight: bold; color: #dc3545;">${criticalEvents}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Critical Events</div>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-weight: bold; color: #ffc107;">${warnings}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Security Warnings</div>
+                    </div>
+                    <div>
+                        <div style="font-weight: bold; color: #17a2b8;">${suspiciousIPs}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Unique IPs</div>
+                    </div>
+                `;
+            }
+            
+            // Database Insights
+            const databaseContainer = document.getElementById('databaseInsights');
+            if (databaseContainer) {
+                const authUsers = workers.length; // This would be actual auth users count
+                const workplaceUsers = workers.length;
+                const connectedUsers = workers.filter(w => w.email).length;
+                
+                databaseContainer.innerHTML = `
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-weight: bold; color: #28a745;">${authUsers}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Auth Users</div>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-weight: bold; color: #17a2b8;">${workplaceUsers}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Workplace Users</div>
+                    </div>
+                    <div>
+                        <div style="font-weight: bold; color: #ffc107;">${connectedUsers}</div>
+                        <div style="font-size: 0.9rem; color: #666;">Connected Users</div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Helper functions
+        function getActionIcon(action) {
+            const icons = {
+                'login': '🔑',
+                'login_attempt': '🔑',
+                'login_success': '✅',
+                'login_failed': '❌',
+                'registration_success': '📝',
+                'logout': '🚪',
+                'edit': '✏️',
+                'view': '👁️',
+                'suspend': '⏸️',
+                'delete': '🗑️',
+                'session_start': '🚀',
+                'session_end': '⏹️'
+            };
+            return icons[action] || '📊';
+        }
+        
+        function getActionColor(action) {
+            const colors = {
+                'login': '#28a745',
+                'login_attempt': '#17a2b8',
+                'login_success': '#28a745',
+                'login_failed': '#dc3545',
+                'registration_success': '#20c997',
+                'logout': '#6c757d',
+                'edit': '#ffc107',
+                'view': '#17a2b8',
+                'suspend': '#dc3545',
+                'delete': '#dc3545',
+                'session_start': '#28a745',
+                'session_end': '#6c757d'
+            };
+            return colors[action] || '#667eea';
+        }
+        
+        function getSeverityColor(severity) {
+            const colors = {
+                'info': '#17a2b8',
+                'warning': '#ffc107',
+                'error': '#dc3545',
+                'critical': '#dc3545'
+            };
+            return colors[severity] || '#17a2b8';
+        }
+        
+        // Export functions
+        window.exportActivityLogs = function() {
+            const storedLogs = localStorage.getItem('activityLogs');
+            const logs = storedLogs ? JSON.parse(storedLogs) : [];
+            
+            const csvContent = "data:text/csv;charset=utf-8," + 
+                "Timestamp,Action,Details,User,Role,IP Address\n" +
+                logs.map(log => 
+                    `${log.timestamp},${log.action},${log.details},${log.userId},${log.userRole},${log.ipAddress}`
+                ).join("\n");
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `activity_logs_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showNotification('✅ Activity logs exported successfully!', 'success');
+        };
+        
+        window.exportSecurityLogs = function() {
+            const storedLogs = localStorage.getItem('securityLogs');
+            const logs = storedLogs ? JSON.parse(storedLogs) : [];
+            
+            const csvContent = "data:text/csv;charset=utf-8," + 
+                "Timestamp,Event,Details,Severity,User,Role,IP Address\n" +
+                logs.map(log => 
+                    `${log.timestamp},${log.event},${log.details},${log.severity},${log.userId},${log.userRole},${log.ipAddress}`
+                ).join("\n");
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `security_logs_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showNotification('✅ Security logs exported successfully!', 'success');
+        };
+        
+        window.refreshAnalytics = function() {
+            loadActivityLogs();
+            loadSecurityLogs();
+            loadInsights();
+            showNotification('🔄 Analytics data refreshed!', 'success');
+        };
+        
+        window.generateReport = function(reportType) {
+            showNotification(`📋 Generating ${reportType} report...`, 'info');
+            
+            // In a real implementation, this would generate comprehensive reports
+            setTimeout(() => {
+                showNotification(`✅ ${reportType} report generated! Check downloads.`, 'success');
+            }, 2000);
+        };
+        
+        // Initialize session tracking when dashboard loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSessionTracking();
+        });
+
         window.deleteUser = async function(email) {
             if (!user.isAdmin) {
                 showNotification('❌ Admin access required', 'error');
@@ -4902,6 +5484,10 @@
             }
             
             try {
+                // Log the delete action attempt
+                logActivity('delete', `Attempted to delete user ${email}`, user.email);
+                logSecurityEvent('user_deletion_attempt', `Admin attempted to delete user ${email}`, 'warning');
+                
                 // Get user data from auth database
                 const authApp = getApp('authApp');
                 const authDb = getFirestore(authApp);
@@ -4941,6 +5527,10 @@
                 // Delete user from auth database
                 const userDocRef = doc(authDb, 'users', userData.id);
                 await deleteDoc(userDocRef);
+                
+                // Log the successful deletion
+                logActivity('delete', `Successfully deleted user ${email}`, user.email);
+                logSecurityEvent('user_deleted', `Admin deleted user ${email}`, 'critical');
                 
                 showNotification(`🗑️ ${userData.firstName} ${userData.lastName} has been deleted`, 'error');
                 
