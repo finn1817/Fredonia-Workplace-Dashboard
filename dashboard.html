@@ -9024,7 +9024,9 @@
             });
             
             superAdminElements.forEach(el => {
-                el.style.display = (currentUserRole === USER_ROLES.SUPER_ADMIN) ? '' : 'none';
+                const shouldShow = (currentUserRole === USER_ROLES.SUPER_ADMIN);
+                el.style.display = shouldShow ? '' : 'none';
+                console.log('🔍 Super admin element:', el.textContent, 'should show:', shouldShow, 'current role:', currentUserRole);
             });
             
             workplaceAdminElements.forEach(el => {
