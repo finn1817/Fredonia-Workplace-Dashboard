@@ -896,6 +896,113 @@
             border-radius: 8px 8px 0 0;
         }
 
+        /* Role-based visibility classes */
+        .admin-only {
+            display: none;
+        }
+
+        .super-admin-only {
+            display: none;
+        }
+
+        .workplace-admin-only {
+            display: none;
+        }
+
+        /* Admin Management Styles */
+        .admin-management-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .admin-filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .admin-filters input,
+        .admin-filters select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .admin-filters input {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .admin-details {
+            display: grid;
+            gap: 15px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+
+        .detail-row strong {
+            color: #495057;
+        }
+
+        /* Status badges for different roles */
+        .status-badge.super-admin {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+        }
+
+        .status-badge.admin {
+            background: linear-gradient(135deg, #4834d4, #686de0);
+            color: white;
+        }
+
+        .status-badge.pending {
+            background: linear-gradient(135deg, #fdcb6e, #e17055);
+            color: white;
+        }
+
+        /* Admin form styles */
+        .admin-form-group {
+            margin-bottom: 15px;
+        }
+
+        .admin-form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .admin-form-group input,
+        .admin-form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .admin-form-group select[multiple] {
+            height: 120px;
+        }
+
+        .admin-form-group small {
+            color: #6c757d;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
+
         .management-tab {
             padding: 1rem 2rem;
             cursor: pointer;
@@ -4139,6 +4246,7 @@
                 <div class="management-tabs">
                     <button class="management-tab active" onclick="switchManagementTab('workers', event)">👥 Workers (${workers.length})</button>
                     <button class="management-tab" onclick="switchManagementTab('users', event)">👤 Users (${window.allUsers?.length || 0})</button>
+                    <button class="management-tab super-admin-only" onclick="switchManagementTab('admins', event)">🛡️ Admins</button>
                     <button class="management-tab" onclick="switchManagementTab('import', event)">📥 Import/Export</button>
                     <button class="management-tab" onclick="switchManagementTab('analytics', event)">📊 Analytics</button>
                 </div>
@@ -4151,6 +4259,11 @@
                 <!-- Users Management Tab -->
                 <div id="users-tab" class="management-content">
                     ${generateUsersTab()}
+                </div>
+
+                <!-- Admins Management Tab -->
+                <div id="admins-tab" class="management-content">
+                    ${generateAdminsTab()}
                 </div>
 
                 <!-- Import/Export Tab -->
@@ -4300,6 +4413,129 @@
                 `;
             });
             
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function generateAdminsTab() {
+            const superAdminCount = window.allUsers?.filter(u => u.isSuperAdmin).length || 0;
+            const workplaceAdminCount = window.allUsers?.filter(u => u.isAdmin && !u.isSuperAdmin).length || 0;
+            const pendingAdmins = window.allUsers?.filter(u => (u.isAdmin || u.isSuperAdmin) && u.status === 'pending').length || 0;
+            const activeAdmins = window.allUsers?.filter(u => (u.isAdmin || u.isSuperAdmin) && u.status === 'active').length || 0;
+
+            return `
+                <div class="management-header">
+                    <div>
+                        <h3>🛡️ Admin Management</h3>
+                        <p>Manage admin users and their permissions</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-success" onclick="showAddAdmin()">➕ Add Admin</button>
+                        <button class="btn btn-info" onclick="exportAdmins()">📤 Export</button>
+                    </div>
+                </div>
+
+                <div class="management-stats">
+                    <div class="stat-card">
+                        <div class="stat-number">${superAdminCount + workplaceAdminCount}</div>
+                        <div class="stat-label">Total Admins</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${superAdminCount}</div>
+                        <div class="stat-label">Super Admins</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${workplaceAdminCount}</div>
+                        <div class="stat-label">Workplace Admins</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${pendingAdmins}</div>
+                        <div class="stat-label">Pending Approval</div>
+                    </div>
+                </div>
+
+                <div class="search-filter-section">
+                    <div class="search-box">
+                        <input type="text" id="adminSearch" placeholder="Search admins by name or email..." onkeyup="filterAdmins()">
+                    </div>
+                    <select class="filter-dropdown" id="adminRoleFilter" onchange="filterAdmins()">
+                        <option value="">All Roles</option>
+                        <option value="super_admin">Super Admin</option>
+                        <option value="workplace_admin">Workplace Admin</option>
+                        <option value="pending">Pending Approval</option>
+                    </select>
+                    <select class="filter-dropdown" id="adminStatusFilter" onchange="filterAdmins()">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="suspended">Suspended</option>
+                    </select>
+                </div>
+
+                <div id="adminsTableContainer">
+                    ${generateAdminsTable()}
+                </div>
+            `;
+        }
+
+        function generateAdminsTable() {
+            const adminUsers = window.allUsers?.filter(user => user.isAdmin || user.isSuperAdmin) || [];
+            
+            if (adminUsers.length === 0) {
+                return '<div class="warning">No admin users found. Add your first admin to get started!</div>';
+            }
+
+            let html = `
+                <table class="enhanced-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Assigned Workplaces</th>
+                            <th>Status</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            adminUsers.forEach(admin => {
+                const roleBadge = admin.isSuperAdmin ? 
+                    '<span class="status-badge super-admin">Super Admin</span>' : 
+                    '<span class="status-badge admin">Workplace Admin</span>';
+                
+                const statusBadge = admin.status === 'active' ? 
+                    '<span class="status-badge active">Active</span>' : 
+                    '<span class="status-badge suspended">Suspended</span>';
+
+                const assignedWorkplaces = admin.assignedWorkplaces?.map(wpId => {
+                    const workplace = workplaces.find(wp => wp.id === wpId);
+                    return workplace ? workplace.name : 'Unknown';
+                }).join(', ') || 'None assigned';
+
+                const lastLogin = admin.lastLogin ? new Date(admin.lastLogin).toLocaleDateString() : 'Never';
+
+                html += `
+                    <tr>
+                        <td><strong>${admin.firstName} ${admin.lastName}</strong></td>
+                        <td>${admin.email}</td>
+                        <td>${roleBadge}</td>
+                        <td>${assignedWorkplaces}</td>
+                        <td>${statusBadge}</td>
+                        <td>${lastLogin}</td>
+                        <td>
+                            <div class="table-actions">
+                                <button class="btn btn-info" onclick="viewAdminDetails('${admin.id}')">👁️ View</button>
+                                <button class="btn btn-warning" onclick="editAdmin('${admin.id}')">✏️ Edit</button>
+                                <button class="btn btn-secondary" onclick="toggleAdminStatus('${admin.id}')">${admin.status === 'active' ? '⏸️ Suspend' : '▶️ Activate'}</button>
+                                <button class="btn btn-danger" onclick="deleteAdmin('${admin.id}')">🗑️ Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
             html += '</tbody></table>';
             return html;
         }
@@ -8645,6 +8881,591 @@
             document.body.removeChild(link);
         }
 
+        // ========================================
+        // PHASE 2: SUPER ADMIN vs WORKPLACE ADMIN SYSTEM
+        // ========================================
+        
+        // Role-based access control
+        const USER_ROLES = {
+            SUPER_ADMIN: 'super_admin',
+            WORKPLACE_ADMIN: 'workplace_admin',
+            USER: 'user'
+        };
+
+        // Current user role (will be set during login)
+        let currentUserRole = USER_ROLES.USER;
+        let currentUserWorkplaces = [];
+
+        // Check if user has permission for specific action
+        window.hasPermission = function(action, workplaceId = null) {
+            switch(currentUserRole) {
+                case USER_ROLES.SUPER_ADMIN:
+                    return true; // Super admin has all permissions
+                case USER_ROLES.WORKPLACE_ADMIN:
+                    // Workplace admin can only manage their assigned workplaces
+                    if (workplaceId && !currentUserWorkplaces.includes(workplaceId)) {
+                        return false;
+                    }
+                    // Workplace admin permissions
+                    const workplaceAdminActions = [
+                        'manage_workers', 'view_schedule', 'edit_schedule', 
+                        'manage_users', 'view_reports', 'export_data'
+                    ];
+                    return workplaceAdminActions.includes(action);
+                case USER_ROLES.USER:
+                    // Regular user permissions
+                    const userActions = ['view_schedule', 'view_own_profile'];
+                    return userActions.includes(action);
+                default:
+                    return false;
+            }
+        };
+
+        // Get workplaces user can manage
+        window.getUserWorkplaces = function() {
+            if (currentUserRole === USER_ROLES.SUPER_ADMIN) {
+                return workplaces; // Super admin can see all workplaces
+            } else if (currentUserRole === USER_ROLES.WORKPLACE_ADMIN) {
+                return workplaces.filter(wp => currentUserWorkplaces.includes(wp.id));
+            }
+            return [];
+        };
+
+        // Initialize user role and permissions
+        window.initializeUserRole = function(user) {
+            if (user.isSuperAdmin) {
+                currentUserRole = USER_ROLES.SUPER_ADMIN;
+                currentUserWorkplaces = workplaces.map(wp => wp.id);
+            } else if (user.isAdmin) {
+                currentUserRole = USER_ROLES.WORKPLACE_ADMIN;
+                currentUserWorkplaces = user.assignedWorkplaces || [];
+            } else {
+                currentUserRole = USER_ROLES.USER;
+                currentUserWorkplaces = [];
+            }
+            
+            // Update UI based on permissions
+            updateUIForUserRole();
+        };
+
+        // Update UI elements based on user role
+        window.updateUIForUserRole = function() {
+            // Hide/show admin features
+            const adminElements = document.querySelectorAll('.admin-only');
+            const superAdminElements = document.querySelectorAll('.super-admin-only');
+            const workplaceAdminElements = document.querySelectorAll('.workplace-admin-only');
+            
+            adminElements.forEach(el => {
+                el.style.display = (currentUserRole === USER_ROLES.SUPER_ADMIN || currentUserRole === USER_ROLES.WORKPLACE_ADMIN) ? '' : 'none';
+            });
+            
+            superAdminElements.forEach(el => {
+                el.style.display = (currentUserRole === USER_ROLES.SUPER_ADMIN) ? '' : 'none';
+            });
+            
+            workplaceAdminElements.forEach(el => {
+                el.style.display = (currentUserRole === USER_ROLES.WORKPLACE_ADMIN) ? '' : 'none';
+            });
+
+            // Update workplace selector
+            updateWorkplaceSelector();
+        };
+
+        // Update workplace selector based on user permissions
+        window.updateWorkplaceSelector = function() {
+            const selector = document.getElementById('workplaceSelector');
+            if (!selector) return;
+
+            const userWorkplaces = getUserWorkplaces();
+            
+            // Clear current options
+            selector.innerHTML = '';
+            
+            if (currentUserRole === USER_ROLES.SUPER_ADMIN) {
+                // Super admin sees all workplaces
+                workplaces.forEach(workplace => {
+                    const option = document.createElement('option');
+                    option.value = workplace.id;
+                    option.textContent = workplace.name;
+                    selector.appendChild(option);
+                });
+            } else if (currentUserRole === USER_ROLES.WORKPLACE_ADMIN) {
+                // Workplace admin sees only their assigned workplaces
+                userWorkplaces.forEach(workplaceId => {
+                    const workplace = workplaces.find(wp => wp.id === workplaceId);
+                    if (workplace) {
+                        const option = document.createElement('option');
+                        option.value = workplace.id;
+                        option.textContent = workplace.name;
+                        selector.appendChild(option);
+                    }
+                });
+            }
+
+            // Set default selection
+            if (userWorkplaces.length > 0) {
+                selector.value = userWorkplaces[0];
+                selectedWorkplace = userWorkplaces[0];
+                loadWorkplaceData();
+            }
+        };
+
+        // Admin Management Functions
+        window.showAdminManagement = function() {
+            if (!hasPermission('manage_admins')) {
+                showNotification('❌ You do not have permission to manage admins', 'error');
+                return;
+            }
+
+            const modal = document.getElementById('adminManagementModal');
+            if (modal) {
+                modal.style.display = 'block';
+                loadAdminUsers();
+            }
+        };
+
+        window.loadAdminUsers = function() {
+            const container = document.getElementById('adminUsersContainer');
+            if (!container) return;
+
+            const adminUsers = window.allUsers?.filter(user => user.isAdmin || user.isSuperAdmin) || [];
+            
+            let html = `
+                <div class="admin-management-header">
+                    <h3>Admin Users Management</h3>
+                    <button class="btn btn-primary" onclick="showAddAdmin()">➕ Add New Admin</button>
+                </div>
+                <div class="admin-filters">
+                    <input type="text" id="adminSearch" placeholder="Search admins..." onkeyup="filterAdmins()">
+                    <select id="adminRoleFilter" onchange="filterAdmins()">
+                        <option value="">All Roles</option>
+                        <option value="super_admin">Super Admin</option>
+                        <option value="workplace_admin">Workplace Admin</option>
+                        <option value="pending">Pending Approval</option>
+                    </select>
+                </div>
+                <div id="adminUsersTableContainer">
+            `;
+
+            if (adminUsers.length === 0) {
+                html += '<div class="warning">No admin users found.</div>';
+            } else {
+                html += `
+                    <table class="enhanced-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Assigned Workplaces</th>
+                                <th>Status</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                adminUsers.forEach(admin => {
+                    const roleBadge = admin.isSuperAdmin ? 
+                        '<span class="status-badge super-admin">Super Admin</span>' : 
+                        '<span class="status-badge admin">Workplace Admin</span>';
+                    
+                    const statusBadge = admin.status === 'active' ? 
+                        '<span class="status-badge active">Active</span>' : 
+                        '<span class="status-badge suspended">Suspended</span>';
+
+                    const assignedWorkplaces = admin.assignedWorkplaces?.map(wpId => {
+                        const workplace = workplaces.find(wp => wp.id === wpId);
+                        return workplace ? workplace.name : 'Unknown';
+                    }).join(', ') || 'None assigned';
+
+                    const lastLogin = admin.lastLogin ? new Date(admin.lastLogin).toLocaleDateString() : 'Never';
+
+                    html += `
+                        <tr>
+                            <td><strong>${admin.firstName} ${admin.lastName}</strong></td>
+                            <td>${admin.email}</td>
+                            <td>${roleBadge}</td>
+                            <td>${assignedWorkplaces}</td>
+                            <td>${statusBadge}</td>
+                            <td>${lastLogin}</td>
+                            <td>
+                                <div class="table-actions">
+                                    <button class="btn btn-info" onclick="viewAdminDetails('${admin.id}')">👁️ View</button>
+                                    <button class="btn btn-warning" onclick="editAdmin('${admin.id}')">✏️ Edit</button>
+                                    <button class="btn btn-secondary" onclick="toggleAdminStatus('${admin.id}')">${admin.status === 'active' ? '⏸️ Suspend' : '▶️ Activate'}</button>
+                                    <button class="btn btn-danger" onclick="deleteAdmin('${admin.id}')">🗑️ Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table>';
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        };
+
+        window.showAddAdmin = function() {
+            const modal = document.getElementById('addAdminModal');
+            if (modal) {
+                modal.style.display = 'block';
+                
+                // Populate workplace options
+                const workplaceSelect = document.getElementById('adminWorkplaces');
+                if (workplaceSelect) {
+                    workplaceSelect.innerHTML = '';
+                    workplaces.forEach(workplace => {
+                        const option = document.createElement('option');
+                        option.value = workplace.id;
+                        option.textContent = workplace.name;
+                        workplaceSelect.appendChild(option);
+                    });
+                }
+            }
+        };
+
+        window.createAdmin = function() {
+            const form = document.getElementById('addAdminForm');
+            const formData = new FormData(form);
+            
+            const adminData = {
+                firstName: formData.get('firstName'),
+                lastName: formData.get('lastName'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                role: formData.get('role'),
+                assignedWorkplaces: formData.getAll('workplaces'),
+                status: 'pending', // New admins start as pending
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser?.id || 'system'
+            };
+
+            // Validate data
+            if (!adminData.firstName || !adminData.lastName || !adminData.email) {
+                showNotification('❌ Please fill in all required fields', 'error');
+                return;
+            }
+
+            // Check if email already exists
+            if (window.allUsers?.find(u => u.email.toLowerCase() === adminData.email.toLowerCase())) {
+                showNotification('❌ User with this email already exists', 'error');
+                return;
+            }
+
+            // Add to Firestore
+            const adminRef = db.collection('users').doc();
+            adminRef.set({
+                ...adminData,
+                id: adminRef.id,
+                isAdmin: adminData.role === 'workplace_admin',
+                isSuperAdmin: adminData.role === 'super_admin'
+            }).then(() => {
+                showNotification('✅ Admin user created successfully', 'success');
+                document.getElementById('addAdminModal').style.display = 'none';
+                form.reset();
+                loadAdminUsers();
+                loadUsers(); // Refresh users list
+            }).catch(error => {
+                console.error('Error creating admin:', error);
+                showNotification('❌ Error creating admin user', 'error');
+            });
+        };
+
+        // Admin Action Functions
+        window.viewAdminDetails = function(adminId) {
+            const admin = window.allUsers?.find(u => u.id === adminId);
+            if (!admin) {
+                showNotification('❌ Admin not found', 'error');
+                return;
+            }
+
+            const assignedWorkplaces = admin.assignedWorkplaces?.map(wpId => {
+                const workplace = workplaces.find(wp => wp.id === wpId);
+                return workplace ? workplace.name : 'Unknown';
+            }).join(', ') || 'None assigned';
+
+            const modal = document.getElementById('adminDetailsModal');
+            if (modal) {
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>👁️ Admin Details</h2>
+                            <span class="close" onclick="this.parentElement.parentElement.parentElement.style.display='none'">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <div class="admin-details">
+                                <div class="detail-row">
+                                    <strong>Name:</strong> ${admin.firstName} ${admin.lastName}
+                                </div>
+                                <div class="detail-row">
+                                    <strong>Email:</strong> ${admin.email}
+                                </div>
+                                <div class="detail-row">
+                                    <strong>Phone:</strong> ${admin.phone || 'Not provided'}
+                                </div>
+                                <div class="detail-row">
+                                    <strong>Role:</strong> ${admin.isSuperAdmin ? 'Super Admin' : 'Workplace Admin'}
+                                </div>
+                                <div class="detail-row">
+                                    <strong>Assigned Workplaces:</strong> ${assignedWorkplaces}
+                                </div>
+                                <div class="detail-row">
+                                    <strong>Status:</strong> ${admin.status}
+                                </div>
+                                <div class="detail-row">
+                                    <strong>Created:</strong> ${admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : 'Unknown'}
+                                </div>
+                                <div class="detail-row">
+                                    <strong>Last Login:</strong> ${admin.lastLogin ? new Date(admin.lastLogin).toLocaleDateString() : 'Never'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                modal.style.display = 'block';
+            }
+        };
+
+        window.editAdmin = function(adminId) {
+            const admin = window.allUsers?.find(u => u.id === adminId);
+            if (!admin) {
+                showNotification('❌ Admin not found', 'error');
+                return;
+            }
+
+            // Populate edit form
+            document.getElementById('editAdminId').value = adminId;
+            document.getElementById('editAdminFirstName').value = admin.firstName;
+            document.getElementById('editAdminLastName').value = admin.lastName;
+            document.getElementById('editAdminEmail').value = admin.email;
+            document.getElementById('editAdminPhone').value = admin.phone || '';
+            document.getElementById('editAdminRole').value = admin.isSuperAdmin ? 'super_admin' : 'workplace_admin';
+            
+            // Populate workplace assignments
+            const workplaceSelect = document.getElementById('editAdminWorkplaces');
+            if (workplaceSelect) {
+                workplaceSelect.innerHTML = '';
+                workplaces.forEach(workplace => {
+                    const option = document.createElement('option');
+                    option.value = workplace.id;
+                    option.textContent = workplace.name;
+                    option.selected = admin.assignedWorkplaces?.includes(workplace.id) || false;
+                    workplaceSelect.appendChild(option);
+                });
+            }
+
+            // Show edit modal
+            document.getElementById('editAdminModal').style.display = 'block';
+        };
+
+        window.updateAdmin = function() {
+            const form = document.getElementById('editAdminForm');
+            const formData = new FormData(form);
+            
+            const adminId = formData.get('adminId');
+            const adminData = {
+                firstName: formData.get('firstName'),
+                lastName: formData.get('lastName'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                role: formData.get('role'),
+                assignedWorkplaces: formData.getAll('workplaces'),
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUser?.id || 'system'
+            };
+
+            // Validate data
+            if (!adminData.firstName || !adminData.lastName || !adminData.email) {
+                showNotification('❌ Please fill in all required fields', 'error');
+                return;
+            }
+
+            // Update in Firestore
+            db.collection('users').doc(adminId).update({
+                ...adminData,
+                isAdmin: adminData.role === 'workplace_admin',
+                isSuperAdmin: adminData.role === 'super_admin'
+            }).then(() => {
+                showNotification('✅ Admin updated successfully', 'success');
+                document.getElementById('editAdminModal').style.display = 'none';
+                loadAdminUsers();
+                loadUsers(); // Refresh users list
+            }).catch(error => {
+                console.error('Error updating admin:', error);
+                showNotification('❌ Error updating admin', 'error');
+            });
+        };
+
+        window.toggleAdminStatus = function(adminId) {
+            const admin = window.allUsers?.find(u => u.id === adminId);
+            if (!admin) {
+                showNotification('❌ Admin not found', 'error');
+                return;
+            }
+
+            const newStatus = admin.status === 'active' ? 'suspended' : 'active';
+            const action = newStatus === 'active' ? 'activated' : 'suspended';
+
+            db.collection('users').doc(adminId).update({
+                status: newStatus,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUser?.id || 'system'
+            }).then(() => {
+                showNotification(`✅ Admin ${action} successfully`, 'success');
+                loadAdminUsers();
+                loadUsers(); // Refresh users list
+            }).catch(error => {
+                console.error('Error updating admin status:', error);
+                showNotification('❌ Error updating admin status', 'error');
+            });
+        };
+
+        window.deleteAdmin = function(adminId) {
+            const admin = window.allUsers?.find(u => u.id === adminId);
+            if (!admin) {
+                showNotification('❌ Admin not found', 'error');
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete admin ${admin.firstName} ${admin.lastName}? This action cannot be undone.`)) {
+                db.collection('users').doc(adminId).delete().then(() => {
+                    showNotification('✅ Admin deleted successfully', 'success');
+                    loadAdminUsers();
+                    loadUsers(); // Refresh users list
+                }).catch(error => {
+                    console.error('Error deleting admin:', error);
+                    showNotification('❌ Error deleting admin', 'error');
+                });
+            }
+        };
+
+        window.filterAdmins = function() {
+            const searchTerm = document.getElementById('adminSearch')?.value.toLowerCase() || '';
+            const roleFilter = document.getElementById('adminRoleFilter')?.value || '';
+            const statusFilter = document.getElementById('adminStatusFilter')?.value || '';
+            
+            const adminUsers = window.allUsers?.filter(user => user.isAdmin || user.isSuperAdmin) || [];
+            const filteredAdmins = adminUsers.filter(admin => {
+                // Search filter
+                const matchesSearch = !searchTerm || 
+                    admin.firstName.toLowerCase().includes(searchTerm) ||
+                    admin.lastName.toLowerCase().includes(searchTerm) ||
+                    admin.email.toLowerCase().includes(searchTerm);
+                
+                // Role filter
+                const matchesRole = !roleFilter || 
+                    (roleFilter === 'super_admin' && admin.isSuperAdmin) ||
+                    (roleFilter === 'workplace_admin' && admin.isAdmin && !admin.isSuperAdmin) ||
+                    (roleFilter === 'pending' && admin.status === 'pending');
+                
+                // Status filter
+                const matchesStatus = !statusFilter || admin.status === statusFilter;
+                
+                return matchesSearch && matchesRole && matchesStatus;
+            });
+            
+            // Update table with filtered results
+            updateAdminsTable(filteredAdmins);
+        };
+
+        window.updateAdminsTable = function(filteredAdmins) {
+            const container = document.getElementById('adminsTableContainer');
+            if (!container) return;
+            
+            if (filteredAdmins.length === 0) {
+                container.innerHTML = '<div class="warning">No admins found matching your criteria.</div>';
+                return;
+            }
+
+            let html = `
+                <table class="enhanced-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Assigned Workplaces</th>
+                            <th>Status</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            filteredAdmins.forEach(admin => {
+                const roleBadge = admin.isSuperAdmin ? 
+                    '<span class="status-badge super-admin">Super Admin</span>' : 
+                    '<span class="status-badge admin">Workplace Admin</span>';
+                
+                const statusBadge = admin.status === 'active' ? 
+                    '<span class="status-badge active">Active</span>' : 
+                    '<span class="status-badge suspended">Suspended</span>';
+
+                const assignedWorkplaces = admin.assignedWorkplaces?.map(wpId => {
+                    const workplace = workplaces.find(wp => wp.id === wpId);
+                    return workplace ? workplace.name : 'Unknown';
+                }).join(', ') || 'None assigned';
+
+                const lastLogin = admin.lastLogin ? new Date(admin.lastLogin).toLocaleDateString() : 'Never';
+
+                html += `
+                    <tr>
+                        <td><strong>${admin.firstName} ${admin.lastName}</strong></td>
+                        <td>${admin.email}</td>
+                        <td>${roleBadge}</td>
+                        <td>${assignedWorkplaces}</td>
+                        <td>${statusBadge}</td>
+                        <td>${lastLogin}</td>
+                        <td>
+                            <div class="table-actions">
+                                <button class="btn btn-info" onclick="viewAdminDetails('${admin.id}')">👁️ View</button>
+                                <button class="btn btn-warning" onclick="editAdmin('${admin.id}')">✏️ Edit</button>
+                                <button class="btn btn-secondary" onclick="toggleAdminStatus('${admin.id}')">${admin.status === 'active' ? '⏸️ Suspend' : '▶️ Activate'}</button>
+                                <button class="btn btn-danger" onclick="deleteAdmin('${admin.id}')">🗑️ Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        };
+
+        window.exportAdmins = function() {
+            const adminUsers = window.allUsers?.filter(user => user.isAdmin || user.isSuperAdmin) || [];
+            const csvContent = generateAdminsCSV(adminUsers);
+            downloadCSV(csvContent, `admins_${new Date().toISOString().split('T')[0]}.csv`);
+        };
+
+        window.generateAdminsCSV = function(adminUsers) {
+            const headers = ['First Name', 'Last Name', 'Email', 'Role', 'Assigned Workplaces', 'Status', 'Created', 'Last Login'];
+            const rows = adminUsers.map(admin => {
+                const assignedWorkplaces = admin.assignedWorkplaces?.map(wpId => {
+                    const workplace = workplaces.find(wp => wp.id === wpId);
+                    return workplace ? workplace.name : 'Unknown';
+                }).join('; ') || 'None assigned';
+
+                return [
+                    admin.firstName,
+                    admin.lastName,
+                    admin.email,
+                    admin.isSuperAdmin ? 'Super Admin' : 'Workplace Admin',
+                    assignedWorkplaces,
+                    admin.status,
+                    admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : 'Unknown',
+                    admin.lastLogin ? new Date(admin.lastLogin).toLocaleDateString() : 'Never'
+                ];
+            });
+            
+            return [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+        };
+
         // User Management Functions
         window.showAddUser = function() {
             showNotification('👤 Add User functionality coming in Phase 2', 'info');
@@ -8923,6 +9744,168 @@
                 progressContainer.style.display = 'none';
                 showNotification(`❌ Import failed: ${error.message}`, 'error');
                 console.error('Import error:', error);
+            }
+        };
+
+        // ========================================
+        // ADMIN MANAGEMENT MODALS
+        // ========================================
+        
+        // Add Admin Modal
+        const addAdminModal = document.createElement('div');
+        addAdminModal.id = 'addAdminModal';
+        addAdminModal.className = 'modal';
+        addAdminModal.innerHTML = `
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h2>➕ Add New Admin</h2>
+                    <span class="close" onclick="document.getElementById('addAdminModal').style.display='none'">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="addAdminForm" onsubmit="event.preventDefault(); createAdmin();">
+                        <div class="admin-form-group">
+                            <label for="adminFirstName">First Name *</label>
+                            <input type="text" id="adminFirstName" name="firstName" required>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="adminLastName">Last Name *</label>
+                            <input type="text" id="adminLastName" name="lastName" required>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="adminEmail">Email *</label>
+                            <input type="email" id="adminEmail" name="email" required>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="adminPhone">Phone</label>
+                            <input type="tel" id="adminPhone" name="phone">
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="adminRole">Role *</label>
+                            <select id="adminRole" name="role" required onchange="toggleWorkplaceAssignment()">
+                                <option value="">Select Role</option>
+                                <option value="workplace_admin">Workplace Admin</option>
+                                <option value="super_admin">Super Admin</option>
+                            </select>
+                        </div>
+                        <div class="admin-form-group" id="workplaceAssignmentGroup" style="display: none;">
+                            <label for="adminWorkplaces">Assigned Workplaces</label>
+                            <select id="adminWorkplaces" name="workplaces" multiple>
+                                <!-- Workplaces will be populated dynamically -->
+                            </select>
+                            <small>Hold Ctrl/Cmd to select multiple workplaces</small>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('addAdminModal').style.display='none'">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Create Admin</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(addAdminModal);
+
+        // Edit Admin Modal
+        const editAdminModal = document.createElement('div');
+        editAdminModal.id = 'editAdminModal';
+        editAdminModal.className = 'modal';
+        editAdminModal.innerHTML = `
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h2>✏️ Edit Admin</h2>
+                    <span class="close" onclick="document.getElementById('editAdminModal').style.display='none'">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="editAdminForm" onsubmit="event.preventDefault(); updateAdmin();">
+                        <input type="hidden" id="editAdminId" name="adminId">
+                        <div class="admin-form-group">
+                            <label for="editAdminFirstName">First Name *</label>
+                            <input type="text" id="editAdminFirstName" name="firstName" required>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="editAdminLastName">Last Name *</label>
+                            <input type="text" id="editAdminLastName" name="lastName" required>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="editAdminEmail">Email *</label>
+                            <input type="email" id="editAdminEmail" name="email" required>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="editAdminPhone">Phone</label>
+                            <input type="tel" id="editAdminPhone" name="phone">
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="editAdminRole">Role *</label>
+                            <select id="editAdminRole" name="role" required onchange="toggleEditWorkplaceAssignment()">
+                                <option value="">Select Role</option>
+                                <option value="workplace_admin">Workplace Admin</option>
+                                <option value="super_admin">Super Admin</option>
+                            </select>
+                        </div>
+                        <div class="admin-form-group" id="editWorkplaceAssignmentGroup" style="display: none;">
+                            <label for="editAdminWorkplaces">Assigned Workplaces</label>
+                            <select id="editAdminWorkplaces" name="workplaces" multiple>
+                                <!-- Workplaces will be populated dynamically -->
+                            </select>
+                            <small>Hold Ctrl/Cmd to select multiple workplaces</small>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('editAdminModal').style.display='none'">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Update Admin</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(editAdminModal);
+
+        // Admin Details Modal
+        const adminDetailsModal = document.createElement('div');
+        adminDetailsModal.id = 'adminDetailsModal';
+        adminDetailsModal.className = 'modal';
+        document.body.appendChild(adminDetailsModal);
+
+        // Helper functions for admin modals
+        window.toggleWorkplaceAssignment = function() {
+            const role = document.getElementById('adminRole').value;
+            const workplaceGroup = document.getElementById('workplaceAssignmentGroup');
+            
+            if (role === 'workplace_admin') {
+                workplaceGroup.style.display = 'block';
+                // Populate workplaces
+                const workplaceSelect = document.getElementById('adminWorkplaces');
+                if (workplaceSelect) {
+                    workplaceSelect.innerHTML = '';
+                    workplaces.forEach(workplace => {
+                        const option = document.createElement('option');
+                        option.value = workplace.id;
+                        option.textContent = workplace.name;
+                        workplaceSelect.appendChild(option);
+                    });
+                }
+            } else {
+                workplaceGroup.style.display = 'none';
+            }
+        };
+
+        window.toggleEditWorkplaceAssignment = function() {
+            const role = document.getElementById('editAdminRole').value;
+            const workplaceGroup = document.getElementById('editWorkplaceAssignmentGroup');
+            
+            if (role === 'workplace_admin') {
+                workplaceGroup.style.display = 'block';
+                // Populate workplaces
+                const workplaceSelect = document.getElementById('editAdminWorkplaces');
+                if (workplaceSelect) {
+                    workplaceSelect.innerHTML = '';
+                    workplaces.forEach(workplace => {
+                        const option = document.createElement('option');
+                        option.value = workplace.id;
+                        option.textContent = workplace.name;
+                        workplaceSelect.appendChild(option);
+                    });
+                }
+            } else {
+                workplaceGroup.style.display = 'none';
             }
         };
     </script>
