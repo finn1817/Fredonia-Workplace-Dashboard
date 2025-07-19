@@ -5441,8 +5441,7 @@
                 // Also try querying by currentEmail as a fallback
                 let requestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
-                    where('userId', '==', userId),
-                    orderBy('createdAt', 'desc')
+                    where('userId', '==', userId)
                 );
                 console.log('Requests query created for userId:', userId);
                 
@@ -5454,8 +5453,7 @@
                     console.log('No results by userId, trying currentEmail...');
                     requestsQuery = query(
                         collection(authDb, 'emailChangeRequests'),
-                        where('currentEmail', '==', user.email),
-                        orderBy('createdAt', 'desc')
+                        where('currentEmail', '==', user.email)
                     );
                     snapshot = await getDocs(requestsQuery);
                     console.log('Snapshot by currentEmail, size:', snapshot.size);
@@ -5466,8 +5464,15 @@
                     return;
                 }
                 
+                // Sort by createdAt in descending order (newest first)
+                const sortedDocs = snapshot.docs.sort((a, b) => {
+                    const dateA = new Date(a.data().createdAt);
+                    const dateB = new Date(b.data().createdAt);
+                    return dateB - dateA;
+                });
+                
                 let html = '';
-                snapshot.forEach(doc => {
+                sortedDocs.forEach(doc => {
                     const data = doc.data();
                     const statusClass = data.status;
                     const statusBadgeClass = data.status;
