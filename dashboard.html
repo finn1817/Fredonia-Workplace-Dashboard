@@ -4789,7 +4789,7 @@
 
         // Enhanced worker management with validation
         window.showAddWorker = function() {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -4802,7 +4802,7 @@
         };
 
         window.editWorker = function(workerId) {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -4827,7 +4827,7 @@
         };
 
         window.deleteWorker = async function(workerId) {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -4852,7 +4852,7 @@
         const workerForm = document.getElementById('workerForm');
         workerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -5023,7 +5023,7 @@
 
         // Form display functions
         window.showGenerateForm = function() {
-            if (!user.isAdmin) {
+            if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
@@ -9049,12 +9049,11 @@
                     if (workplaceId && !currentUserWorkplaces.includes(workplaceId)) {
                         return false;
                     }
-                    // Workplace admin permissions
-                    const workplaceAdminActions = [
-                        'manage_workers', 'view_schedule', 'edit_schedule', 
-                        'manage_users', 'view_reports', 'export_data'
+                    // Workplace admins have access to most features, except admin management
+                    const restrictedActions = [
+                        'manage_admins', 'delete_admin', 'edit_admin', 'create_admin'
                     ];
-                    return workplaceAdminActions.includes(action);
+                    return !restrictedActions.includes(action);
                 case USER_ROLES.USER:
                     // Regular user permissions
                     const userActions = ['view_schedule', 'view_own_profile'];
