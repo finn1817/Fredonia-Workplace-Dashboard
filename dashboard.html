@@ -4637,9 +4637,14 @@
                     '<span class="status-badge active">Active</span>' : 
                     '<span class="status-badge suspended">Suspended</span>';
                 
-                const roleBadge = user.isAdmin ? 
-                    '<span class="status-badge active">Admin</span>' : 
-                    '<span class="status-badge pending">User</span>';
+                let roleBadge;
+                if (user.isSuperAdmin) {
+                    roleBadge = '<span class="status-badge super-admin">Super Admin</span>';
+                } else if (user.isAdmin) {
+                    roleBadge = '<span class="status-badge active">Admin</span>';
+                } else {
+                    roleBadge = '<span class="status-badge pending">User</span>';
+                }
 
                 const lastLogin = user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never';
 
@@ -8773,9 +8778,14 @@
                     '<span class="status-badge active">Active</span>' : 
                     '<span class="status-badge suspended">Suspended</span>';
                 
-                const roleBadge = user.isAdmin ? 
-                    '<span class="status-badge active">Admin</span>' : 
-                    '<span class="status-badge pending">User</span>';
+                let roleBadge;
+                if (user.isSuperAdmin) {
+                    roleBadge = '<span class="status-badge super-admin">Super Admin</span>';
+                } else if (user.isAdmin) {
+                    roleBadge = '<span class="status-badge active">Admin</span>';
+                } else {
+                    roleBadge = '<span class="status-badge pending">User</span>';
+                }
 
                 const lastLogin = user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never';
 
@@ -8893,7 +8903,7 @@
                 user.firstName,
                 user.lastName,
                 user.email,
-                user.isAdmin ? 'Admin' : 'User',
+                user.isSuperAdmin ? 'Super Admin' : (user.isAdmin ? 'Admin' : 'User'),
                 user.status,
                 user.phone || '',
                 user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'
