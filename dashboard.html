@@ -1796,6 +1796,7 @@
                 return { schedule: {}, assignedHours: {}, lowHours: [], unassigned: [], altSols: {}, unfilledShifts: [], wsIssues: [], minHoursIssues: [], coverageGaps: [] };
             }
 
+            // CRITICAL FIX: Initialize empty schedule and tracking
             const schedule = {};
             const unfilledShifts = [];
             const shiftLengths = [2, 3, 4, 5];
@@ -1805,11 +1806,15 @@
             const availabilityHours = {};
             const forcedAssignments = [];
             
+            // CRITICAL FIX: Initialize all workers with 0 hours
             workersData.forEach(w => {
                 assignedHours[w.email] = 0;
                 wsStatus[w.email] = w.work_study || false;
                 availabilityHours[w.email] = calculateAvailabilityHours(w);
             });
+            
+            // CRITICAL FIX: Track which workers are already assigned to prevent double assignment
+            const assignedWorkers = new Set();
 
             const wsWorkers = workersData.filter(w => wsStatus[w.email]);
             wsWorkers.sort((a, b) => availabilityHours[a.email] - availabilityHours[b.email]);
@@ -1919,18 +1924,29 @@
 
                 const optimalShifts = findWorkStudyShifts(windows);
 
-                // Assign the shifts found with fallback logic
+                // CRITICAL FIX: Assign the shifts found with proper tracking
                 let assignedAny = false;
                 for (const [day, start, end, duration] of optimalShifts) {
+                    // CRITICAL FIX: Check if worker is already assigned to this time slot
                     const slotStart = hourToTime(start);
                     const slotEnd = hourToTime(end);
                     
-                    // Check if this slot is already full
+                    // Check if this worker is already assigned to this exact time slot
                     const existingShifts = (schedule[day] || []).filter(s => 
-                        s.start === slotStart && s.end === slotEnd
+                        s.start === slotStart && s.end === slotEnd && s.raw_assigned.includes(email)
                     );
                     
-                    if (existingShifts.length < maxWorkersPerShift) {
+                    if (existingShifts.length > 0) {
+                        console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping duplicate assignment`);
+                        continue;
+                    }
+                    
+                    // Check if this slot is already full with other workers
+                    const slotOccupancy = (schedule[day] || []).filter(s => 
+                        s.start === slotStart && s.end === slotEnd
+                    ).length;
+                    
+                    if (slotOccupancy < maxWorkersPerShift) {
                         if (!schedule[day]) schedule[day] = [];
                         
                         schedule[day].push({
@@ -1944,7 +1960,12 @@
                             forced_shift: true // Mark as forced to ensure it's not overridden
                         });
                         
-                        assignedHours[email] += duration;
+                        // CRITICAL FIX: Only add hours if not already assigned
+                        if (!assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
+                            assignedHours[email] += duration;
+                            assignedWorkers.add(`${email}_${day}_${slotStart}_${slotEnd}`);
+                            console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} assigned ${duration}h at ${slotStart}-${slotEnd} on ${day}`);
+                        }
                         remaining -= duration;
                         assignedAny = true;
                     } else {
@@ -1984,6 +2005,12 @@
                                         shift.start === slotStart && shift.end === slotEnd
                                     );
                                     
+                                    // CRITICAL FIX: Check for duplicate assignment
+                                    if (assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
+                                        console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping fallback assignment`);
+                                        continue;
+                                    }
+                                    
                                     if (existingShifts.length < maxWorkersPerShift) {
                                         if (!schedule[day]) schedule[day] = [];
                                         
@@ -1999,9 +2026,13 @@
                                             fallback_assignment: true
                                         });
                                         
-                                        assignedHours[email] += assignDuration;
+                                        // CRITICAL FIX: Only add hours if not already assigned
+                                        if (!assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
+                                            assignedHours[email] += assignDuration;
+                                            assignedWorkers.add(`${email}_${day}_${slotStart}_${slotEnd}`);
+                                            console.log(`Fallback assignment: ${w.first_name} ${w.last_name} assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
+                                        }
                                         remaining -= assignDuration;
-                                        console.log(`Fallback assignment: ${w.first_name} ${w.last_name} assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
                                         break;
                                     }
                                 }
@@ -2036,9 +2067,15 @@
                                     const availableDuration = e - s;
                                     const assignDuration = Math.min(availableDuration, remaining);
                                     
-                                    // Force assignment regardless of existing shifts
+                                    // CRITICAL FIX: Force assignment with duplicate checking
                                     const slotStart = hourToTime(s);
                                     const slotEnd = hourToTime(s + assignDuration);
+                                    
+                                    // CRITICAL FIX: Check for duplicate assignment even in last resort
+                                    if (assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
+                                        console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping last resort assignment`);
+                                        continue;
+                                    }
                                     
                                     if (!schedule[day]) schedule[day] = [];
                                     
@@ -2054,9 +2091,13 @@
                                         last_resort_assignment: true
                                     });
                                     
-                                    assignedHours[email] += assignDuration;
+                                    // CRITICAL FIX: Only add hours if not already assigned
+                                    if (!assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
+                                        assignedHours[email] += assignDuration;
+                                        assignedWorkers.add(`${email}_${day}_${slotStart}_${slotEnd}`);
+                                        console.log(`LAST RESORT assignment: ${w.first_name} ${w.last_name} forced assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
+                                    }
                                     remaining -= assignDuration;
-                                    console.log(`LAST RESORT assignment: ${w.first_name} ${w.last_name} forced assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
                                     break;
                                 }
                             }
@@ -2246,12 +2287,24 @@
 
                                 const chosen = availableWorkers.slice(0, maxWorkersPerShift);
 
-                                // Assign shifts
+                                // CRITICAL FIX: Assign shifts with duplicate checking
                                 for (const x of chosen) {
-                                    assignedHours[x.email] += finalDuration;
                                     const shiftStart = hourToTime(cur);
                                     const shiftEnd = hourToTime(finalEndShift);
-                                    console.log(`Creating shift: ${shiftStart}-${shiftEnd} for ${x.first_name} ${x.last_name}`);
+                                    
+                                    // CRITICAL FIX: Check for duplicate assignment
+                                    if (assignedWorkers.has(`${x.email}_${day}_${shiftStart}_${shiftEnd}`)) {
+                                        console.warn(`⚠️ Worker ${x.first_name} ${x.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping assignment`);
+                                        continue;
+                                    }
+                                    
+                                    // CRITICAL FIX: Only add hours if not already assigned
+                                    if (!assignedWorkers.has(`${x.email}_${day}_${shiftStart}_${shiftEnd}`)) {
+                                        assignedHours[x.email] += finalDuration;
+                                        assignedWorkers.add(`${x.email}_${day}_${shiftStart}_${shiftEnd}`);
+                                        console.log(`Creating shift: ${shiftStart}-${shiftEnd} for ${x.first_name} ${x.last_name}`);
+                                    }
+                                    
                                     schedule[day].push({
                                         start: shiftStart,
                                         end: shiftEnd,
@@ -2404,7 +2457,21 @@
                 
                 if (eligible.length > 0) {
                     const chosen = eligible[0];
-                    assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
+                    const shiftStart = hourToTime(us.start_hour);
+                    const shiftEnd = hourToTime(us.end_hour);
+                    
+                    // CRITICAL FIX: Check for duplicate assignment
+                    if (assignedWorkers.has(`${chosen.email}_${us.day}_${shiftStart}_${shiftEnd}`)) {
+                        console.warn(`⚠️ Worker ${chosen.first_name} ${chosen.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping unfilled shift assignment`);
+                        continue;
+                    }
+                    
+                    // CRITICAL FIX: Only add hours if not already assigned
+                    if (!assignedWorkers.has(`${chosen.email}_${us.day}_${shiftStart}_${shiftEnd}`)) {
+                        assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
+                        assignedWorkers.add(`${chosen.email}_${us.day}_${shiftStart}_${shiftEnd}`);
+                    }
+                    
                     if (!schedule[us.day]) schedule[us.day] = [];
                     schedule[us.day].push({
                         start: us.start,
@@ -2508,11 +2575,45 @@
                 console.log('✅ Work study validation passed: All work study students have exactly 5 hours');
             }
             
+            // CRITICAL FIX: Final validation to ensure no negative or excessive hours
+            console.log('🔍 Performing final schedule validation...');
+            const finalValidation = calculateAssignedHours(schedule);
+            
+            // Check for any critical issues
+            const criticalIssues = [];
+            Object.entries(finalValidation).forEach(([email, hours]) => {
+                if (hours < 0) {
+                    criticalIssues.push(`${email}: ${hours} hours (NEGATIVE!)`);
+                } else if (hours > 25) {
+                    criticalIssues.push(`${email}: ${hours} hours (EXCESSIVE!)`);
+                }
+            });
+            
+            if (criticalIssues.length > 0) {
+                console.error('🚨 CRITICAL VALIDATION FAILED:', criticalIssues);
+                console.error('🚨 SCHEDULE GENERATION FAILED - CRITICAL ISSUES DETECTED');
+                
+                // Return empty schedule to prevent saving corrupted data
+                return {
+                    schedule: {},
+                    assignedHours: {},
+                    lowHours: [],
+                    unassigned: workersData.map(w => `${w.first_name} ${w.last_name}`),
+                    altSols: {},
+                    unfilledShifts: [],
+                    wsIssues: ['CRITICAL: Schedule generation failed due to validation errors'],
+                    minHoursIssues: [],
+                    coverageGaps: [],
+                    forcedAssignments: []
+                };
+            }
+            
+            console.log('✅ Final validation passed - no critical issues detected');
             console.log('Enhanced schedule generation complete with coverage analysis');
             
             return {
                 schedule,
-                assignedHours,
+                assignedHours: finalValidation, // Use the validated hours
                 lowHours,
                 unassigned,
                 altSols,
