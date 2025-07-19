@@ -2396,15 +2396,20 @@
                     const docSnap = await getDoc(docRef);
                     
                     if (!docSnap.exists()) {
+                        // Only create with default hours if workplace doesn't exist
                         await setDoc(docRef, {
                             name: workplace.name,
                             hours_of_operation: workplace.hours,
                             created_at: new Date().toISOString()
                         });
-                        console.log(`Created workplace: ${workplace.id}`);
+                        console.log(`Created workplace: ${workplace.id} with default hours`);
+                    } else {
+                        // Workplace exists - log the current hours for debugging
+                        const currentData = docSnap.data();
+                        console.log(`Workplace ${workplace.id} exists with hours:`, currentData.hours_of_operation);
                     }
                 } catch (error) {
-                    console.error(`Error creating ${workplace.id}:`, error);
+                    console.error(`Error checking ${workplace.id}:`, error);
                 }
             }
         }
@@ -2482,8 +2487,10 @@
                 const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
                 if (workplaceDoc.exists()) {
                     hours = workplaceDoc.data().hours_of_operation || {};
+                    console.log(`Loaded hours from database for ${selectedWorkplace}:`, hours);
                 } else {
                     hours = {};
+                    console.warn(`No workplace document found for ${selectedWorkplace}, using empty hours`);
                 }
 
                 console.log(`Loaded ${workers.length} workers and operating hours for ${selectedWorkplace}`);
@@ -2766,6 +2773,7 @@
                 });
                 
                 hours = newHours;
+                console.log(`Updated hours for ${selectedWorkplace}:`, newHours);
                 showNotification('✅ Hours updated successfully!', 'success');
                 closeModal('hoursModal');
                 
@@ -3340,8 +3348,10 @@
                     }
                 };
                 
-                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'schedules'), scheduleData);
-                console.log('Enhanced schedule saved to Firebase');
+                const docRef = await addDoc(collection(db, 'workplaces', selectedWorkplace, 'schedules'), scheduleData);
+                currentScheduleId = docRef.id; // Set the current schedule ID to the newly created document
+                console.log('Enhanced schedule saved to Firebase with ID:', currentScheduleId);
+                return docRef.id;
             } catch (error) {
                 console.error('Error saving schedule:', error);
                 throw error;
@@ -4365,6 +4375,19 @@
         }
 
         testConnection();
+
+        // Debug function to check current hours
+        window.debugHours = function() {
+            console.log('=== CURRENT HOURS DEBUG ===');
+            console.log('Selected workplace:', selectedWorkplace);
+            console.log('Current hours object:', hours);
+            console.log('Sunday hours:', hours.Sunday);
+            if (hours.Sunday && hours.Sunday[0]) {
+                console.log('Sunday start:', hours.Sunday[0].start);
+                console.log('Sunday end:', hours.Sunday[0].end);
+            }
+            console.log('==========================');
+        };
 
         // Add SheetJS via CDN
         if (!window.XLSX) {
