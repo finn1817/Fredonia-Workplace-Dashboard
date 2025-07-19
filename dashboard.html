@@ -180,6 +180,25 @@
             transform: translateY(-1px); 
             filter: brightness(1.1);
         }
+        
+        /* Enhanced worker list styling */
+        .available-worker {
+            background-color: #f8fff8;
+            border-color: #28a745 !important;
+        }
+        
+        .unavailable-worker {
+            background-color: #fff8f8;
+            border-color: #dc3545 !important;
+        }
+        
+        .available-worker:hover {
+            background-color: #e8f5e8;
+        }
+        
+        .unavailable-worker:hover {
+            background-color: #f5e8e8;
+        }
 
         .btn.loading::after {
             content: "";
@@ -4766,54 +4785,161 @@
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
+            
             // Build day options
             let dayOptions = DAYS.map(day => `<option value='${day}'>${day}</option>`).join('');
-            let html = `<div class='form-group'><label>Day</label><select id='addShiftDay'><option value=''>Select Day</option>${dayOptions}</select></div>`;
-            html += `<div class='form-row'><div class='form-group'><label>Start Time</label><input type='time' id='addShiftStart'></div><div class='form-group'><label>End Time</label><input type='time' id='addShiftEnd'></div></div>`;
-            html += `<div class='form-group'><label><input type='checkbox' id='addShiftShowUnavailable'> Show unavailable workers</label></div>`;
-            html += `<div class='form-group' id='addShiftWorkersGroup' style='display:none;'><label>Assign Worker(s)</label><select id='addShiftWorkers' multiple size='5'></select></div>`;
-            html += `<div style='margin-top:1rem;'><button class='btn btn-success' id='saveAddShiftBtn'>Add Shift</button> <button class='btn btn-secondary' onclick="closeModal('addShiftModal')">Cancel</button></div>`;
+            
+            // Enhanced HTML with better formatting and worker display
+            let html = `
+                <div class='form-group'>
+                    <label><strong>Day</strong></label>
+                    <select id='addShiftDay' class='form-control'>
+                        <option value=''>Select Day</option>${dayOptions}
+                    </select>
+                </div>
+                <div class='form-row'>
+                    <div class='form-group'>
+                        <label><strong>Start Time</strong></label>
+                        <input type='time' id='addShiftStart' class='form-control'>
+                    </div>
+                    <div class='form-group'>
+                        <label><strong>End Time</strong></label>
+                        <input type='time' id='addShiftEnd' class='form-control'>
+                    </div>
+                </div>
+                <div class='form-group'>
+                    <label>
+                        <input type='checkbox' id='addShiftShowUnavailable' checked> 
+                        Show unavailable workers
+                    </label>
+                </div>
+                <div class='form-group' id='addShiftWorkersGroup' style='display:none;'>
+                    <label><strong>Current Schedule for ${day}</strong></label>
+                    <div id='addShiftCurrentSchedule' style='margin-bottom: 10px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; font-size: 0.9em;'></div>
+                    <label><strong>Assign Worker(s)</strong></label>
+                    <div id='addShiftWorkersList' style='max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;'></div>
+                </div>
+                <div style='margin-top:1rem;'>
+                    <button class='btn btn-success' id='saveAddShiftBtn'>Add Shift</button> 
+                    <button class='btn btn-secondary' onclick="closeModal('addShiftModal')">Cancel</button>
+                </div>
+            `;
+            
             document.getElementById('addShiftModalBody').innerHTML = html;
             document.getElementById('addShiftModal').style.display = 'block';
-            // Helper to update worker list
+            
+            // Enhanced helper to update worker list
             function updateWorkerList() {
                 const day = document.getElementById('addShiftDay').value;
                 const start = document.getElementById('addShiftStart').value;
                 const end = document.getElementById('addShiftEnd').value;
                 const showUnavailable = document.getElementById('addShiftShowUnavailable').checked;
                 const group = document.getElementById('addShiftWorkersGroup');
-                const select = document.getElementById('addShiftWorkers');
+                const workersList = document.getElementById('addShiftWorkersList');
+                const currentScheduleDiv = document.getElementById('addShiftCurrentSchedule');
+                
                 if (!day || !start || !end) {
                     group.style.display = 'none';
-                    select.innerHTML = '';
+                    workersList.innerHTML = '';
+                    currentScheduleDiv.innerHTML = '';
                     return;
                 }
-                // Filter workers
-                let filtered = workers;
-                if (!showUnavailable) {
-                    filtered = workers.filter(w => isWorkerAvailable(w, day, timeToHour(start), timeToHour(end)));
+                
+                // Show current schedule and operating hours for this day
+                const dayShifts = schedule[day] || [];
+                const dayHours = hours[day] || [];
+                
+                let scheduleHtml = '';
+                
+                // Show operating hours
+                if (dayHours.length > 0) {
+                    scheduleHtml += `<strong>Operating Hours:</strong> ${dayHours.map(h => `${formatTime(h.start)}-${formatTime(h.end)}`).join(', ')}<br>`;
                 }
-                // Build options
-                function formatAvail(w) {
-                    return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
+                
+                // Show existing shifts
+                if (dayShifts.length > 0) {
+                    scheduleHtml += '<strong>Existing Shifts:</strong><br>';
+                    dayShifts.forEach((shift, index) => {
+                        const workers = shift.assigned.join(', ');
+                        scheduleHtml += `• ${formatTime(shift.start)}-${formatTime(shift.end)}: ${workers}<br>`;
+                    });
+                } else {
+                    scheduleHtml += '<em>No shifts scheduled for this day yet.</em>';
                 }
-                select.innerHTML = workers.map(w => {
-                    const available = isWorkerAvailable(w, day, timeToHour(start), timeToHour(end));
-                    if (!showUnavailable && !available) return '';
-                    return `<option value='${w.email}'${!available ? ' style="color:#aaa;"' : ''}>${w.first_name} ${w.last_name} (${formatAvail(w)}${!available ? ' - Unavailable' : ''})</option>`;
-                }).join('');
+                
+                currentScheduleDiv.innerHTML = scheduleHtml;
+                
+                // Convert time strings to hours for comparison
+                const startHour = timeToHour(start);
+                const endHour = timeToHour(end);
+                
+                // Build worker list with availability information
+                let workersHtml = '';
+                
+                workers.forEach(w => {
+                    const available = isWorkerAvailable(w, day, startHour, endHour);
+                    const isWorkStudy = w.work_study;
+                    
+                    // Format availability for this specific day
+                    let dayAvailability = 'No availability';
+                    if (w.availability[day] && w.availability[day].length > 0) {
+                        dayAvailability = w.availability[day].map(slot => 
+                            `${formatTime(slot.start)}-${formatTime(slot.end)}`
+                        ).join(', ');
+                    }
+                    
+                    // Check if worker has any shifts on this day
+                    const existingShifts = (schedule[day] || []).filter(shift => 
+                        shift.raw_assigned && shift.raw_assigned.includes(w.email)
+                    );
+                    
+                    let shiftInfo = '';
+                    if (existingShifts.length > 0) {
+                        shiftInfo = existingShifts.map(shift => 
+                            `${formatTime(shift.start)}-${formatTime(shift.end)}`
+                        ).join(', ');
+                    }
+                    
+                    const workerClass = available ? 'available-worker' : 'unavailable-worker';
+                    const statusText = available ? '✅ Available' : '❌ Unavailable';
+                    const workStudyBadge = isWorkStudy ? ' <span style="color: #ffc107; font-weight: bold;">(WS)</span>' : '';
+                    
+                    workersHtml += `
+                        <div class="${workerClass}" style="padding: 8px; margin: 4px 0; border-radius: 4px; border: 1px solid #ddd; ${!available ? 'background-color: #f8f9fa;' : ''}">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" name="addShiftWorker" value="${w.email}" ${!available && !showUnavailable ? 'disabled' : ''} style="margin-right: 8px;">
+                                <div style="flex: 1;">
+                                    <strong>${w.first_name} ${w.last_name}${workStudyBadge}</strong>
+                                    <div style="font-size: 0.9em; color: #666;">
+                                        <div><strong>Status:</strong> ${statusText}</div>
+                                        <div><strong>${day} Availability:</strong> ${dayAvailability}</div>
+                                        ${shiftInfo ? `<div><strong>Existing Shifts:</strong> ${shiftInfo}</div>` : ''}
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    `;
+                });
+                
+                if (workersHtml === '') {
+                    workersList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No workers found for the selected criteria.</div>';
+                } else {
+                    workersList.innerHTML = workersHtml;
+                }
                 group.style.display = 'block';
             }
+            // Set up event listeners
             document.getElementById('addShiftDay').onchange = updateWorkerList;
             document.getElementById('addShiftStart').oninput = updateWorkerList;
             document.getElementById('addShiftEnd').oninput = updateWorkerList;
             document.getElementById('addShiftShowUnavailable').onchange = updateWorkerList;
-            // Save logic (unchanged)
+            
+            // Save logic (updated for checkbox selection)
             document.getElementById('saveAddShiftBtn').onclick = async function() {
                 const day = document.getElementById('addShiftDay').value;
                 const start = document.getElementById('addShiftStart').value;
                 const end = document.getElementById('addShiftEnd').value;
-                const selected = Array.from(document.getElementById('addShiftWorkers').selectedOptions).map(o => o.value);
+                const selected = Array.from(document.querySelectorAll('#addShiftModal input[name="addShiftWorker"]:checked')).map(cb => cb.value);
                 if (!day || !start || !end) {
                     showNotification('❌ All fields are required', 'error');
                     return;
