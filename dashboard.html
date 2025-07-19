@@ -2124,7 +2124,7 @@
             for (const [day, hours] of Object.entries(hoursOfOperation)) {
                 for (const hour of hours) {
                     const opStart = timeToHour(hour.start);
-                    const opEnd = timeToHour(hour.end);
+                    let opEnd = timeToHour(hour.end);
                     if (opEnd <= opStart) opEnd += 24;
                     
                     const dayShifts = schedule[day] || [];
@@ -2133,7 +2133,7 @@
                     dayShifts.forEach(shift => {
                         if (shift.assigned && shift.assigned.length > 0 && !shift.assigned.includes('Unfilled')) {
                             const shiftStart = timeToHour(shift.start);
-                            const shiftEnd = timeToHour(shift.end);
+                            let shiftEnd = timeToHour(shift.end);
                             if (shiftEnd <= shiftStart) shiftEnd += 24;
                             coveredPeriods.push([shiftStart, shiftEnd]);
                         }
