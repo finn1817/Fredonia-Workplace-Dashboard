@@ -6315,7 +6315,14 @@
                     console.log('🔍 isAdmin:', userData.isAdmin);
                     console.log('🔍 isSuperAdmin:', userData.isSuperAdmin);
                     
-                    if (userData.isAdmin || userData.isSuperAdmin) {
+                    // Check if user is admin from either database
+                    const isAdminFromAuth = window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin);
+                    const isAdminFromWorkplace = userData && (userData.isAdmin || userData.isSuperAdmin);
+                    
+                    console.log('🔍 isAdminFromAuth:', isAdminFromAuth);
+                    console.log('🔍 isAdminFromWorkplace:', isAdminFromWorkplace);
+                    
+                    if (isAdminFromAuth || isAdminFromWorkplace) {
                         console.log('🔍 Setting admin section visible');
                         document.getElementById('adminBadge').style.display = 'inline';
                         document.getElementById('adminSection').style.display = 'block';
@@ -6380,7 +6387,49 @@
                     return true;
                 } else {
                     console.log('❌ User not found in workplace database');
-                    // User not found in workplace database - show user dashboard
+                    // User not found in workplace database - check if admin from auth
+                    if (window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin)) {
+                        console.log('✅ User is admin from auth database - keeping admin section visible');
+                        // Keep admin section visible for admin users
+                        document.getElementById('adminBadge').style.display = 'inline';
+                        document.getElementById('adminSection').style.display = 'block';
+                        document.getElementById('userDashboard').style.display = 'none';
+                        document.getElementById('userBadge').style.display = 'none';
+                        return true;
+                    } else {
+                        // Show user dashboard for non-admin users
+                        document.getElementById('adminBadge').style.display = 'none';
+                        document.getElementById('userBadge').style.display = 'inline';
+                        document.getElementById('adminSection').style.display = 'none';
+                        document.getElementById('userDashboard').style.display = 'block';
+                        
+                        // Set welcome message
+                        let welcomeName = '';
+                        if (user.firstName && user.lastName) {
+                            welcomeName = `${user.firstName} ${user.lastName}`;
+                        } else if (user.firstName) {
+                            welcomeName = user.firstName;
+                        } else {
+                            welcomeName = user.email || 'User';
+                        }
+                        document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+                        
+                        return false;
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error loading user data:', error);
+                // Error loading user data - check if admin from auth
+                if (window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin)) {
+                    console.log('✅ User is admin from auth database - keeping admin section visible despite error');
+                    // Keep admin section visible for admin users
+                    document.getElementById('adminBadge').style.display = 'inline';
+                    document.getElementById('adminSection').style.display = 'block';
+                    document.getElementById('userDashboard').style.display = 'none';
+                    document.getElementById('userBadge').style.display = 'none';
+                    return true;
+                } else {
+                    // Show user dashboard for non-admin users
                     document.getElementById('adminBadge').style.display = 'none';
                     document.getElementById('userBadge').style.display = 'inline';
                     document.getElementById('adminSection').style.display = 'none';
@@ -6395,30 +6444,11 @@
                     } else {
                         welcomeName = user.email || 'User';
                     }
+                    document.getElementById('userWelcome').style.display = 'block';
                     document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
                     
                     return false;
                 }
-            } catch (error) {
-                console.error('❌ Error loading user data:', error);
-                // Error loading user data - show user dashboard as fallback
-                document.getElementById('adminBadge').style.display = 'none';
-                document.getElementById('userBadge').style.display = 'inline';
-                document.getElementById('adminSection').style.display = 'none';
-                document.getElementById('userDashboard').style.display = 'block';
-                
-                // Set welcome message
-                let welcomeName = '';
-                if (user.firstName && user.lastName) {
-                    welcomeName = `${user.firstName} ${user.lastName}`;
-                } else if (user.firstName) {
-                    welcomeName = user.firstName;
-                } else {
-                    welcomeName = user.email || 'User';
-                }
-                document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
-                
-                return false;
             }
         }
 
@@ -9129,10 +9159,22 @@
                 currentUserRole = USER_ROLES.ADMIN;
                 console.log('🔍 Set as ADMIN');
                 console.log('🔍 Admin section should be visible');
+                
+                // Immediately show admin section
+                document.getElementById('adminBadge').style.display = 'inline';
+                document.getElementById('adminSection').style.display = 'block';
+                document.getElementById('userDashboard').style.display = 'none';
+                document.getElementById('userBadge').style.display = 'none';
             } else {
                 currentUserRole = USER_ROLES.USER;
                 console.log('🔍 Set as USER');
                 console.log('🔍 User dashboard should be visible');
+                
+                // Immediately show user dashboard
+                document.getElementById('adminBadge').style.display = 'none';
+                document.getElementById('userBadge').style.display = 'inline';
+                document.getElementById('adminSection').style.display = 'none';
+                document.getElementById('userDashboard').style.display = 'block';
             }
             
             console.log('🔍 Final role:', currentUserRole);
