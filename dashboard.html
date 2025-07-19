@@ -4167,7 +4167,7 @@
             document.getElementById('workersModalContent').innerHTML = html;
         }
 
-        function switchManagementTab(tabName, event) {
+        window.switchManagementTab = function(tabName, event) {
             // Update tab buttons
             document.querySelectorAll('.management-tab').forEach(tab => {
                 tab.classList.remove('active');
@@ -4179,7 +4179,7 @@
                 content.classList.remove('active');
             });
             document.getElementById(`${tabName}-tab`).classList.add('active');
-        }
+        };
 
         function generateWorkersTab() {
             const workStudyCount = workers.filter(w => w.work_study).length;
@@ -8338,8 +8338,8 @@
             }
         }, 60 * 60 * 1000); // Run every hour
 
-        // Enhanced Management Helper Functions
-        function filterWorkers() {
+        // Enhanced Management Helper Functions - Global Scope
+        window.filterWorkers = function() {
             const searchTerm = document.getElementById('workerSearch')?.value.toLowerCase() || '';
             const workStudyFilter = document.getElementById('workStudyFilter')?.value || '';
             const userLinkFilter = document.getElementById('userLinkFilter')?.value || '';
@@ -8367,9 +8367,9 @@
             
             // Update table with filtered results
             updateWorkersTable(filteredWorkers);
-        }
+        };
 
-        function filterUsers() {
+        window.filterUsers = function() {
             const searchTerm = document.getElementById('userSearch')?.value.toLowerCase() || '';
             const roleFilter = document.getElementById('userRoleFilter')?.value || '';
             const statusFilter = document.getElementById('userStatusFilter')?.value || '';
@@ -8394,9 +8394,9 @@
             
             // Update table with filtered results
             updateUsersTable(filteredUsers);
-        }
+        };
 
-        function updateWorkersTable(filteredWorkers = workers) {
+        window.updateWorkersTable = function(filteredWorkers = workers) {
             const container = document.getElementById('workersTableContainer');
             if (!container) return;
             
@@ -8448,9 +8448,9 @@
             
             html += '</tbody></table>';
             container.innerHTML = html;
-        }
+        };
 
-        function updateUsersTable(filteredUsers = window.allUsers || []) {
+        window.updateUsersTable = function(filteredUsers = window.allUsers || []) {
             const container = document.getElementById('usersTableContainer');
             if (!container) return;
             
@@ -8510,10 +8510,10 @@
             
             html += '</tbody></table>';
             container.innerHTML = html;
-        }
+        };
 
-        // Bulk Actions Functions
-        function updateBulkActions() {
+        // Bulk Actions Functions - Global Scope
+        window.updateBulkActions = function() {
             const checkboxes = document.querySelectorAll('.worker-checkbox:checked');
             const bulkActions = document.getElementById('workerBulkActions');
             
@@ -8522,9 +8522,9 @@
             } else {
                 bulkActions.style.display = 'none';
             }
-        }
+        };
 
-        function updateUserBulkActions() {
+        window.updateUserBulkActions = function() {
             const checkboxes = document.querySelectorAll('.user-checkbox:checked');
             const bulkActions = document.getElementById('userBulkActions');
             
@@ -8533,9 +8533,9 @@
             } else {
                 bulkActions.style.display = 'none';
             }
-        }
+        };
 
-        function toggleSelectAllWorkers() {
+        window.toggleSelectAllWorkers = function() {
             const selectAll = document.getElementById('selectAllWorkersCheckbox');
             const checkboxes = document.querySelectorAll('.worker-checkbox');
             
@@ -8544,9 +8544,9 @@
             });
             
             updateBulkActions();
-        }
+        };
 
-        function toggleSelectAllUsers() {
+        window.toggleSelectAllUsers = function() {
             const selectAll = document.getElementById('selectAllUsersCheckbox');
             const checkboxes = document.querySelectorAll('.user-checkbox');
             
@@ -8555,7 +8555,7 @@
             });
             
             updateUserBulkActions();
-        }
+        };
 
         // Export Functions
         window.exportWorkers = function() {
