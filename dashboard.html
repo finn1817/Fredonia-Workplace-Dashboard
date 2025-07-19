@@ -4844,13 +4844,13 @@
                 console.log('DEBUG: scheduleData:', scheduleData);
                 let myShiftsByDay = {};
                 let totalHours = 0;
-                if (scheduleData && scheduleData.days) {
+                if (scheduleData && scheduleData.schedule) {
                     // Find user's shifts
                     for (const day of DAYS) {
-                        const shifts = scheduleData.days[day] || [];
+                        const shifts = scheduleData.schedule[day] || [];
                         myShiftsByDay[day] = shifts.filter(shift => {
-                            if (!shift.raw_assigned || !Array.isArray(shift.raw_assigned)) return false;
-                            return shift.raw_assigned.some(email => 
+                            if (!shift.assigned || !Array.isArray(shift.assigned)) return false;
+                            return shift.assigned.some(email => 
                                 email && email.trim().toLowerCase() === userEmail
                             );
                         });
@@ -4888,11 +4888,13 @@
                 document.getElementById('userHoursPlaceholder').innerHTML = `<strong>${totalHours.toFixed(1)}</strong> hours assigned this week.`;
                 // Show the dashboard
                 document.getElementById('userDashboard').style.display = 'block';
+                console.log('User dashboard should now be visible');
             } catch (error) {
                 console.error('Error loading user dashboard:', error);
                 document.getElementById('userShiftsPlaceholder').innerHTML = '<div style="color:#888;">Error loading your shifts.</div>';
                 document.getElementById('userHoursPlaceholder').innerHTML = '<div style="color:#888;">Error calculating hours.</div>';
                 document.getElementById('userDashboard').style.display = 'block';
+                console.log('User dashboard shown due to error');
             }
         }
 
@@ -5096,6 +5098,10 @@
         // 1. Request Shift Swap button (non-admin users)
         if (!user.isAdmin) {
             document.getElementById('requestShiftSwapBtn').onclick = function() {
+                console.log('Shift swap button clicked!');
+                console.log('Selected workplace:', selectedWorkplace);
+                console.log('User:', user);
+                
                 if (!selectedWorkplace) {
                     showNotification('❌ Please select a workplace first', 'error');
                     return;
@@ -5118,6 +5124,9 @@
 
         // 3. Open shift swap request modal and populate data
         async function openShiftSwapRequestModal() {
+            console.log('openShiftSwapRequestModal called');
+            console.log('selectedWorkplace:', selectedWorkplace);
+            
             if (!selectedWorkplace) return;
             
             try {
