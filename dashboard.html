@@ -4102,8 +4102,8 @@
                         email: email,
                         workplaceWorker: workplaceWorker,
                         authUser: authUser,
-                        status: workplaceWorker ? 'ACTIVE' : 'INACTIVE',
-                        connection: workplaceWorker && authUser ? 'CONNECTED' : 'DISCONNECTED',
+                        authStatus: authUser ? 'HAS_ACCOUNT' : 'NO_ACCOUNT',
+                        workplaceStatus: workplaceWorker ? 'IN_SCHEDULER' : 'NOT_IN_SCHEDULER',
                         role: authUser?.isAdmin ? 'ADMIN' : 'USER'
                     };
                 });
@@ -4112,34 +4112,10 @@
                 const totalUsers = combinedData.length;
                 const admins = combinedData.filter(d => d.role === 'ADMIN').length;
                 const regularUsers = combinedData.filter(d => d.role === 'USER').length;
-                const activeUsers = combinedData.filter(d => d.status === 'ACTIVE').length;
+                const usersWithAccounts = combinedData.filter(d => d.authStatus === 'HAS_ACCOUNT').length;
+                const usersInScheduler = combinedData.filter(d => d.workplaceStatus === 'IN_SCHEDULER').length;
 
                 let html = `
-                    <div style="margin-bottom: 1rem;">
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                            <span style="font-size: 1.5rem;">👥</span>
-                            <h3 style="margin: 0; font-size: 1.3rem;">Enhanced Worker & User Management</h3>
-                            <div style="margin-left: auto;">
-                                <span style="cursor: pointer; font-size: 1.5rem; color: #999;" onclick="closeModal('workersModal')">×</span>
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1.5rem;">
-                            <button class="tab-btn" data-tab="workers" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                                Workers (${workers.length})
-                            </button>
-                            <button class="tab-btn active" data-tab="users" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; color: #667eea; font-weight: bold;">
-                                Users (${totalUsers})
-                            </button>
-                            <button class="tab-btn" data-tab="import" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                                Import/Export
-                            </button>
-                            <button class="tab-btn" data-tab="analytics" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                                Analytics
-                            </button>
-                        </div>
-                    </div>
-
                     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem;">
                         <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
                             <span style="font-size: 1.5rem;">👤</span>
@@ -4147,7 +4123,7 @@
                         </div>
                         <p style="margin: 0; opacity: 0.9;">Manage user accounts and permissions</p>
                         <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                            <button class="btn btn-success" onclick="showAddWorker()" style="background: #28a745; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                            <button class="btn btn-success" onclick="showAddUser()" style="background: #28a745; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
                                 <span style="margin-right: 0.5rem;">➕</span>Add User
                             </button>
                             <button class="btn btn-info" onclick="exportUserData()" style="background: #17a2b8; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
@@ -4170,8 +4146,12 @@
                             <div style="color: #666; font-size: 0.9rem;">Regular Users</div>
                         </div>
                         <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                            <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${activeUsers}</div>
-                            <div style="color: #666; font-size: 0.9rem;">Active Users</div>
+                            <div style="font-size: 2rem; font-weight: bold; color: #17a2b8;">${usersWithAccounts}</div>
+                            <div style="color: #666; font-size: 0.9rem;">With Login Accounts</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${usersInScheduler}</div>
+                            <div style="color: #666; font-size: 0.9rem;">In Scheduler</div>
                         </div>
                     </div>
 
@@ -4188,10 +4168,10 @@
                         </select>
                         <select id="userFilterStatus" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
                             <option value="all">All Status</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                            <option value="connected">Connected</option>
-                            <option value="disconnected">Disconnected</option>
+                            <option value="active">Has Account or In Scheduler</option>
+                            <option value="inactive">No Account or Not In Scheduler</option>
+                            <option value="connected">Fully Connected (Both)</option>
+                            <option value="disconnected">Partially Connected</option>
                         </select>
                     </div>
                 `;
@@ -4210,7 +4190,8 @@
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Role</th>
-                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Status</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Login Account</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">In Scheduler</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Phone</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Last Login</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Actions</th>
@@ -4229,9 +4210,13 @@
                             '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">ADMIN</span>' :
                             '<span style="background: #ffc107; color: #212529; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">USER</span>';
                         
-                        const statusBadge = data.status === 'ACTIVE' ?
-                            '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">ACTIVE</span>' :
-                            '<span style="background: #6c757d; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">INACTIVE</span>';
+                        const authStatusBadge = data.authStatus === 'HAS_ACCOUNT' ?
+                            '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">✅ HAS ACCOUNT</span>' :
+                            '<span style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">❌ NO ACCOUNT</span>';
+                        
+                        const schedulerStatusBadge = data.workplaceStatus === 'IN_SCHEDULER' ?
+                            '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">✅ IN SCHEDULER</span>' :
+                            '<span style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">❌ NOT IN SCHEDULER</span>';
 
                         html += `
                             <tr style="border-bottom: 1px solid #dee2e6;">
@@ -4241,7 +4226,8 @@
                                 <td style="padding: 1rem; font-weight: 600;">${name}</td>
                                 <td style="padding: 1rem;">${data.email}</td>
                                 <td style="padding: 1rem;">${roleBadge}</td>
-                                <td style="padding: 1rem;">${statusBadge}</td>
+                                <td style="padding: 1rem;">${authStatusBadge}</td>
+                                <td style="padding: 1rem;">${schedulerStatusBadge}</td>
                                 <td style="padding: 1rem;">${phone}</td>
                                 <td style="padding: 1rem;">${lastLogin}</td>
                                 <td style="padding: 1rem;">
@@ -4259,7 +4245,39 @@
                     html += '</tbody></table></div>';
                 }
                 
-                document.getElementById('workersModalContent').innerHTML = html;
+                // Structure the modal content to maintain tab navigation
+                const modalContent = document.getElementById('workersModalContent');
+                modalContent.innerHTML = `
+                    <div class="enhanced-worker-management">
+                        <div class="tab-navigation">
+                            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                                <span style="font-size: 1.5rem;">👥</span>
+                                <h3 style="margin: 0; font-size: 1.3rem;">Enhanced Worker & User Management</h3>
+                                <div style="margin-left: auto;">
+                                    <span style="cursor: pointer; font-size: 1.5rem; color: #999;" onclick="closeModal('workersModal')">×</span>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1.5rem;">
+                                <button class="tab-btn" data-tab="workers" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                                    Workers (${workers.length})
+                                </button>
+                                <button class="tab-btn active" data-tab="users" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; color: #667eea; font-weight: bold;">
+                                    Users (${totalUsers})
+                                </button>
+                                <button class="tab-btn" data-tab="import" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                                    Import/Export
+                                </button>
+                                <button class="tab-btn" data-tab="analytics" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                                    Analytics
+                                </button>
+                            </div>
+                        </div>
+                        <div class="tab-content">
+                            ${html}
+                        </div>
+                    </div>
+                `;
                 
                 // Add event listeners for search and filter
                 setupUserSearchAndFilter();
@@ -4291,17 +4309,23 @@
                 selectAllCheckbox.addEventListener('change', toggleSelectAllUsers);
             }
 
-            // Add tab switching functionality
-            const tabButtons = document.querySelectorAll('.tab-btn');
-            tabButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const tabName = button.getAttribute('data-tab');
-                    switchTab(tabName);
+            // Add tab switching functionality with proper event delegation
+            setTimeout(() => {
+                const tabButtons = document.querySelectorAll('.tab-btn');
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const tabName = button.getAttribute('data-tab');
+                        console.log('Tab clicked:', tabName);
+                        switchTab(tabName);
+                    });
                 });
-            });
+            }, 100);
         }
 
         function switchTab(tabName) {
+            console.log('Switching to tab:', tabName);
+            
             // Update tab button styles
             const tabButtons = document.querySelectorAll('.tab-btn');
             tabButtons.forEach(btn => {
@@ -4319,29 +4343,84 @@
                 activeButton.style.fontWeight = 'bold';
             }
 
+            // Get the content container within the enhanced worker management structure
+            const contentContainer = document.querySelector('#workersModalContent .tab-content') || 
+                                   document.querySelector('#workersModalContent');
+
             // Handle different tab content
             switch(tabName) {
                 case 'workers':
-                    displayWorkersTab();
+                    displayWorkersTab(contentContainer);
                     break;
                 case 'users':
-                    // Users tab is already displayed by default
+                    displayUsersTab(contentContainer);
                     break;
                 case 'import':
-                    displayImportExportTab();
+                    displayImportExportTab(contentContainer);
                     break;
                 case 'analytics':
-                    displayAnalyticsTab();
+                    displayAnalyticsTab(contentContainer);
                     break;
             }
         }
 
-        function displayWorkersTab() {
-            // Show the original workers table
-            displayWorkersInModal();
+        function displayWorkersTab(contentContainer) {
+            // Show the original workers table but maintain tab structure
+            let html = `
+                <div style="margin-bottom: 1rem;">
+                    <button class="btn btn-success" onclick="showAddWorker()">➕ Add New Worker</button>
+                    <span style="margin-left: 1rem; color: #666;">Total: ${workers.length} workers</span>
+                </div>
+            `;
+            
+            if (workers.length === 0) {
+                html += '<div class="warning">No workers found. Add your first worker to get started!</div>';
+            } else {
+                html += `
+                    <table class="worker-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Work Study</th>
+                                <th>Availability</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                workers.forEach(worker => {
+                    html += `
+                        <tr>
+                            <td><strong>${worker.first_name} ${worker.last_name}</strong></td>
+                            <td>${worker.email}</td>
+                            <td>${worker.work_study ? '✅ Yes' : '❌ No'}</td>
+                            <td><small>${worker.availability_text || 'No availability set'}</small></td>
+                            <td>
+                                <div class="worker-actions">
+                                    <button class="btn btn-warning" onclick="editWorker('${worker.id}')">✏️ Edit</button>
+                                    <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')">🗑️ Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table>';
+            }
+            
+            if (contentContainer) {
+                contentContainer.innerHTML = html;
+            }
         }
 
-        function displayImportExportTab() {
+        function displayUsersTab(contentContainer) {
+            // Re-display the users tab content
+            displayEnhancedWorkersInModal();
+        }
+
+        function displayImportExportTab(contentContainer) {
             const content = `
                 <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     <h3 style="margin-bottom: 1rem;">📥 Import/Export Management</h3>
@@ -4363,14 +4442,12 @@
                 </div>
             `;
             
-            const tableContainer = document.querySelector('#workersModalContent .table-container') || 
-                                 document.querySelector('#workersModalContent table')?.parentElement;
-            if (tableContainer) {
-                tableContainer.innerHTML = content;
+            if (contentContainer) {
+                contentContainer.innerHTML = content;
             }
         }
 
-        function displayAnalyticsTab() {
+        function displayAnalyticsTab(contentContainer) {
             const content = `
                 <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     <h3 style="margin-bottom: 1rem;">📊 Analytics Dashboard</h3>
@@ -4395,10 +4472,8 @@
                 </div>
             `;
             
-            const tableContainer = document.querySelector('#workersModalContent .table-container') || 
-                                 document.querySelector('#workersModalContent table')?.parentElement;
-            if (tableContainer) {
-                tableContainer.innerHTML = content;
+            if (contentContainer) {
+                contentContainer.innerHTML = content;
             }
         }
 
@@ -4413,11 +4488,16 @@
                 const name = row.cells[1]?.textContent.toLowerCase() || '';
                 const email = row.cells[2]?.textContent.toLowerCase() || '';
                 const role = row.cells[3]?.textContent.toLowerCase() || '';
-                const status = row.cells[4]?.textContent.toLowerCase() || '';
+                const authStatus = row.cells[4]?.textContent.toLowerCase() || '';
+                const schedulerStatus = row.cells[5]?.textContent.toLowerCase() || '';
                 
                 const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
                 const matchesRole = roleFilter === 'all' || role.includes(roleFilter);
-                const matchesStatus = statusFilter === 'all' || status.includes(statusFilter);
+                const matchesStatus = statusFilter === 'all' || 
+                    (statusFilter === 'active' && (authStatus.includes('has account') || schedulerStatus.includes('in scheduler'))) ||
+                    (statusFilter === 'inactive' && (authStatus.includes('no account') || schedulerStatus.includes('not in scheduler'))) ||
+                    (statusFilter === 'connected' && authStatus.includes('has account') && schedulerStatus.includes('in scheduler')) ||
+                    (statusFilter === 'disconnected' && (authStatus.includes('no account') || schedulerStatus.includes('not in scheduler')));
                 
                 row.style.display = matchesSearch && matchesRole && matchesStatus ? '' : 'none';
             });
