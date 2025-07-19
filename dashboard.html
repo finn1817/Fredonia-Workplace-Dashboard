@@ -176,6 +176,11 @@
         .btn-secondary { background: #6c757d; color: white; }
         .btn-admin { background: #28a745; color: white; }
 
+        /* Hide admin-only elements by default */
+        .admin-only {
+            display: none;
+        }
+
         .btn:hover:not(:disabled) { 
             transform: translateY(-1px); 
             filter: brightness(1.1);
@@ -1608,17 +1613,17 @@
                 <h2 class="section-title">Schedule Management</h2>
                 
                 <div class="action-buttons">
-                    <div class="admin-only" style="display:none;">
+                    <div class="admin-only">
                         <button class="btn btn-primary" onclick="showGenerateForm()" id="generateBtn">📅 Generate New Schedule</button>
                         <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
                     </div>
                     <button class="btn btn-success" onclick="viewCurrentSchedule()">👁️ View Current Schedule</button>
                     <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
-                    <div class="admin-only" style="display:none;">
+                    <div class="admin-only">
                         <button class="btn btn-secondary" onclick="viewWorkers()" id="viewWorkersBtn">👥 View Workers</button>
                     </div>
                     <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
-                    <div class="admin-only" style="display:none;">
+                    <div class="admin-only">
                         <button class="btn btn-secondary" onclick="printSchedule()" id="printScheduleBtn">🖨️ Print Schedule</button>
                     </div>
                 </div>
