@@ -1302,6 +1302,13 @@
             text-decoration: underline;
         }
 
+        .user-worker-link-disabled {
+            color: #6c757d;
+            text-decoration: none;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
         .no-link {
             color: #dc3545;
             font-size: 0.8rem;
@@ -4213,6 +4220,14 @@
                 return;
             }
             
+            // Check if current user is workplace admin trying to view another admin
+            if (window.currentUser && window.currentUser.isAdmin && !window.currentUser.isSuperAdmin) {
+                if (user.isAdmin) {
+                    showNotification('❌ Workplace admins cannot view admin user details', 'error');
+                    return;
+                }
+            }
+            
             const linkedWorker = workers.find(w => w.email.toLowerCase() === user.email.toLowerCase());
             
             const html = `
@@ -4393,9 +4408,17 @@
             
             workers.forEach(worker => {
                 const linkedUser = window.allUsers?.find(u => u.email.toLowerCase() === worker.email.toLowerCase());
-                const userLinkStatus = linkedUser ? 
-                    `<a href="#" class="user-worker-link" onclick="viewUserDetails('${linkedUser.id}')">✅ Linked (${linkedUser.isAdmin ? 'Admin' : 'User'})</a>` :
-                    `<span class="no-link">❌ No User Account</span>`;
+                let userLinkStatus;
+                if (linkedUser) {
+                    // Check if workplace admin is trying to view admin user
+                    if (window.currentUser && window.currentUser.isAdmin && !window.currentUser.isSuperAdmin && linkedUser.isAdmin) {
+                        userLinkStatus = `<span class="user-worker-link-disabled">✅ Linked (Admin) - No Access</span>`;
+                    } else {
+                        userLinkStatus = `<a href="#" class="user-worker-link" onclick="viewUserDetails('${linkedUser.id}')">✅ Linked (${linkedUser.isAdmin ? 'Admin' : 'User'})</a>`;
+                    }
+                } else {
+                    userLinkStatus = `<span class="no-link">❌ No User Account</span>`;
+                }
 
                 html += `
                     <tr>
@@ -6305,6 +6328,7 @@
                     if (userData.isSuperAdmin || userData.isAdmin) {
                         document.getElementById('adminBadge').style.display = 'inline';
                         document.getElementById('adminSection').style.display = 'block';
+                        document.getElementById('userDashboard').style.display = 'none';
                         document.getElementById('userBadge').style.display = 'none';
                         
                         // Add super admin header if user is super admin
@@ -6343,6 +6367,20 @@
                     } else {
                         document.getElementById('adminBadge').style.display = 'none';
                         document.getElementById('userBadge').style.display = 'inline';
+                        document.getElementById('adminSection').style.display = 'none';
+                        document.getElementById('userDashboard').style.display = 'block';
+                        
+                        // Set welcome message for non-admin users
+                        let welcomeName = '';
+                        if (user.firstName && user.lastName) {
+                            welcomeName = `${user.firstName} ${user.lastName}`;
+                        } else if (user.firstName) {
+                            welcomeName = user.firstName;
+                        } else {
+                            welcomeName = user.email || 'User';
+                        }
+                        document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+                        
                         // Hide admin-only buttons for non-admin users
                         document.getElementById('generateBtn').style.display = 'none';
                     }
@@ -6350,10 +6388,44 @@
                     return true;
                 } else {
                     console.log('❌ User not found in workplace database');
+                    // User not found in workplace database - show user dashboard
+                    document.getElementById('adminBadge').style.display = 'none';
+                    document.getElementById('userBadge').style.display = 'inline';
+                    document.getElementById('adminSection').style.display = 'none';
+                    document.getElementById('userDashboard').style.display = 'block';
+                    
+                    // Set welcome message
+                    let welcomeName = '';
+                    if (user.firstName && user.lastName) {
+                        welcomeName = `${user.firstName} ${user.lastName}`;
+                    } else if (user.firstName) {
+                        welcomeName = user.firstName;
+                    } else {
+                        welcomeName = user.email || 'User';
+                    }
+                    document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+                    
                     return false;
                 }
             } catch (error) {
                 console.error('❌ Error loading user data:', error);
+                // Error loading user data - show user dashboard as fallback
+                document.getElementById('adminBadge').style.display = 'none';
+                document.getElementById('userBadge').style.display = 'inline';
+                document.getElementById('adminSection').style.display = 'none';
+                document.getElementById('userDashboard').style.display = 'block';
+                
+                // Set welcome message
+                let welcomeName = '';
+                if (user.firstName && user.lastName) {
+                    welcomeName = `${user.firstName} ${user.lastName}`;
+                } else if (user.firstName) {
+                    welcomeName = user.firstName;
+                } else {
+                    welcomeName = user.email || 'User';
+                }
+                document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+                
                 return false;
             }
         }
@@ -6657,22 +6729,8 @@
             };
         };
 
-        // In the script, show/hide user dashboard for non-admins
-        if (!window.currentUser || (!window.currentUser.isAdmin && !window.currentUser.isSuperAdmin)) {
-            document.getElementById('userDashboard').style.display = 'block';
-            document.getElementById('adminSection').style.display = 'none';
-            // Set welcome message
-            let welcomeName = '';
-            if (user.firstName && user.lastName) {
-                welcomeName = `${user.firstName} ${user.lastName}`;
-            } else if (user.firstName) {
-                welcomeName = user.firstName;
-            } else {
-                welcomeName = user.email || 'User';
-            }
-            document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
-            // Removed pre-fill of old account form fields (no longer present)
-        }
+        // Admin section visibility will be handled after user data is loaded
+        // This prevents the section from being hidden before we know the user's role
 
         // My Account modal logic for all users
         document.getElementById('myAccountBtn').onclick = function() {
