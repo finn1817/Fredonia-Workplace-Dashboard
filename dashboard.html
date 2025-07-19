@@ -2189,30 +2189,7 @@
         // Set current user for role-based access (will be updated with full data from database)
         window.currentUser = user;
         
-        // Add super admin header if user is super admin
-        if (user.isSuperAdmin) {
-            const header = document.createElement('div');
-            header.id = 'superAdminHeader';
-            header.style.cssText = `
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                text-align: center;
-                padding: 1rem;
-                font-size: 1.5rem;
-                font-weight: bold;
-                text-transform: uppercase;
-                letter-spacing: 2px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                margin-bottom: 1rem;
-            `;
-            header.textContent = '🛡️ SUPER ADMIN DASHBOARD 🛡️';
-            
-            // Insert after the main header
-            const mainContent = document.querySelector('.container');
-            if (mainContent) {
-                mainContent.insertBefore(header, mainContent.firstChild);
-            }
-        }
+        // Super admin header will be added after we load user data from workplace database
 
         // Firebase setup
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
@@ -4031,6 +4008,12 @@
             
             await loadWorkplaceData();
             await loadAllUsers(); // Load users from auth database
+            
+            // Load admin users if current user is super admin
+            if (window.currentUser && window.currentUser.isSuperAdmin) {
+                await loadAdminUsers();
+            }
+            
             displayEnhancedManagementInterface();
         };
 
@@ -6323,6 +6306,40 @@
                         document.getElementById('adminBadge').style.display = 'inline';
                         document.getElementById('adminSection').style.display = 'block';
                         document.getElementById('userBadge').style.display = 'none';
+                        
+                        // Add super admin header if user is super admin
+                        if (userData.isSuperAdmin) {
+                            // Remove existing header if it exists
+                            const existingHeader = document.getElementById('superAdminHeader');
+                            if (existingHeader) {
+                                existingHeader.remove();
+                            }
+                            
+                            const header = document.createElement('div');
+                            header.id = 'superAdminHeader';
+                            header.style.cssText = `
+                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                color: white;
+                                text-align: center;
+                                padding: 1rem;
+                                font-size: 1.5rem;
+                                font-weight: bold;
+                                text-transform: uppercase;
+                                letter-spacing: 2px;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                                margin-bottom: 1rem;
+                                position: sticky;
+                                top: 0;
+                                z-index: 1000;
+                            `;
+                            header.textContent = '🛡️ SUPER ADMIN DASHBOARD 🛡️';
+                            
+                            // Insert at the top of the page
+                            const mainContent = document.querySelector('.container');
+                            if (mainContent) {
+                                mainContent.insertBefore(header, mainContent.firstChild);
+                            }
+                        }
                     } else {
                         document.getElementById('adminBadge').style.display = 'none';
                         document.getElementById('userBadge').style.display = 'inline';
