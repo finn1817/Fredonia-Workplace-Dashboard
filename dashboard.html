@@ -4907,6 +4907,43 @@
                     targetWorkerSelect.appendChild(option);
                 });
                 
+                // Add event listener to populate target worker's shifts when selected
+                targetWorkerSelect.addEventListener('change', function() {
+                    const selectedWorkerEmail = this.value;
+                    const targetShiftTimeSelect = document.getElementById('swapTargetShiftTime');
+                    
+                    if (!selectedWorkerEmail) {
+                        targetShiftTimeSelect.innerHTML = '<option value="">Select their shift time...</option>';
+                        return;
+                    }
+                    
+                    // Find shifts for the selected worker
+                    const targetWorkerShifts = [];
+                    for (const [day, shifts] of Object.entries(currentSchedule.days)) {
+                        shifts.forEach((shift, index) => {
+                            if (shift.raw_assigned && shift.raw_assigned.includes(selectedWorkerEmail)) {
+                                targetWorkerShifts.push({
+                                    day,
+                                    date: getDateForDay(day),
+                                    time: `${shift.start}-${shift.end}`,
+                                    shiftIndex: index
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Populate the target shift time dropdown
+                    targetShiftTimeSelect.innerHTML = '<option value="">Select their shift time...</option>';
+                    targetWorkerShifts.forEach(shift => {
+                        const option = document.createElement('option');
+                        option.value = JSON.stringify(shift);
+                        option.textContent = `${shift.day} ${shift.date} - ${shift.time}`;
+                        targetShiftTimeSelect.appendChild(option);
+                    });
+                    
+                    console.log('DEBUG: Found shifts for', selectedWorkerEmail, ':', targetWorkerShifts);
+                });
+                
                 // Set default dates
                 const today = new Date();
                 document.getElementById('swapRequesterShiftDate').value = today.toISOString().split('T')[0];
