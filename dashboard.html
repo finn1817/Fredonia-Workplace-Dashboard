@@ -4837,20 +4837,37 @@
             if (!selectedWorkplace) return;
             
             try {
-                // Load current schedule to get available shifts
-                const scheduleSnap = await getDocs(query(
+                // Load current schedule to get available shifts (same approach as loadUserDashboard)
+                let currentSchedule = null;
+                let currentScheduleId = null;
+                
+                const currentSnapshot = await getDocs(query(
                     collection(db, 'workplaces', selectedWorkplace, 'schedules'),
-                    orderBy('createdAt', 'desc'),
                     where('isCurrent', '==', true)
                 ));
                 
-                if (scheduleSnap.empty) {
-                    showNotification('❌ No current schedule found. Please generate a schedule first.', 'error');
+                if (!currentSnapshot.empty) {
+                    currentSchedule = currentSnapshot.docs[0].data();
+                    currentScheduleId = currentSnapshot.docs[0].id;
+                } else {
+                    // Fallback to most recent schedule
+                    const recentSnapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                        orderBy('createdAt', 'desc')
+                    ));
+                    if (!recentSnapshot.empty) {
+                        currentSchedule = recentSnapshot.docs[0].data();
+                        currentScheduleId = recentSnapshot.docs[0].id;
+                    }
+                }
+                
+                if (!currentSchedule) {
+                    showNotification('❌ No schedule found. Please generate a schedule first.', 'error');
                     return;
                 }
                 
-                const currentSchedule = scheduleSnap.docs[0].data();
-                currentScheduleId = scheduleSnap.docs[0].id;
+                console.log('DEBUG: Found schedule:', currentSchedule);
+                console.log('DEBUG: Schedule ID:', currentScheduleId);
                 
                 // Populate requester's shifts (shifts assigned to current user)
                 const requesterShifts = [];
