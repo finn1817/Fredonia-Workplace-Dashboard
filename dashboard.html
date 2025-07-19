@@ -1379,6 +1379,14 @@
         const timeToHour = (timeStr) => {
             if (!timeStr) return 0;
             const [h, m] = timeStr.split(':').map(Number);
+            // Handle midnight (00:00) correctly - convert to 0 hours
+            if (h === 0) {
+                return m / 60; // 00:00 becomes 0.0, 00:30 becomes 0.5, etc.
+            }
+            // Handle 12-hour format midnight (12:00 AM) correctly - convert to 0 hours
+            if (h === 12) {
+                return m / 60; // 12:00 becomes 0.0, 12:30 becomes 0.5, etc.
+            }
             return h + (m / 60);
         };
 
@@ -3766,7 +3774,15 @@
             const startHour = timeToHour(start);
             const endHour = timeToHour(end);
             
-            if (endHour <= startHour) {
+            // Handle overnight shifts properly (when end time is midnight or earlier than start time)
+            if (endHour <= startHour && endHour !== 0) {
+                showNotification('❌ End time must be after start time', 'error');
+                return;
+            }
+            
+            // For overnight shifts (end time is midnight), we need to add 24 hours to end time for comparison
+            const adjustedEndHour = endHour === 0 ? 24 : endHour;
+            if (adjustedEndHour <= startHour) {
                 showNotification('❌ End time must be after start time', 'error');
                 return;
             }
@@ -3913,7 +3929,19 @@
                     showNotification('❌ All fields are required', 'error');
                     return;
                 }
-                if (end <= start) {
+                // Handle overnight shifts properly (when end time is midnight or earlier than start time)
+                const startHour = timeToHour(start);
+                const endHour = timeToHour(end);
+                
+                // If end time is midnight (00:00) or earlier than start time, it's an overnight shift
+                if (endHour <= startHour && endHour !== 0) {
+                    showNotification('❌ End time must be after start time', 'error');
+                    return;
+                }
+                
+                // For overnight shifts (end time is midnight), we need to add 24 hours to end time for comparison
+                const adjustedEndHour = endHour === 0 ? 24 : endHour;
+                if (adjustedEndHour <= startHour) {
                     showNotification('❌ End time must be after start time', 'error');
                     return;
                 }
@@ -3921,9 +3949,18 @@
                     showNotification('❌ At least one worker must be assigned', 'error');
                     return;
                 }
-                // Validate within operating hours
+                // Validate within operating hours (handle overnight shifts)
                 const opHours = (hours[day] && hours[day][0]) ? hours[day][0] : { start: '00:00', end: '23:59' };
-                if (start < opHours.start || end > opHours.end) {
+                const opStartHour = timeToHour(opHours.start);
+                const opEndHour = timeToHour(opHours.end);
+                const shiftStartHour = timeToHour(start);
+                const shiftEndHour = timeToHour(end);
+                
+                // For overnight shifts, adjust the end time
+                const adjustedShiftEndHour = shiftEndHour === 0 ? 24 : shiftEndHour;
+                const adjustedOpEndHour = opEndHour === 0 ? 24 : opEndHour;
+                
+                if (shiftStartHour < opStartHour || adjustedShiftEndHour > adjustedOpEndHour) {
                     showNotification(`❌ Shift must be within operating hours: ${formatTime(opHours.start)} - ${formatTime(opHours.end)}`, 'error');
                     return;
                 }
@@ -4030,12 +4067,33 @@
                     showNotification('❌ Start and end times are required', 'error');
                     return;
                 }
-                if (newEnd <= newStart) {
+                // Handle overnight shifts properly (when end time is midnight or earlier than start time)
+                const startHour = timeToHour(newStart);
+                const endHour = timeToHour(newEnd);
+                
+                // If end time is midnight (00:00) or earlier than start time, it's an overnight shift
+                if (endHour <= startHour && endHour !== 0) {
                     showNotification('❌ End time must be after start time', 'error');
                     return;
                 }
-                // Validate within operating hours
-                if (newStart < opHours.start || newEnd > opHours.end) {
+                
+                // For overnight shifts (end time is midnight), we need to add 24 hours to end time for comparison
+                const adjustedEndHour = endHour === 0 ? 24 : endHour;
+                if (adjustedEndHour <= startHour) {
+                    showNotification('❌ End time must be after start time', 'error');
+                    return;
+                }
+                // Validate within operating hours (handle overnight shifts)
+                const opStartHour = timeToHour(opHours.start);
+                const opEndHour = timeToHour(opHours.end);
+                const shiftStartHour = timeToHour(newStart);
+                const shiftEndHour = timeToHour(newEnd);
+                
+                // For overnight shifts, adjust the end time
+                const adjustedShiftEndHour = shiftEndHour === 0 ? 24 : shiftEndHour;
+                const adjustedOpEndHour = opEndHour === 0 ? 24 : opEndHour;
+                
+                if (shiftStartHour < opStartHour || adjustedShiftEndHour > adjustedOpEndHour) {
                     showNotification(`❌ Shift must be within operating hours: ${formatTime(opHours.start)} - ${formatTime(opHours.end)}`, 'error');
                     return;
                 }
