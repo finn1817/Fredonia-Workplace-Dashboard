@@ -5475,6 +5475,11 @@
                                 ${data.requesterEmail === user.email ? `<button class="btn btn-danger" style="font-size:0.8em;padding:0.25rem 0.5rem;margin-left:1rem;" onclick="deleteMyShiftSwapRequest('${doc.id}')">🗑️ Delete Now</button>` : ''}
                             </div>` : ''}
                             
+                            ${!data.deleteAfter && data.requesterEmail === user.email ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;display:flex;justify-content:space-between;align-items:center;">
+                                <span>🗑️ No automatic deletion scheduled</span>
+                                <button class="btn btn-danger" style="font-size:0.8em;padding:0.25rem 0.5rem;margin-left:1rem;" onclick="deleteMyShiftSwapRequest('${doc.id}')">🗑️ Delete Now</button>
+                            </div>` : ''}
+                            
                             ${user.isAdmin && data.status === 'pending' ? `
                                 <div class="swap-actions">
                                     <button class="btn btn-success" onclick="approveShiftSwap('${doc.id}')">✅ Approve</button>
@@ -5733,6 +5738,11 @@
                             ${data.deleteAfter ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;display:flex;justify-content:space-between;align-items:center;">
                                 <span>🗑️ Will be deleted on ${new Date(data.deleteAfter).toLocaleDateString()}</span>
                                 ${data.requesterEmail === user.email ? `<button class="btn btn-danger" style="font-size:0.8em;padding:0.25rem 0.5rem;margin-left:1rem;" onclick="deleteMyShiftSwapRequest('${doc.id}')">🗑️ Delete Now</button>` : ''}
+                            </div>` : ''}
+                            
+                            ${!data.deleteAfter && data.requesterEmail === user.email ? `<div class="swap-delete-info" style="color:#888;font-size:0.9em;margin-top:0.5rem;display:flex;justify-content:space-between;align-items:center;">
+                                <span>🗑️ No automatic deletion scheduled</span>
+                                <button class="btn btn-danger" style="font-size:0.8em;padding:0.25rem 0.5rem;margin-left:1rem;" onclick="deleteMyShiftSwapRequest('${doc.id}')">🗑️ Delete Now</button>
                             </div>` : ''}
                             
                             ${data.status !== 'pending' && data.updatedBy ? 
