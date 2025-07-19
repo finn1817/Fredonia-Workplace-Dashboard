@@ -199,6 +199,132 @@
         .unavailable-worker:hover {
             background-color: #f5e8e8;
         }
+        
+        /* Clean Add Shift Modal Styling */
+        .add-shift-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
+            height: 80vh;
+        }
+        
+        .add-shift-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 280px;
+        }
+        
+        .add-shift-form .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .add-shift-form .form-control:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            margin: 0;
+            transform: scale(1.2);
+        }
+        
+        .form-actions {
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .form-actions .btn {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .add-shift-content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .schedule-info {
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            font-size: 14px;
+            border-left: 4px solid #007bff;
+            line-height: 1.5;
+        }
+        
+        .workers-list {
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: white;
+        }
+        
+        .worker-item {
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            transition: all 0.2s ease;
+        }
+        
+        .worker-item.available-worker {
+            background-color: #f8fff8;
+            border-color: #28a745;
+        }
+        
+        .worker-item.unavailable-worker {
+            background-color: #fff8f8;
+            border-color: #dc3545;
+        }
+        
+        .worker-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .worker-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            gap: 12px;
+        }
+        
+        .worker-label input[type="checkbox"] {
+            margin: 0;
+            transform: scale(1.2);
+        }
+        
+        .worker-info {
+            flex: 1;
+        }
+        
+        .worker-details {
+            font-size: 13px;
+            color: #666;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
 
         .btn.loading::after {
             content: "";
@@ -4790,44 +4916,42 @@
             // Build day options
             let dayOptions = DAYS.map(day => `<option value='${day}'>${day}</option>`).join('');
             
-            // Enhanced HTML with better formatting and worker display
+            // Clean, professional HTML layout
             let html = `
-                <div style="display: grid; grid-template-columns: 300px 1fr; gap: 30px; height: 80vh;">
-                    <!-- Left Column: Form Controls -->
-                    <div style="display: flex; flex-direction: column; gap: 15px; min-width: 280px;">
+                <div class="add-shift-container">
+                    <div class="add-shift-form">
                         <div class='form-group'>
                             <label><strong>Day</strong></label>
-                            <select id='addShiftDay' class='form-control' style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <select id='addShiftDay' class='form-control'>
                                 <option value=''>Select Day</option>${dayOptions}
                             </select>
                         </div>
                         <div class='form-group'>
                             <label><strong>Start Time</strong></label>
-                            <input type='time' id='addShiftStart' class='form-control' style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <input type='time' id='addShiftStart' class='form-control'>
                         </div>
                         <div class='form-group'>
                             <label><strong>End Time</strong></label>
-                            <input type='time' id='addShiftEnd' class='form-control' style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <input type='time' id='addShiftEnd' class='form-control'>
                         </div>
                         <div class='form-group'>
-                            <label style="display: flex; align-items: center; gap: 8px;">
-                                <input type='checkbox' id='addShiftShowUnavailable' checked style="margin: 0;"> 
+                            <label class="checkbox-label">
+                                <input type='checkbox' id='addShiftShowUnavailable' checked> 
                                 <strong>Show unavailable workers</strong>
                             </label>
                         </div>
-                        <div style='margin-top:auto;'>
-                            <button class='btn btn-success' id='saveAddShiftBtn' style="width: 100%; margin-bottom: 10px;">Add Shift</button> 
-                            <button class='btn btn-secondary' onclick="closeModal('addShiftModal')" style="width: 100%;">Cancel</button>
+                        <div class="form-actions">
+                            <button class='btn btn-success' id='saveAddShiftBtn'>Add Shift</button> 
+                            <button class='btn btn-secondary' onclick="closeModal('addShiftModal')">Cancel</button>
                         </div>
                     </div>
                     
-                    <!-- Right Column: Schedule Info and Workers -->
-                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="add-shift-content">
                         <div class='form-group' id='addShiftWorkersGroup' style='display:none;'>
                             <label><strong>Current Schedule</strong></label>
-                            <div id='addShiftCurrentSchedule' style='margin-bottom: 10px; padding: 12px; background-color: #f8f9fa; border-radius: 6px; font-size: 0.9em; border-left: 4px solid #007bff;'></div>
+                            <div id='addShiftCurrentSchedule' class="schedule-info"></div>
                             <label><strong>Assign Worker(s)</strong></label>
-                            <div id='addShiftWorkersList' style='height: 500px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; border-radius: 6px; background-color: white;'></div>
+                            <div id='addShiftWorkersList' class="workers-list"></div>
                         </div>
                     </div>
                 </div>
@@ -4924,12 +5048,12 @@
                     const workStudyBadge = isWorkStudy ? ' <span style="color: #ffc107; font-weight: bold;">(WS)</span>' : '';
                     
                     workersHtml += `
-                        <div class="${workerClass}" style="padding: 8px; margin: 4px 0; border-radius: 4px; border: 1px solid #ddd; ${!available ? 'background-color: #f8f9fa;' : ''}">
-                            <label style="display: flex; align-items: center; cursor: pointer;">
-                                <input type="checkbox" name="addShiftWorker" value="${w.email}" style="margin-right: 8px;">
-                                <div style="flex: 1;">
+                        <div class="worker-item ${workerClass}">
+                            <label class="worker-label">
+                                <input type="checkbox" name="addShiftWorker" value="${w.email}">
+                                <div class="worker-info">
                                     <strong>${w.first_name} ${w.last_name}${workStudyBadge}</strong>
-                                    <div style="font-size: 0.9em; color: #666;">
+                                    <div class="worker-details">
                                         <div><strong>Status:</strong> ${statusText}</div>
                                         <div><strong>${day} Availability:</strong> ${dayAvailability}</div>
                                         ${shiftInfo ? `<div><strong>Existing Shifts:</strong> ${shiftInfo}</div>` : ''}
