@@ -262,6 +262,135 @@
             color: #333;
         }
 
+        /* Simplified Hours Management Styles */
+        .simplified-hours-container {
+            max-width: 100%;
+        }
+
+        .hours-instructions {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .hours-instructions ul {
+            margin: 0.5rem 0 0 1.5rem;
+            padding: 0;
+        }
+
+        .hours-instructions li {
+            margin-bottom: 0.25rem;
+        }
+
+        .days-checkboxes {
+            margin-bottom: 2rem;
+        }
+
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .day-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .day-checkbox:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .day-checkbox input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+
+        .day-checkbox label {
+            margin: 0;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .time-blocks-container {
+            margin-bottom: 2rem;
+        }
+
+        .day-time-blocks {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .day-time-blocks h5 {
+            margin-bottom: 1rem;
+            color: #333;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 0.5rem;
+        }
+
+        .time-block {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .time-inputs {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .time-input {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 120px;
+        }
+
+        .time-input label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #555;
+            margin: 0;
+        }
+
+        .time-input input[type="time"] {
+            padding: 0.5rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .hours-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            padding-top: 1rem;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+        }
+
         .schedule-display {
             background: white;
             border-radius: 12px;
@@ -964,7 +1093,7 @@
 
     <!-- Modal for Manage Hours -->
     <div id="hoursModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
                 <h3>⏰ Manage Hours of Operation</h3>
                 <span class="close" onclick="closeModal('hoursModal')">&times;</span>
@@ -2000,8 +2129,28 @@
                             gaps.push([currentTime, opEnd]);
                         }
 
-                        // Fill each gap
+                        // CRITICAL FIX: Filter out gaps where no workers are available at all
+                        const validGaps = [];
                         for (const [gapStart, gapEnd] of gaps) {
+                            // Check if any workers are available during this gap
+                            let hasAvailableWorkers = false;
+                            for (const worker of workersData) {
+                                if (isWorkerAvailable(worker, day, gapStart, gapEnd)) {
+                                    hasAvailableWorkers = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (hasAvailableWorkers) {
+                                validGaps.push([gapStart, gapEnd]);
+                                console.log(`✅ Valid gap: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} - workers available`);
+                            } else {
+                                console.log(`❌ Invalid gap: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} - no workers available, skipping`);
+                            }
+                        }
+
+                        // Fill each gap
+                        for (const [gapStart, gapEnd] of validGaps) {
                             console.log(`Filling gap: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} (${gapStart}-${gapEnd} hours)`);
                             let cur = gapStart;
                             while (cur < gapEnd) {
@@ -2033,6 +2182,13 @@
                                         assignedHours[xEmail] + shiftDuration <= maxHoursPerWorker) {
                                         availableWorkers.push(x);
                                     }
+                                }
+
+                                // CRITICAL FIX: Only create shifts if workers are actually available
+                                if (availableWorkers.length === 0) {
+                                    console.log(`⚠️ No workers available for ${hourToTime(cur)}-${hourToTime(endShift)}, skipping shift creation`);
+                                    cur = endShift;
+                                    continue;
                                 }
 
                                 // Sort by priority: work study students with 0 hours get absolute priority
@@ -2715,32 +2871,171 @@
 
             await loadWorkplaceData();
             
-            let html = '<div class="hours-grid">';
+            let html = `
+                <div class="simplified-hours-container">
+                    <div class="hours-instructions">
+                        <p><strong>📋 Instructions:</strong></p>
+                        <ul>
+                            <li>✅ Check the days you want to set hours for</li>
+                            <li>⏰ Use the time inputs to set start and end times</li>
+                            <li>➕ Click "Add Time Block" to add multiple time periods per day</li>
+                            <li>🗑️ Use the trash icon to remove time blocks</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="days-checkboxes">
+                        <h4>📅 Select Days</h4>
+                        <div class="checkbox-grid">
+            `;
             
             DAYS.forEach(day => {
-                const dayHours = hours[day] || [{ start: "09:00", end: "17:00" }];
+                const dayHours = hours[day] || [];
+                const isChecked = dayHours.length > 0 ? 'checked' : '';
                 html += `
-                    <div class="day-hours">
-                        <h5>${day}</h5>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Start Time</label>
-                                <input type="time" id="start_${day}" value="${dayHours[0]?.start || '09:00'}">
-                            </div>
-                            <div class="form-group">
-                                <label>End Time</label>
-                                <input type="time" id="end_${day}" value="${dayHours[0]?.end || '17:00'}">
-                            </div>
-                        </div>
+                    <div class="day-checkbox">
+                        <input type="checkbox" id="day_${day}" ${isChecked} onchange="toggleDayHours('${day}')">
+                        <label for="day_${day}">${day}</label>
                     </div>
                 `;
             });
             
-            html += '</div>';
-            html += '<button class="btn btn-success" onclick="saveHours()" id="saveHoursBtn">💾 Save Hours</button>';
+            html += `
+                        </div>
+                    </div>
+                    
+                    <div class="time-blocks-container">
+                        <h4>⏰ Time Blocks</h4>
+                        <div id="timeBlocksContainer">
+            `;
+            
+            DAYS.forEach(day => {
+                const dayHours = hours[day] || [];
+                html += `<div id="timeBlocks_${day}" class="day-time-blocks" style="display: ${dayHours.length > 0 ? 'block' : 'none'};">`;
+                html += `<h5>${day}</h5>`;
+                
+                if (dayHours.length === 0) {
+                    html += `
+                        <div class="time-block" data-day="${day}" data-index="0">
+                            <div class="time-inputs">
+                                <div class="time-input">
+                                    <label>Start:</label>
+                                    <input type="time" class="start-time" value="09:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>End:</label>
+                                    <input type="time" class="end-time" value="17:00">
+                                </div>
+                                <button class="btn btn-danger btn-sm" onclick="removeTimeBlock('${day}', 0)" style="display: none;">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    dayHours.forEach((hourBlock, index) => {
+                        html += `
+                            <div class="time-block" data-day="${day}" data-index="${index}">
+                                <div class="time-inputs">
+                                    <div class="time-input">
+                                        <label>Start:</label>
+                                        <input type="time" class="start-time" value="${hourBlock.start}">
+                                    </div>
+                                    <div class="time-input">
+                                        <label>End:</label>
+                                        <input type="time" class="end-time" value="${hourBlock.end}">
+                                    </div>
+                                    <button class="btn btn-danger btn-sm" onclick="removeTimeBlock('${day}', ${index})">🗑️</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                html += `
+                    <button class="btn btn-info btn-sm" onclick="addTimeBlock('${day}')">➕ Add Time Block</button>
+                </div>
+                `;
+            });
+            
+            html += `
+                        </div>
+                    </div>
+                    
+                    <div class="hours-actions">
+                        <button class="btn btn-success" onclick="saveHours()" id="saveHoursBtn">💾 Save Hours</button>
+                        <button class="btn btn-secondary" onclick="closeModal('hoursModal')">Cancel</button>
+                    </div>
+                </div>
+            `;
             
             document.getElementById('hoursModalContent').innerHTML = html;
             document.getElementById('hoursModal').style.display = 'block';
+        };
+
+        // New simplified hours management functions
+        window.toggleDayHours = function(day) {
+            const checkbox = document.getElementById(`day_${day}`);
+            const timeBlocksDiv = document.getElementById(`timeBlocks_${day}`);
+            
+            if (checkbox.checked) {
+                timeBlocksDiv.style.display = 'block';
+            } else {
+                timeBlocksDiv.style.display = 'none';
+            }
+        };
+
+        window.addTimeBlock = function(day) {
+            const timeBlocksDiv = document.getElementById(`timeBlocks_${day}`);
+            const existingBlocks = timeBlocksDiv.querySelectorAll('.time-block');
+            const newIndex = existingBlocks.length;
+            
+            const newBlock = document.createElement('div');
+            newBlock.className = 'time-block';
+            newBlock.setAttribute('data-day', day);
+            newBlock.setAttribute('data-index', newIndex);
+            
+            newBlock.innerHTML = `
+                <div class="time-inputs">
+                    <div class="time-input">
+                        <label>Start:</label>
+                        <input type="time" class="start-time" value="09:00">
+                    </div>
+                    <div class="time-input">
+                        <label>End:</label>
+                        <input type="time" class="end-time" value="17:00">
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="removeTimeBlock('${day}', ${newIndex})">🗑️</button>
+                </div>
+            `;
+            
+            // Insert before the "Add Time Block" button
+            const addButton = timeBlocksDiv.querySelector('button[onclick*="addTimeBlock"]');
+            timeBlocksDiv.insertBefore(newBlock, addButton);
+        };
+
+        window.removeTimeBlock = function(day, index) {
+            const timeBlocksDiv = document.getElementById(`timeBlocks_${day}`);
+            const blocks = timeBlocksDiv.querySelectorAll('.time-block');
+            
+            if (blocks.length <= 1) {
+                // Don't remove the last block, just hide the delete button
+                const deleteBtn = timeBlocksDiv.querySelector(`[data-index="${index}"] .btn-danger`);
+                if (deleteBtn) deleteBtn.style.display = 'none';
+                return;
+            }
+            
+            const blockToRemove = timeBlocksDiv.querySelector(`[data-index="${index}"]`);
+            if (blockToRemove) {
+                blockToRemove.remove();
+            }
+            
+            // Reindex remaining blocks
+            const remainingBlocks = timeBlocksDiv.querySelectorAll('.time-block');
+            remainingBlocks.forEach((block, newIndex) => {
+                block.setAttribute('data-index', newIndex);
+                const deleteBtn = block.querySelector('.btn-danger');
+                if (deleteBtn) {
+                    deleteBtn.onclick = () => removeTimeBlock(day, newIndex);
+                }
+            });
         };
 
         window.saveHours = async function() {
@@ -2756,16 +3051,36 @@
                 let hasErrors = false;
                 
                 DAYS.forEach(day => {
-                    const start = document.getElementById(`start_${day}`).value;
-                    const end = document.getElementById(`end_${day}`).value;
+                    const checkbox = document.getElementById(`day_${day}`);
+                    if (!checkbox.checked) {
+                        // Day not selected, skip
+                        return;
+                    }
                     
-                    if (start && end) {
-                        if (timeToHour(end) <= timeToHour(start)) {
-                            showNotification(`❌ ${day}: End time must be after start time`, 'error');
-                            hasErrors = true;
-                            return;
+                    const timeBlocksDiv = document.getElementById(`timeBlocks_${day}`);
+                    const timeBlocks = timeBlocksDiv.querySelectorAll('.time-block');
+                    const dayHours = [];
+                    
+                    timeBlocks.forEach(block => {
+                        const startInput = block.querySelector('.start-time');
+                        const endInput = block.querySelector('.end-time');
+                        
+                        if (startInput && endInput && startInput.value && endInput.value) {
+                            const start = startInput.value;
+                            const end = endInput.value;
+                            
+                            if (timeToHour(end) <= timeToHour(start)) {
+                                showNotification(`❌ ${day}: End time must be after start time`, 'error');
+                                hasErrors = true;
+                                return;
+                            }
+                            
+                            dayHours.push({ start, end });
                         }
-                        newHours[day] = [{ start, end }];
+                    });
+                    
+                    if (dayHours.length > 0) {
+                        newHours[day] = dayHours;
                     }
                 });
                 
