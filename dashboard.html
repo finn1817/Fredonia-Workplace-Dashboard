@@ -2095,6 +2095,12 @@
                     if (opEnd <= opStart) opEnd += 24;
 
                     console.log(`Processing ${day}: ${op.start}-${op.end} (${opStart}-${opEnd} hours)`);
+                    
+                    // CRITICAL: Validate operating hours
+                    if (opStart < 0 || opStart > 24 || opEnd < 0 || opEnd > 48) {
+                        console.error(`❌ Invalid operating hours for ${day}: ${opStart}-${opEnd}`);
+                        continue;
+                    }
 
                     // Create continuous coverage for entire operating period
                     if (ensureFullCoverage) {
@@ -2163,6 +2169,21 @@
                                 const endShift = Math.min(cur + shiftLength, gapEnd);
                                 const shiftDuration = endShift - cur;
 
+                                // CRITICAL: Ensure shift stays within operating hours
+                                let finalEndShift = endShift;
+                                let finalDuration = shiftDuration;
+                                
+                                if (endShift > opEnd) {
+                                    console.log(`⚠️ Shift would exceed operating hours (${hourToTime(endShift)} > ${hourToTime(opEnd)}), adjusting...`);
+                                    finalEndShift = opEnd;
+                                    finalDuration = finalEndShift - cur;
+                                    
+                                    if (finalDuration < 2) {
+                                        console.log(`⚠️ Adjusted shift too short (${finalDuration.toFixed(1)}h), skipping`);
+                                        break;
+                                    }
+                                }
+
                                 // Find available workers for this gap
                                 const availableWorkers = [];
                                 
@@ -2178,8 +2199,8 @@
                                         // Continue to include them in regular assignment as fallback
                                     }
                                     
-                                    if (isWorkerAvailable(x, day, cur, endShift) && 
-                                        assignedHours[xEmail] + shiftDuration <= maxHoursPerWorker) {
+                                    if (isWorkerAvailable(x, day, cur, finalEndShift) && 
+                                        assignedHours[xEmail] + finalDuration <= maxHoursPerWorker) {
                                         availableWorkers.push(x);
                                     }
                                 }
@@ -2234,9 +2255,9 @@
 
                                 // Assign shifts
                                 for (const x of chosen) {
-                                    assignedHours[x.email] += shiftDuration;
+                                    assignedHours[x.email] += finalDuration;
                                     const shiftStart = hourToTime(cur);
-                                    const shiftEnd = hourToTime(endShift);
+                                    const shiftEnd = hourToTime(finalEndShift);
                                     console.log(`Creating shift: ${shiftStart}-${shiftEnd} for ${x.first_name} ${x.last_name}`);
                                     schedule[day].push({
                                         start: shiftStart,
@@ -2253,15 +2274,15 @@
                                     unfilledShifts.push({
                                         day: day,
                                         start: hourToTime(cur),
-                                        end: hourToTime(endShift),
+                                        end: hourToTime(finalEndShift),
                                         start_hour: cur,
-                                        end_hour: endShift,
+                                        end_hour: finalEndShift,
                                         isGap: true
                                     });
                                     
                                     schedule[day].push({
                                         start: hourToTime(cur),
-                                        end: hourToTime(endShift),
+                                        end: hourToTime(finalEndShift),
                                         assigned: ["⚠️ COVERAGE GAP"],
                                         available: availableWorkers.map(y => `${y.first_name} ${y.last_name}`),
                                         raw_assigned: [],
@@ -2270,7 +2291,7 @@
                                     });
                                 }
 
-                                cur = endShift;
+                                cur = finalEndShift;
                             }
                         }
                     }
@@ -5938,57 +5959,41 @@
             };
         }
 
-        // Zod schema for a shift
-        let ShiftSchema;
-        
-        function initializeZodSchema() {
-            if (window.zod) {
-                ShiftSchema = window.zod.object({
-                    start: window.zod.string().regex(/^\d{2}:\d{2}$/),
-                    end: window.zod.string().regex(/^\d{2}:\d{2}$/),
-                    assigned: window.zod.array(window.zod.string()).min(1),
-                    raw_assigned: window.zod.array(window.zod.string()).min(1),
-                    // Optional fields
-                    available: window.zod.array(window.zod.string()).optional(),
-                    all_available: window.zod.array(window.zod.any()).optional(),
-                    is_work_study: window.zod.boolean().optional(),
-                    isGap: window.zod.boolean().optional(),
-                    forced: window.zod.boolean().optional(),
-                });
-            }
-        }
-
+        // Simple shift validation without Zod dependency
         function validateShift(shift) {
             try {
-                if (!ShiftSchema) {
-                    console.warn('Zod schema not initialized, skipping validation');
-                    return true;
+                // Basic validation without external dependencies
+                if (!shift.start || !shift.end) {
+                    throw new Error('Start and end times are required');
                 }
-                ShiftSchema.parse(shift);
+                
+                // Check time format (HH:MM)
+                const timeRegex = /^\d{2}:\d{2}$/;
+                if (!timeRegex.test(shift.start) || !timeRegex.test(shift.end)) {
+                    throw new Error('Invalid time format. Use HH:MM format');
+                }
+                
                 // Check that end is after start
                 const startHour = timeToHour(shift.start);
                 const endHour = timeToHour(shift.end);
-                if (endHour <= startHour) {
+                if (endHour <= startHour && endHour !== 0) { // Allow midnight (00:00)
                     throw new Error('End time must be after start time');
                 }
+                
+                // Check required fields
+                if (!shift.assigned || !Array.isArray(shift.assigned) || shift.assigned.length === 0) {
+                    throw new Error('At least one assigned worker is required');
+                }
+                
+                if (!shift.raw_assigned || !Array.isArray(shift.raw_assigned) || shift.raw_assigned.length === 0) {
+                    throw new Error('Raw assigned data is required');
+                }
+                
                 return true;
             } catch (err) {
-                showNotification('❌ Invalid shift: ' + (err.errors ? err.errors[0].message : err.message), 'error');
+                console.error('Shift validation error:', err.message);
                 return false;
             }
-        }
-        
-        // Initialize Zod schema when available
-        if (window.zod) {
-            initializeZodSchema();
-        } else {
-            // Wait for Zod to load
-            const checkZod = setInterval(() => {
-                if (window.zod) {
-                    initializeZodSchema();
-                    clearInterval(checkZod);
-                }
-            }, 100);
         }
 
         // --- SHIFT SWAP REQUEST SYSTEM ---
