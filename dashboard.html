@@ -5179,7 +5179,7 @@
                 targetWorkers.forEach(worker => {
                     const option = document.createElement('option');
                     option.value = worker.email;
-                    option.textContent = `${worker.firstName} ${worker.lastName} (${worker.email})`;
+                    option.textContent = `${worker.first_name} ${worker.last_name} (${worker.email})`;
                     targetWorkerSelect.appendChild(option);
                 });
                 
@@ -5223,7 +5223,7 @@
                         shiftIndex: requesterShiftData.shiftIndex
                     },
                     targetWorkerId: targetWorkerEmail,
-                    targetWorkerName: workers.find(w => w.email === targetWorkerEmail)?.firstName + ' ' + workers.find(w => w.email === targetWorkerEmail)?.lastName,
+                    targetWorkerName: workers.find(w => w.email === targetWorkerEmail)?.first_name + ' ' + workers.find(w => w.email === targetWorkerEmail)?.last_name,
                     targetWorkerEmail: targetWorkerEmail,
                     targetWorkerShift: {
                         date: targetShiftDate,
