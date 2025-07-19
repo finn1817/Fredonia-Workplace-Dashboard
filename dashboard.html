@@ -3937,10 +3937,10 @@
         function displayEnhancedManagementInterface() {
             const html = `
                 <div class="management-tabs">
-                    <button class="management-tab active" onclick="switchManagementTab('workers')">👥 Workers (${workers.length})</button>
-                    <button class="management-tab" onclick="switchManagementTab('users')">👤 Users (${window.allUsers?.length || 0})</button>
-                    <button class="management-tab" onclick="switchManagementTab('import')">📥 Import/Export</button>
-                    <button class="management-tab" onclick="switchManagementTab('analytics')">📊 Analytics</button>
+                    <button class="management-tab active" onclick="switchManagementTab('workers', event)">👥 Workers (${workers.length})</button>
+                    <button class="management-tab" onclick="switchManagementTab('users', event)">👤 Users (${window.allUsers?.length || 0})</button>
+                    <button class="management-tab" onclick="switchManagementTab('import', event)">📥 Import/Export</button>
+                    <button class="management-tab" onclick="switchManagementTab('analytics', event)">📊 Analytics</button>
                 </div>
 
                 <!-- Workers Management Tab -->
@@ -3967,7 +3967,7 @@
             document.getElementById('workersModalContent').innerHTML = html;
         }
 
-        function switchManagementTab(tabName) {
+        function switchManagementTab(tabName, event) {
             // Update tab buttons
             document.querySelectorAll('.management-tab').forEach(tab => {
                 tab.classList.remove('active');
@@ -4427,9 +4427,10 @@
                 return;
             }
             // Check for duplicate email (excluding current worker if editing)
+            const workerId = document.getElementById('workerForm').getAttribute('data-worker-id');
             const duplicateWorker = workers.find(w => 
                 w.email.toLowerCase() === email.toLowerCase() && 
-                w.id !== editingWorkerId
+                w.id !== workerId
             );
             if (duplicateWorker) {
                 showNotification('❌ A worker with this email already exists', 'error');
@@ -4495,8 +4496,9 @@
                 'updated_by': user.email
             };
             try {
-                if (editingWorkerId) {
-                    await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', editingWorkerId), workerData);
+                const workerId = document.getElementById('workerForm').getAttribute('data-worker-id');
+                if (workerId) {
+                    await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId), workerData);
                     showNotification('✅ Worker updated successfully!', 'success');
                 } else {
                     workerData.created_at = new Date().toISOString();
@@ -4506,6 +4508,9 @@
                 }
                 closeModal('workerFormModal');
                 await loadWorkplaceData();
+                if (document.getElementById('workersModal').style.display === 'block') {
+                    displayEnhancedManagementInterface();
+                }
             } catch (error) {
                 console.error('Error saving worker:', error);
                 showNotification('❌ Error saving worker', 'error');
@@ -8510,6 +8515,169 @@
             if (!modal) {
                 modal = document.createElement('div');
                 modal.id = 'workerDetailsModal';
+                modal.className = 'modal';
+                document.body.appendChild(modal);
+            }
+            modal.innerHTML = html;
+            modal.style.display = 'block';
+        };
+
+        window.editWorker = function(workerId) {
+            const worker = workers.find(w => w.id === workerId);
+            if (!worker) {
+                showNotification('❌ Worker not found', 'error');
+                return;
+            }
+            
+            // Populate the existing worker form
+            document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
+            document.getElementById('workerFirstName').value = worker.first_name;
+            document.getElementById('workerLastName').value = worker.last_name;
+            document.getElementById('workerEmail').value = worker.email;
+            document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
+            document.getElementById('workerAvailability').value = worker.availability_text || '';
+            
+            // Store the worker ID for updating
+            document.getElementById('workerForm').setAttribute('data-worker-id', workerId);
+            
+            // Show the modal
+            document.getElementById('workerFormModal').style.display = 'block';
+        };
+
+        window.deleteWorker = function(workerId) {
+            const worker = workers.find(w => w.id === workerId);
+            if (!worker) {
+                showNotification('❌ Worker not found', 'error');
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to delete ${worker.first_name} ${worker.last_name}? This action cannot be undone.`)) {
+                deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId))
+                    .then(() => {
+                        showNotification('✅ Worker deleted successfully', 'success');
+                        loadWorkplaceData();
+                        displayEnhancedManagementInterface();
+                    })
+                    .catch(error => {
+                        console.error('Error deleting worker:', error);
+                        showNotification('❌ Error deleting worker', 'error');
+                    });
+            }
+        };
+
+        window.showAddWorker = function() {
+            // Reset the form
+            document.getElementById('workerFormTitle').textContent = '➕ Add Worker';
+            document.getElementById('workerForm').reset();
+            document.getElementById('workerForm').removeAttribute('data-worker-id');
+            
+            // Show the modal
+            document.getElementById('workerFormModal').style.display = 'block';
+        };
+
+        window.exportWorkers = function() {
+            if (workers.length === 0) {
+                showNotification('❌ No workers to export', 'error');
+                return;
+            }
+            
+            // Create CSV content
+            let csvContent = 'First Name,Last Name,Email,Work Study,Days & Time Available\n';
+            
+            workers.forEach(worker => {
+                const firstName = `"${worker.first_name}"`;
+                const lastName = `"${worker.last_name}"`;
+                const email = `"${worker.email}"`;
+                const workStudy = `"${worker.work_study ? 'Yes' : 'No'}"`;
+                const availability = `"${worker.availability_text || ''}"`;
+                
+                csvContent += `${firstName},${lastName},${email},${workStudy},${availability}\n`;
+            });
+            
+            // Create and download file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `${selectedWorkplace}_workers_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showNotification('📄 Workers exported to CSV file', 'success');
+        };
+
+        window.exportUsers = function() {
+            if (!window.allUsers || window.allUsers.length === 0) {
+                showNotification('❌ No users to export', 'error');
+                return;
+            }
+            
+            // Create CSV content
+            let csvContent = 'First Name,Last Name,Email,Role,Status,Phone,Last Login\n';
+            
+            window.allUsers.forEach(user => {
+                const firstName = `"${user.firstName}"`;
+                const lastName = `"${user.lastName}"`;
+                const email = `"${user.email}"`;
+                const role = `"${user.isAdmin ? 'Admin' : 'User'}"`;
+                const status = `"${user.status}"`;
+                const phone = `"${user.phone || ''}"`;
+                const lastLogin = `"${user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}"`;
+                
+                csvContent += `${firstName},${lastName},${email},${role},${status},${phone},${lastLogin}\n`;
+            });
+            
+            // Create and download file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `users_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showNotification('📄 Users exported to CSV file', 'success');
+        };
+
+        window.showAddUser = function() {
+            showNotification('👤 Add User functionality coming in Phase 2', 'info');
+        };
+
+        window.viewUserDetails = function(userId) {
+            const user = window.allUsers?.find(u => u.id === userId);
+            if (!user) {
+                showNotification('❌ User not found', 'error');
+                return;
+            }
+            
+            const linkedWorker = workers.find(w => w.email.toLowerCase() === user.email.toLowerCase());
+            
+            const html = `
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h3>👤 User Details</h3>
+                        <span class="close" onclick="closeModal('userDetailsModal')">&times;</span>
+                    </div>
+                    <div>
+                        <p><strong>Name:</strong> ${user.firstName} ${user.lastName}</p>
+                        <p><strong>Email:</strong> ${user.email}</p>
+                        <p><strong>Role:</strong> ${user.isAdmin ? 'Admin' : 'User'}</p>
+                        <p><strong>Status:</strong> ${user.status}</p>
+                        <p><strong>Phone:</strong> ${user.phone || 'Not provided'}</p>
+                        <p><strong>Last Login:</strong> ${user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</p>
+                        <p><strong>Worker Account:</strong> ${linkedWorker ? `Linked (${linkedWorker.work_study ? 'Work Study' : 'Regular'})` : 'No worker account'}</p>
+                    </div>
+                </div>
+            `;
+            
+            let modal = document.getElementById('userDetailsModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'userDetailsModal';
                 modal.className = 'modal';
                 document.body.appendChild(modal);
             }
