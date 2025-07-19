@@ -1985,9 +1985,278 @@
             window.location.href = 'index.html';
         };
 
+        // PRODUCTION-READY: Comprehensive validation and safety functions
+        const validateScheduleInputs = (hoursOfOperation, workersData, maxHoursPerWorker, maxWorkersPerShift, minHoursPerWorker) => {
+            const errors = [];
+            const warnings = [];
+            
+            // Validate hours of operation
+            if (!hoursOfOperation || typeof hoursOfOperation !== 'object') {
+                errors.push('Hours of operation must be a valid object');
+            } else {
+                for (const [day, hours] of Object.entries(hoursOfOperation)) {
+                    if (!Array.isArray(hours)) {
+                        errors.push(`Invalid hours format for ${day}`);
+                        continue;
+                    }
+                    for (const hour of hours) {
+                        if (!hour.start || !hour.end) {
+                            errors.push(`Missing start/end time for ${day}`);
+                            continue;
+                        }
+                        const start = timeToHour(hour.start);
+                        const end = timeToHour(hour.end);
+                        if (isNaN(start) || isNaN(end)) {
+                            errors.push(`Invalid time format for ${day}: ${hour.start}-${hour.end}`);
+                        }
+                    }
+                }
+            }
+            
+            // Validate workers data
+            if (!Array.isArray(workersData) || workersData.length === 0) {
+                errors.push('Workers data must be a non-empty array');
+            } else {
+                for (const worker of workersData) {
+                    if (!worker.email || !worker.first_name || !worker.last_name) {
+                        errors.push(`Worker missing required fields: ${worker.email || 'no email'}`);
+                    }
+                    if (!worker.availability || typeof worker.availability !== 'object') {
+                        errors.push(`Worker ${worker.email} has invalid availability data`);
+                    }
+                }
+            }
+            
+            // Validate parameters
+            if (maxHoursPerWorker < 1 || maxHoursPerWorker > 40) {
+                errors.push('Max hours per worker must be between 1 and 40');
+            }
+            if (maxWorkersPerShift < 1 || maxWorkersPerShift > 10) {
+                errors.push('Max workers per shift must be between 1 and 10');
+            }
+            if (minHoursPerWorker < 0 || minHoursPerWorker > maxHoursPerWorker) {
+                errors.push('Min hours per worker must be between 0 and max hours');
+            }
+            
+            return { errors, warnings };
+        };
+        
+        const validateShiftAssignment = (worker, day, start, end, assignedHours, maxHoursPerWorker, shiftAssignments, maxWorkersPerShift) => {
+            const errors = [];
+            const warnings = [];
+            
+            // Validate worker exists
+            if (!worker || !worker.email) {
+                errors.push('Invalid worker data');
+                return { valid: false, errors, warnings };
+            }
+            
+            // Validate time format
+            const startHour = timeToHour(start);
+            const endHour = timeToHour(end);
+            if (isNaN(startHour) || isNaN(endHour)) {
+                errors.push(`Invalid time format: ${start}-${end}`);
+                return { valid: false, errors, warnings };
+            }
+            
+            // Validate shift duration
+            let duration = endHour - startHour;
+            if (duration <= 0) {
+                duration += 24; // Handle overnight shifts
+            }
+            if (duration < 0.5 || duration > 12) {
+                errors.push(`Invalid shift duration: ${duration.toFixed(1)} hours`);
+                return { valid: false, errors, warnings };
+            }
+            
+            // Check worker availability
+            if (!isWorkerAvailable(worker, day, startHour, endHour)) {
+                errors.push(`Worker ${worker.first_name} ${worker.last_name} not available on ${day} from ${start} to ${end}`);
+                return { valid: false, errors, warnings };
+            }
+            
+            // Check hours limit
+            const currentHours = assignedHours[worker.email] || 0;
+            if (currentHours + duration > maxHoursPerWorker) {
+                errors.push(`Worker ${worker.first_name} ${worker.last_name} would exceed max hours (${currentHours + duration} > ${maxHoursPerWorker})`);
+                return { valid: false, errors, warnings };
+            }
+            
+            // Check duplicate assignment
+            const shiftKey = `${day}_${start}_${end}`;
+            if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(worker.email)) {
+                errors.push(`Worker ${worker.first_name} ${worker.last_name} already assigned to ${day} ${start}-${end}`);
+                return { valid: false, errors, warnings };
+            }
+            
+            // Check shift capacity
+            const currentWorkers = shiftAssignments.get(shiftKey) || new Set();
+            if (currentWorkers.size >= maxWorkersPerShift) {
+                errors.push(`Shift ${day} ${start}-${end} is at capacity (${currentWorkers.size}/${maxWorkersPerShift})`);
+                return { valid: false, errors, warnings };
+            }
+            
+            return { valid: true, errors, warnings, duration };
+        };
+        
+        const validateWorkStudyRequirements = (wsWorkers, assignedHours) => {
+            const issues = [];
+            const violations = [];
+            
+            for (const worker of wsWorkers) {
+                const hours = assignedHours[worker.email] || 0;
+                if (hours < 5) {
+                    issues.push(`${worker.first_name} ${worker.last_name}: Only ${hours.toFixed(1)} hours assigned (needs 5)`);
+                    violations.push({ worker, hours, required: 5 });
+                } else if (hours > 5.1) {
+                    issues.push(`${worker.first_name} ${worker.last_name}: ${hours.toFixed(1)} hours assigned (should be exactly 5)`);
+                    violations.push({ worker, hours, required: 5 });
+                }
+            }
+            
+            return { issues, violations };
+        };
+        
+        const validateScheduleCoverageComprehensive = (schedule, hoursOfOperation) => {
+            const gaps = [];
+            const warnings = [];
+            
+            for (const [day, hours] of Object.entries(hoursOfOperation)) {
+                for (const hour of hours) {
+                    const opStart = timeToHour(hour.start);
+                    const opEnd = timeToHour(hour.end);
+                    if (opEnd <= opStart) opEnd += 24;
+                    
+                    const dayShifts = schedule[day] || [];
+                    const coveredPeriods = [];
+                    
+                    dayShifts.forEach(shift => {
+                        if (shift.assigned && shift.assigned.length > 0 && !shift.assigned.includes('Unfilled')) {
+                            const shiftStart = timeToHour(shift.start);
+                            const shiftEnd = timeToHour(shift.end);
+                            if (shiftEnd <= shiftStart) shiftEnd += 24;
+                            coveredPeriods.push([shiftStart, shiftEnd]);
+                        }
+                    });
+                    
+                    // Sort and merge overlapping periods
+                    coveredPeriods.sort((a, b) => a[0] - b[0]);
+                    const merged = [];
+                    for (const [start, end] of coveredPeriods) {
+                        if (merged.length === 0 || merged[merged.length - 1][1] < start) {
+                            merged.push([start, end]);
+                        } else {
+                            merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], end);
+                        }
+                    }
+                    
+                    // Find gaps
+                    let currentTime = opStart;
+                    for (const [start, end] of merged) {
+                        if (start > currentTime) {
+                            gaps.push({
+                                day,
+                                start: hourToTime(currentTime),
+                                end: hourToTime(start),
+                                duration: start - currentTime
+                            });
+                        }
+                        currentTime = Math.max(currentTime, end);
+                    }
+                    
+                    if (currentTime < opEnd) {
+                        gaps.push({
+                            day,
+                            start: hourToTime(currentTime),
+                            end: hourToTime(opEnd),
+                            duration: opEnd - currentTime
+                        });
+                    }
+                }
+            }
+            
+            return { gaps, warnings };
+        };
+        
+        const safeAssignWorkerToShift = (worker, day, start, end, schedule, assignedHours, shiftAssignments, maxWorkersPerShift) => {
+            try {
+                // Validate the assignment
+                const validation = validateShiftAssignment(
+                    worker, day, start, end, assignedHours, 
+                    assignedHours.maxHours || 20, shiftAssignments, maxWorkersPerShift
+                );
+                
+                if (!validation.valid) {
+                    console.error('❌ Assignment validation failed:', validation.errors);
+                    return { success: false, errors: validation.errors };
+                }
+                
+                const { duration } = validation;
+                const shiftKey = `${day}_${start}_${end}`;
+                
+                // Update tracking
+                if (!shiftAssignments.has(shiftKey)) {
+                    shiftAssignments.set(shiftKey, new Set());
+                }
+                shiftAssignments.get(shiftKey).add(worker.email);
+                
+                // Update hours
+                assignedHours[worker.email] = (assignedHours[worker.email] || 0) + duration;
+                
+                // Create or update shift
+                if (!schedule[day]) schedule[day] = [];
+                
+                const existingShift = schedule[day].find(s => s.start === start && s.end === end);
+                if (existingShift) {
+                    existingShift.assigned.push(`${worker.first_name} ${worker.last_name}`);
+                    existingShift.raw_assigned.push(worker.email);
+                    existingShift.all_available.push(worker);
+                } else {
+                    schedule[day].push({
+                        start,
+                        end,
+                        assigned: [`${worker.first_name} ${worker.last_name}`],
+                        available: [`${worker.first_name} ${worker.last_name}`],
+                        raw_assigned: [worker.email],
+                        all_available: [worker],
+                        is_work_study: worker.work_study || false
+                    });
+                }
+                
+                console.log(`✅ Safe assignment: ${worker.first_name} ${worker.last_name} to ${day} ${start}-${end} (${duration.toFixed(1)}h)`);
+                return { success: true, duration };
+                
+            } catch (error) {
+                console.error('❌ Error in safe assignment:', error);
+                return { success: false, errors: [error.message] };
+            }
+        };
+
         // Enhanced scheduling algorithm with guaranteed coverage and work study protection
         const createShiftsFromAvailability = (hoursOfOperation, workersData, maxHoursPerWorker = 20, maxWorkersPerShift = 2, minHoursPerWorker = 3, ensureFullCoverage = true) => {
-            console.log('Starting enhanced schedule generation with full coverage:', { hoursOfOperation, workersData, maxHoursPerWorker, maxWorkersPerShift, minHoursPerWorker, ensureFullCoverage });
+            console.log('🚀 PRODUCTION: Starting enhanced schedule generation with comprehensive validation');
+            
+            // PRODUCTION-READY: Comprehensive input validation
+            const inputValidation = validateScheduleInputs(hoursOfOperation, workersData, maxHoursPerWorker, maxWorkersPerShift, minHoursPerWorker);
+            if (inputValidation.errors.length > 0) {
+                console.error('❌ PRODUCTION: Input validation failed:', inputValidation.errors);
+                return { 
+                    schedule: {}, 
+                    assignedHours: {}, 
+                    lowHours: [], 
+                    unassigned: [], 
+                    altSols: {}, 
+                    unfilledShifts: [], 
+                    wsIssues: inputValidation.errors, 
+                    minHoursIssues: [], 
+                    coverageGaps: [],
+                    validationErrors: inputValidation.errors
+                };
+            }
+            
+            if (inputValidation.warnings.length > 0) {
+                console.warn('⚠️ PRODUCTION: Input validation warnings:', inputValidation.warnings);
+            }
             
             if (!hoursOfOperation || !workersData || workersData.length === 0) {
                 console.warn('Missing data for schedule generation');
@@ -2855,7 +3124,111 @@
             }
             
             console.log('✅ Final validation passed - no critical issues detected');
-            console.log('Enhanced schedule generation complete with coverage analysis');
+            
+            // PRODUCTION-READY: Comprehensive final validation
+            console.log('🔍 PRODUCTION: Performing comprehensive final validation...');
+            
+            // 1. Validate Work Study Requirements
+            const wsValidation = validateWorkStudyRequirements(wsWorkers, assignedHours);
+            if (wsValidation.violations.length > 0) {
+                console.error('🚨 PRODUCTION: Work study validation failed:', wsValidation.issues);
+            }
+            
+            // 2. Validate Schedule Coverage
+            const coverageValidation = validateScheduleCoverageComprehensive(schedule, hoursOfOperation);
+            if (coverageValidation.gaps.length > 0) {
+                console.warn('⚠️ PRODUCTION: Coverage gaps detected:', coverageValidation.gaps.length);
+            }
+            
+            // 3. Validate Assignment Tracking
+            const assignmentErrors = [];
+            for (const [shiftKey, workers] of shiftAssignments.entries()) {
+                const [day, start, end] = shiftKey.split('_');
+                const shift = schedule[day]?.find(s => s.start === start && s.end === end);
+                if (!shift) {
+                    assignmentErrors.push(`Shift tracking mismatch: ${shiftKey}`);
+                    continue;
+                }
+                
+                const trackedWorkers = Array.from(workers);
+                const shiftWorkers = shift.raw_assigned || [];
+                
+                if (trackedWorkers.length !== shiftWorkers.length) {
+                    assignmentErrors.push(`Worker count mismatch for ${shiftKey}: tracked=${trackedWorkers.length}, shift=${shiftWorkers.length}`);
+                }
+                
+                for (const worker of trackedWorkers) {
+                    if (!shiftWorkers.includes(worker)) {
+                        assignmentErrors.push(`Worker ${worker} tracked but not in shift ${shiftKey}`);
+                    }
+                }
+            }
+            
+            if (assignmentErrors.length > 0) {
+                console.error('🚨 PRODUCTION: Assignment tracking errors:', assignmentErrors);
+            }
+            
+            // 4. Validate Hour Calculations
+            const hourErrors = [];
+            for (const [email, hours] of Object.entries(assignedHours)) {
+                if (hours < 0) {
+                    hourErrors.push(`${email}: Negative hours (${hours})`);
+                } else if (hours > maxHoursPerWorker * 1.2) {
+                    hourErrors.push(`${email}: Excessive hours (${hours} > ${maxHoursPerWorker * 1.2})`);
+                }
+                
+                // Validate overnight shift handling
+                const workerShifts = Object.values(schedule).flat().filter(s => 
+                    (s.raw_assigned || []).includes(email)
+                );
+                
+                for (const shift of workerShifts) {
+                    const startHour = timeToHour(shift.start);
+                    const endHour = timeToHour(shift.end);
+                    let duration = endHour - startHour;
+                    if (duration <= 0) duration += 24;
+                    
+                    if (duration < 0.5 || duration > 12) {
+                        hourErrors.push(`${email}: Invalid shift duration ${duration.toFixed(1)}h (${shift.start}-${shift.end})`);
+                    }
+                }
+            }
+            
+            if (hourErrors.length > 0) {
+                console.error('🚨 PRODUCTION: Hour calculation errors:', hourErrors);
+            }
+            
+            // 5. Production Success Summary
+            const totalShiftsCount = Object.values(schedule).flat().length;
+            const totalWorkersCount = workersData.length;
+            const assignedWorkersCount = Object.values(assignedHours).filter(h => h > 0).length;
+            const wsAssigned = wsWorkers.filter(w => (assignedHours[w.email] || 0) > 0).length;
+            
+            console.log('📊 PRODUCTION: Schedule Generation Summary:');
+            console.log(`   • Total Shifts: ${totalShiftsCount}`);
+            console.log(`   • Total Workers: ${totalWorkersCount}`);
+            console.log(`   • Assigned Workers: ${assignedWorkersCount}/${totalWorkersCount}`);
+            console.log(`   • Work Study Assigned: ${wsAssigned}/${wsWorkers.length}`);
+            console.log(`   • Coverage Gaps: ${coverageValidation.gaps.length}`);
+            console.log(`   • Work Study Issues: ${wsValidation.issues.length}`);
+            console.log(`   • Assignment Errors: ${assignmentErrors.length}`);
+            console.log(`   • Hour Errors: ${hourErrors.length}`);
+            
+            // 6. Final Production Check
+            const productionIssues = [
+                ...wsValidation.issues,
+                ...assignmentErrors,
+                ...hourErrors
+            ];
+            
+            if (productionIssues.length > 0) {
+                console.error('🚨 PRODUCTION: Critical issues detected - schedule may be unreliable');
+                console.error('Issues:', productionIssues);
+            } else {
+                console.log('✅ PRODUCTION: All validation checks passed - schedule is production-ready');
+            }
+            
+            console.log('Enhanced schedule generation complete with comprehensive validation');
             
             return {
                 schedule,
@@ -2864,10 +3237,21 @@
                 unassigned,
                 altSols,
                 unfilledShifts,
-                wsIssues,
+                wsIssues: [...wsIssues, ...wsValidation.issues],
                 minHoursIssues,
-                coverageGaps,
-                forcedAssignments
+                coverageGaps: [...coverageGaps, ...coverageValidation.gaps],
+                forcedAssignments,
+                productionIssues,
+                validationSummary: {
+                    totalShifts: totalShiftsCount,
+                    totalWorkers: totalWorkersCount,
+                    assignedWorkers: assignedWorkersCount,
+                    wsAssigned,
+                    coverageGaps: coverageValidation.gaps.length,
+                    wsIssues: wsValidation.issues.length,
+                    assignmentErrors: assignmentErrors.length,
+                    hourErrors: hourErrors.length
+                }
             };
         };
 
@@ -4018,13 +4402,24 @@
                     forcedAssignments
                 } = result;
                 
-                // CRITICAL FIX: Check if schedule generation failed
+                // PRODUCTION-READY: Enhanced schedule validation
                 if (Object.keys(generatedSchedule).length === 0) {
-                    console.error('🚨 Schedule generation failed - no schedule was created');
+                    console.error('🚨 PRODUCTION: Schedule generation failed - no schedule was created');
                     document.getElementById('scheduleDisplay').innerHTML = '<div class="error">❌ Schedule generation failed. Check the console for details.</div>';
                     showNotification('❌ Schedule generation failed - check worker availability and operating hours', 'error');
                     setLoading('generateScheduleBtn', false);
                     return;
+                }
+                
+                // Check for production issues
+                if (result.productionIssues && result.productionIssues.length > 0) {
+                    console.warn('⚠️ PRODUCTION: Schedule generated with issues:', result.productionIssues);
+                    showNotification(`⚠️ Schedule generated with ${result.productionIssues.length} issues - review carefully`, 'warning');
+                }
+                
+                // Log validation summary
+                if (result.validationSummary) {
+                    console.log('📊 PRODUCTION: Final validation summary:', result.validationSummary);
                 }
                 
                 // Validate all shifts before saving
