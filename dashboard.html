@@ -4844,13 +4844,13 @@
                 console.log('DEBUG: scheduleData:', scheduleData);
                 let myShiftsByDay = {};
                 let totalHours = 0;
-                if (scheduleData && scheduleData.schedule) {
+                if (scheduleData && scheduleData.days) {
                     // Find user's shifts
                     for (const day of DAYS) {
-                        const shifts = scheduleData.schedule[day] || [];
+                        const shifts = scheduleData.days[day] || [];
                         myShiftsByDay[day] = shifts.filter(shift => {
-                            if (!shift.assigned || !Array.isArray(shift.assigned)) return false;
-                            return shift.assigned.some(email => 
+                            if (!shift.raw_assigned || !Array.isArray(shift.raw_assigned)) return false;
+                            return shift.raw_assigned.some(email => 
                                 email && email.trim().toLowerCase() === userEmail
                             );
                         });
@@ -5147,9 +5147,9 @@
                 
                 // Populate requester's shifts (shifts assigned to current user)
                 const requesterShifts = [];
-                for (const [day, shifts] of Object.entries(currentSchedule.schedule)) {
+                for (const [day, shifts] of Object.entries(currentSchedule.days)) {
                     shifts.forEach((shift, index) => {
-                        if (shift.assigned && shift.assigned.includes(user.email)) {
+                        if (shift.raw_assigned && shift.raw_assigned.includes(user.email)) {
                             requesterShifts.push({
                                 day,
                                 date: getDateForDay(day),
@@ -5365,12 +5365,10 @@
                 const scheduleData = scheduleDoc.data();
                 
                 // Update the schedule by swapping the workers
-                const updatedSchedule = { ...scheduleData.schedule };
+                const updatedSchedule = { ...scheduleData.days };
                 
                 // Remove requester from their shift and add target worker
                 const requesterShift = updatedSchedule[swapData.requesterShift.day][swapData.requesterShift.shiftIndex];
-                requesterShift.assigned = requesterShift.assigned.filter(email => email !== swapData.requesterEmail);
-                requesterShift.assigned.push(swapData.targetWorkerEmail);
                 requesterShift.raw_assigned = requesterShift.raw_assigned.filter(email => email !== swapData.requesterEmail);
                 requesterShift.raw_assigned.push(swapData.targetWorkerEmail);
                 
@@ -5379,9 +5377,7 @@
                 if (targetDay && updatedSchedule[targetDay]) {
                     for (let i = 0; i < updatedSchedule[targetDay].length; i++) {
                         const shift = updatedSchedule[targetDay][i];
-                        if (shift.assigned && shift.assigned.includes(swapData.targetWorkerEmail)) {
-                            shift.assigned = shift.assigned.filter(email => email !== swapData.targetWorkerEmail);
-                            shift.assigned.push(swapData.requesterEmail);
+                        if (shift.raw_assigned && shift.raw_assigned.includes(swapData.targetWorkerEmail)) {
                             shift.raw_assigned = shift.raw_assigned.filter(email => email !== swapData.targetWorkerEmail);
                             shift.raw_assigned.push(swapData.requesterEmail);
                             break;
@@ -5391,7 +5387,7 @@
                 
                 // Update the schedule in Firestore
                 await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleDoc.id), {
-                    schedule: updatedSchedule,
+                    days: updatedSchedule,
                     updatedAt: new Date().toISOString(),
                     updatedBy: user.email
                 });
