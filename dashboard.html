@@ -5295,8 +5295,14 @@
         
         // Submit email change request handler
         document.getElementById('submitEmailChangeRequestBtn').onclick = async function() {
+            console.log('Email change request button clicked');
+            
             const newEmail = document.getElementById('newEmailModal').value.trim();
             const reason = document.getElementById('emailChangeReasonModal').value.trim();
+            
+            console.log('New email:', newEmail);
+            console.log('Reason:', reason);
+            console.log('User:', user);
             
             // Validation
             if (!newEmail) {
@@ -5317,7 +5323,8 @@
             }
             
             try {
-                // Use pre-initialized auth database
+                console.log('Starting email change request submission...');
+                console.log('AuthDb:', authDb);
                 
                 // Check if user already has 2 pending requests
                 const pendingRequestsQuery = query(
@@ -5325,7 +5332,10 @@
                     where('userId', '==', user.uid),
                     where('status', '==', 'pending')
                 );
+                console.log('Pending requests query created');
+                
                 const pendingSnapshot = await getDocs(pendingRequestsQuery);
+                console.log('Pending requests count:', pendingSnapshot.size);
                 
                 if (pendingSnapshot.size >= 2) {
                     showNotification('❌ You already have 2 pending email change requests. Please wait for admin approval.', 'error');
@@ -5346,6 +5356,8 @@
                     return;
                 }
                 
+                console.log('Creating email change request...');
+                
                 // Create email change request
                 await addDoc(collection(authDb, 'emailChangeRequests'), {
                     userId: user.uid,
@@ -5360,6 +5372,8 @@
                     adminNotes: null
                 });
                 
+                console.log('Email change request created successfully');
+                
                 // Clear form
                 document.getElementById('newEmailModal').value = '';
                 document.getElementById('emailChangeReasonModal').value = '';
@@ -5371,24 +5385,36 @@
                 
             } catch (error) {
                 console.error('Error submitting email change request:', error);
+                console.error('Error details:', error.message, error.stack);
                 showNotification('❌ Failed to submit email change request', 'error');
             }
         };
         
         // Load email change requests history
         async function loadEmailChangeRequestsHistory() {
+            console.log('Loading email change requests history...');
+            console.log('User:', user);
+            
             const listDiv = document.getElementById('emailChangeRequestsList');
+            if (!listDiv) {
+                console.error('emailChangeRequestsList element not found');
+                return;
+            }
+            
             listDiv.innerHTML = '<div class="loading">Loading your email change requests...</div>';
             
             try {
-                // Use pre-initialized auth database
+                console.log('AuthDb:', authDb);
                 
                 const requestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
                     where('userId', '==', user.uid),
                     orderBy('createdAt', 'desc')
                 );
+                console.log('Requests query created');
+                
                 const snapshot = await getDocs(requestsQuery);
+                console.log('Snapshot received, size:', snapshot.size);
                 
                 if (snapshot.empty) {
                     listDiv.innerHTML = '<div class="info">No email change requests found.</div>';
@@ -5424,9 +5450,11 @@
                 });
                 
                 listDiv.innerHTML = html;
+                console.log('Email change requests history loaded successfully');
                 
             } catch (error) {
                 console.error('Error loading email change requests:', error);
+                console.error('Error details:', error.message, error.stack);
                 listDiv.innerHTML = '<div class="error">Failed to load email change requests.</div>';
             }
         }
