@@ -904,6 +904,7 @@
                 <button class="btn btn-info" id="viewMessagesBtn" style="position:relative;">📥 View Messages <span id="messagesBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
                 <button class="btn btn-warning" id="timeOffRequestsBtn" style="position:relative;">🏖️ Time Off Requests <span id="timeOffRequestsBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
                 <button class="btn btn-info" id="shiftSwapRequestsBtn" style="position:relative;">🔄 Shift Swap Requests <span id="shiftSwapRequestsBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
+                <button class="btn btn-warning" id="emailChangeRequestsBtn" style="position:relative;">📧 Email Change Requests <span id="emailChangeRequestsBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
                 <button class="btn btn-danger" id="removeAllWorkersBtn">🗑️ Remove All Workers</button>
                 <button class="btn btn-danger" id="cleanupSchedulesBtn">🧹 Clean Up Old Schedules</button>
             </div>
@@ -1254,6 +1255,37 @@
                 </div>
                 <button type="button" class="btn btn-info" id="changePasswordBtnModal" style="margin-top:0.5rem;">Change Password</button>
             </form>
+            
+            <hr style="margin:2rem 0;">
+            
+            <form id="emailChangeRequestFormModal" style="max-width: 500px; margin: 0 auto;">
+                <h4 style="margin-bottom:1rem;">📧 Request Email Change</h4>
+                <div class="info" style="margin-bottom:1rem; font-size:0.9rem;">
+                    <strong>Note:</strong> Email change requests require admin approval. You can have up to 2 pending requests at a time.
+                </div>
+                <div class="form-group">
+                    <label for="currentEmailModal">Current Email</label>
+                    <input type="email" id="currentEmailModal" disabled style="background:#f1f3f4;">
+                </div>
+                <div class="form-group">
+                    <label for="newEmailModal">New Email Address</label>
+                    <input type="email" id="newEmailModal" required placeholder="Enter your new email address">
+                </div>
+                <div class="form-group">
+                    <label for="emailChangeReasonModal">Reason for Change <span style="color:#888;">(optional)</span></label>
+                    <textarea id="emailChangeReasonModal" rows="3" placeholder="Briefly explain why you need to change your email address..."></textarea>
+                </div>
+                <button type="button" class="btn btn-warning" id="submitEmailChangeRequestBtn" style="margin-top:0.5rem;">Submit Email Change Request</button>
+            </form>
+            
+            <hr style="margin:2rem 0;">
+            
+            <div id="emailChangeRequestsHistoryModal" style="max-width: 500px; margin: 0 auto;">
+                <h4 style="margin-bottom:1rem;">📋 Email Change Request History</h4>
+                <div id="emailChangeRequestsList" style="max-height: 200px; overflow-y: auto; border: 1px solid #e1e5e9; border-radius: 8px; padding: 1rem;">
+                    <div class="loading">Loading your email change requests...</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1428,6 +1460,26 @@
             </div>
             <div id="userShiftSwapRequestsList" style="max-height: 60vh; overflow-y: auto;">
                 <div class="loading">Loading your shift swap requests...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Admin Email Change Requests -->
+    <div id="adminEmailChangeRequestsModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px; max-height: 80vh;">
+            <div class="modal-header">
+                <h3>📧 Email Change Requests</h3>
+                <span class="close" onclick="closeModal('adminEmailChangeRequestsModal')">&times;</span>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <button class="btn btn-info" onclick="filterEmailChangeRequests('all')" id="filterEmailAllBtn">All Requests</button>
+                <button class="btn btn-warning" onclick="filterEmailChangeRequests('pending')" id="filterEmailPendingBtn">Pending</button>
+                <button class="btn btn-success" onclick="filterEmailChangeRequests('approved')" id="filterEmailApprovedBtn">Approved</button>
+                <button class="btn btn-danger" onclick="filterEmailChangeRequests('denied')" id="filterEmailDeniedBtn">Denied</button>
+                <button class="btn btn-secondary" onclick="exportEmailChangeRequests()" style="float: right;">📤 Export</button>
+            </div>
+            <div id="adminEmailChangeRequestsList" style="max-height: 60vh; overflow-y: auto;">
+                <div class="loading">Loading email change requests...</div>
             </div>
         </div>
     </div>
@@ -5106,7 +5158,11 @@
             document.getElementById('accountLastNameModal').value = user.lastName || '';
             document.getElementById('accountEmailModal').value = user.email || '';
             document.getElementById('accountPhoneModal').value = user.phone || '';
+            document.getElementById('currentEmailModal').value = user.email || '';
             document.getElementById('myAccountModal').style.display = 'block';
+            
+            // Load email change requests history
+            loadEmailChangeRequestsHistory();
         };
         
         // Save account changes handler
@@ -5228,6 +5284,175 @@
                 showNotification('❌ Failed to change password', 'error');
             }
         };
+
+        // --- EMAIL CHANGE REQUEST SYSTEM ---
+        
+        // Submit email change request handler
+        document.getElementById('submitEmailChangeRequestBtn').onclick = async function() {
+            const newEmail = document.getElementById('newEmailModal').value.trim();
+            const reason = document.getElementById('emailChangeReasonModal').value.trim();
+            
+            // Validation
+            if (!newEmail) {
+                showNotification('❌ New email address is required', 'error');
+                return;
+            }
+            
+            if (newEmail === user.email) {
+                showNotification('❌ New email must be different from current email', 'error');
+                return;
+            }
+            
+            // Email format validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(newEmail)) {
+                showNotification('❌ Please enter a valid email address', 'error');
+                return;
+            }
+            
+            try {
+                // Import auth database
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, collection, addDoc, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                // Check if user already has 2 pending requests
+                const pendingRequestsQuery = query(
+                    collection(authDb, 'emailChangeRequests'),
+                    where('userId', '==', user.uid),
+                    where('status', '==', 'pending')
+                );
+                const pendingSnapshot = await getDocs(pendingRequestsQuery);
+                
+                if (pendingSnapshot.size >= 2) {
+                    showNotification('❌ You already have 2 pending email change requests. Please wait for admin approval.', 'error');
+                    return;
+                }
+                
+                // Check if this exact request already exists
+                const existingRequestQuery = query(
+                    collection(authDb, 'emailChangeRequests'),
+                    where('userId', '==', user.uid),
+                    where('requestedEmail', '==', newEmail),
+                    where('status', '==', 'pending')
+                );
+                const existingSnapshot = await getDocs(existingRequestQuery);
+                
+                if (!existingSnapshot.empty) {
+                    showNotification('❌ You already have a pending request for this email address', 'error');
+                    return;
+                }
+                
+                // Create email change request
+                await addDoc(collection(authDb, 'emailChangeRequests'), {
+                    userId: user.uid,
+                    currentEmail: user.email,
+                    requestedEmail: newEmail,
+                    reason: reason,
+                    status: 'pending',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    reviewedBy: null,
+                    reviewedAt: null,
+                    adminNotes: null
+                });
+                
+                // Clear form
+                document.getElementById('newEmailModal').value = '';
+                document.getElementById('emailChangeReasonModal').value = '';
+                
+                showNotification('✅ Email change request submitted successfully! Admin approval required.', 'success');
+                
+                // Reload history
+                loadEmailChangeRequestsHistory();
+                
+            } catch (error) {
+                console.error('Error submitting email change request:', error);
+                showNotification('❌ Failed to submit email change request', 'error');
+            }
+        };
+        
+        // Load email change requests history
+        async function loadEmailChangeRequestsHistory() {
+            const listDiv = document.getElementById('emailChangeRequestsList');
+            listDiv.innerHTML = '<div class="loading">Loading your email change requests...</div>';
+            
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, collection, query, where, orderBy, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                const requestsQuery = query(
+                    collection(authDb, 'emailChangeRequests'),
+                    where('userId', '==', user.uid),
+                    orderBy('createdAt', 'desc')
+                );
+                const snapshot = await getDocs(requestsQuery);
+                
+                if (snapshot.empty) {
+                    listDiv.innerHTML = '<div class="info">No email change requests found.</div>';
+                    return;
+                }
+                
+                let html = '';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const statusClass = data.status;
+                    const statusBadgeClass = data.status;
+                    
+                    html += `
+                        <div style="border: 1px solid #e1e5e9; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: white;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <strong>${data.requestedEmail}</strong>
+                                <span class="status-badge ${statusBadgeClass}" style="padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">
+                                    ${data.status}
+                                </span>
+                            </div>
+                            <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">
+                                Requested: ${new Date(data.createdAt).toLocaleDateString()}
+                            </div>
+                            ${data.reason ? `<div style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>Reason:</strong> ${data.reason}</div>` : ''}
+                            ${data.status !== 'pending' ? `
+                                <div style="font-size: 0.9rem; color: #666;">
+                                    ${data.status === 'approved' ? '✅ Approved' : '❌ Denied'} by ${data.reviewedBy || 'Admin'} on ${data.reviewedAt ? new Date(data.reviewedAt).toLocaleDateString() : 'Unknown'}
+                                </div>
+                                ${data.adminNotes ? `<div style="font-size: 0.9rem; margin-top: 0.5rem;"><strong>Admin Notes:</strong> ${data.adminNotes}</div>` : ''}
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                listDiv.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error loading email change requests:', error);
+                listDiv.innerHTML = '<div class="error">Failed to load email change requests.</div>';
+            }
+        }
 
         // --- AVAILABILITY REQUESTS FEATURE ---
         // User: Open modal
@@ -6040,6 +6265,7 @@
             await origSelectWorkplaceMsgs(id);
             updateHourRequestsBadge();
             updateMessagesBadge();
+            updateEmailChangeRequestsBadge();
         };
 
         // Remove All Workers button logic (admin only)
@@ -6063,6 +6289,364 @@
                     showNotification('❌ Failed to delete all workers', 'error');
                 }
             };
+        }
+
+        // --- ADMIN EMAIL CHANGE REQUESTS MANAGEMENT ---
+        
+        // Email change requests button handler (admin only)
+        if (user.isAdmin) {
+            document.getElementById('emailChangeRequestsBtn').onclick = function() {
+                document.getElementById('adminEmailChangeRequestsModal').style.display = 'block';
+                loadAdminEmailChangeRequests();
+            };
+        }
+        
+        // Load admin email change requests
+        async function loadAdminEmailChangeRequests(filter = 'all') {
+            const listDiv = document.getElementById('adminEmailChangeRequestsList');
+            listDiv.innerHTML = '<div class="loading">Loading email change requests...</div>';
+            
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, collection, query, where, orderBy, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                let requestsQuery;
+                if (filter === 'all') {
+                    requestsQuery = query(
+                        collection(authDb, 'emailChangeRequests'),
+                        orderBy('createdAt', 'desc')
+                    );
+                } else {
+                    requestsQuery = query(
+                        collection(authDb, 'emailChangeRequests'),
+                        where('status', '==', filter),
+                        orderBy('createdAt', 'desc')
+                    );
+                }
+                
+                const snapshot = await getDocs(requestsQuery);
+                
+                if (snapshot.empty) {
+                    listDiv.innerHTML = '<div class="info">No email change requests found.</div>';
+                    return;
+                }
+                
+                let html = '';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const statusClass = data.status;
+                    const statusBadgeClass = data.status;
+                    
+                    html += `
+                        <div style="border: 1px solid #e1e5e9; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: white;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                                <div>
+                                    <h4 style="margin: 0 0 0.5rem 0;">${data.currentEmail} → ${data.requestedEmail}</h4>
+                                    <div style="font-size: 0.9rem; color: #666;">
+                                        <strong>User ID:</strong> ${data.userId}<br>
+                                        <strong>Requested:</strong> ${new Date(data.createdAt).toLocaleString()}
+                                    </div>
+                                </div>
+                                <span class="status-badge ${statusBadgeClass}" style="padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">
+                                    ${data.status}
+                                </span>
+                            </div>
+                            ${data.reason ? `<div style="font-size: 0.9rem; margin-bottom: 1rem;"><strong>Reason:</strong> ${data.reason}</div>` : ''}
+                            ${data.status !== 'pending' ? `
+                                <div style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">
+                                    ${data.status === 'approved' ? '✅ Approved' : '❌ Denied'} by ${data.reviewedBy || 'Admin'} on ${data.reviewedAt ? new Date(data.reviewedAt).toLocaleString() : 'Unknown'}
+                                </div>
+                                ${data.adminNotes ? `<div style="font-size: 0.9rem; margin-bottom: 1rem;"><strong>Admin Notes:</strong> ${data.adminNotes}</div>` : ''}
+                            ` : ''}
+                            ${data.status === 'pending' ? `
+                                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                                    <button class="btn btn-success" onclick="approveEmailChangeRequest('${doc.id}', '${data.userId}', '${data.currentEmail}', '${data.requestedEmail}')">✅ Approve</button>
+                                    <button class="btn btn-danger" onclick="denyEmailChangeRequest('${doc.id}', '${data.userId}')">❌ Deny</button>
+                                    <button class="btn btn-info" onclick="addAdminNotes('${doc.id}')">📝 Add Notes</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                listDiv.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error loading admin email change requests:', error);
+                listDiv.innerHTML = '<div class="error">Failed to load email change requests.</div>';
+            }
+        }
+        
+        // Filter email change requests
+        window.filterEmailChangeRequests = function(filter) {
+            loadAdminEmailChangeRequests(filter);
+        };
+        
+        // Approve email change request
+        window.approveEmailChangeRequest = async function(requestId, userId, currentEmail, newEmail) {
+            if (!confirm(`Are you sure you want to approve this email change from ${currentEmail} to ${newEmail}?`)) {
+                return;
+            }
+            
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, doc, updateDoc, collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                // Update the request status
+                const requestRef = doc(authDb, 'emailChangeRequests', requestId);
+                await updateDoc(requestRef, {
+                    status: 'approved',
+                    reviewedBy: user.email,
+                    reviewedAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                
+                // Update user email in AUTH database
+                const userRef = doc(authDb, 'users', userId);
+                await updateDoc(userRef, {
+                    email: newEmail
+                });
+                
+                // Update user email in all workplace databases
+                const workplaces = ['esports_lounge', 'esports_arena', 'it_service_center'];
+                for (const workplace of workplaces) {
+                    try {
+                        // Update worker records
+                        const workersQuery = query(
+                            collection(db, 'workplaces', workplace, 'workers'),
+                            where('Email', '==', currentEmail)
+                        );
+                        const workersSnapshot = await getDocs(workersQuery);
+                        
+                        for (const workerDoc of workersSnapshot.docs) {
+                            await updateDoc(workerDoc.ref, {
+                                Email: newEmail
+                            });
+                        }
+                        
+                        // Update any other collections that reference the email
+                        // (schedules, requests, etc.)
+                        const collectionsToUpdate = ['schedules', 'hourRequests', 'timeOffRequests', 'shiftSwaps', 'admin_messages'];
+                        
+                        for (const collectionName of collectionsToUpdate) {
+                            try {
+                                const collectionRef = collection(db, 'workplaces', workplace, collectionName);
+                                const snapshot = await getDocs(collectionRef);
+                                
+                                for (const docSnapshot of snapshot.docs) {
+                                    const data = docSnapshot.data();
+                                    let needsUpdate = false;
+                                    const updateData = {};
+                                    
+                                    // Check if any field contains the old email
+                                    Object.keys(data).forEach(key => {
+                                        if (typeof data[key] === 'string' && data[key] === currentEmail) {
+                                            updateData[key] = newEmail;
+                                            needsUpdate = true;
+                                        }
+                                    });
+                                    
+                                    if (needsUpdate) {
+                                        await updateDoc(docSnapshot.ref, updateData);
+                                    }
+                                }
+                            } catch (error) {
+                                console.warn(`Error updating ${collectionName} in ${workplace}:`, error);
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Error updating workplace ${workplace}:`, error);
+                    }
+                }
+                
+                showNotification('✅ Email change approved and updated across all databases', 'success');
+                loadAdminEmailChangeRequests();
+                
+            } catch (error) {
+                console.error('Error approving email change request:', error);
+                showNotification('❌ Failed to approve email change request', 'error');
+            }
+        };
+        
+        // Deny email change request
+        window.denyEmailChangeRequest = async function(requestId, userId) {
+            const notes = prompt('Please provide a reason for denying this request (optional):');
+            
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                // Update the request status
+                const requestRef = doc(authDb, 'emailChangeRequests', requestId);
+                await updateDoc(requestRef, {
+                    status: 'denied',
+                    reviewedBy: user.email,
+                    reviewedAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    adminNotes: notes || null
+                });
+                
+                showNotification('❌ Email change request denied', 'success');
+                loadAdminEmailChangeRequests();
+                
+            } catch (error) {
+                console.error('Error denying email change request:', error);
+                showNotification('❌ Failed to deny email change request', 'error');
+            }
+        };
+        
+        // Add admin notes
+        window.addAdminNotes = async function(requestId) {
+            const notes = prompt('Enter admin notes:');
+            if (!notes) return;
+            
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                const requestRef = doc(authDb, 'emailChangeRequests', requestId);
+                await updateDoc(requestRef, {
+                    adminNotes: notes,
+                    updatedAt: new Date().toISOString()
+                });
+                
+                showNotification('✅ Admin notes added', 'success');
+                loadAdminEmailChangeRequests();
+                
+            } catch (error) {
+                console.error('Error adding admin notes:', error);
+                showNotification('❌ Failed to add admin notes', 'error');
+            }
+        };
+        
+        // Export email change requests
+        window.exportEmailChangeRequests = async function() {
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, collection, query, orderBy, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                const requestsQuery = query(
+                    collection(authDb, 'emailChangeRequests'),
+                    orderBy('createdAt', 'desc')
+                );
+                const snapshot = await getDocs(requestsQuery);
+                
+                let csvContent = 'User ID,Current Email,Requested Email,Reason,Status,Created At,Reviewed By,Reviewed At,Admin Notes\n';
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    csvContent += `"${data.userId}","${data.currentEmail}","${data.requestedEmail}","${data.reason || ''}","${data.status}","${data.createdAt}","${data.reviewedBy || ''}","${data.reviewedAt || ''}","${data.adminNotes || ''}"\n`;
+                });
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `email_change_requests_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                showNotification('📄 Email change requests exported to CSV', 'success');
+                
+            } catch (error) {
+                console.error('Error exporting email change requests:', error);
+                showNotification('❌ Failed to export email change requests', 'error');
+            }
+        };
+        
+        // Update email change requests badge
+        async function updateEmailChangeRequestsBadge() {
+            if (!user.isAdmin) return;
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+                
+                const authApp = initializeApp(authConfig, 'authApp');
+                const authDb = getFirestore(authApp);
+                
+                const snapshot = await getDocs(query(
+                    collection(authDb, 'emailChangeRequests'),
+                    where('status', '==', 'pending')
+                ));
+                document.getElementById('emailChangeRequestsBadge').style.display = snapshot.empty ? 'none' : 'inline-block';
+            } catch {}
         }
         // Clean Up Old Schedules button logic (admin only)
         if (user.isAdmin) {
