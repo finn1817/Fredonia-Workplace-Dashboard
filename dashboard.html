@@ -686,12 +686,12 @@
 
         .modal-content {
             background-color: white;
-            margin: 2% auto;
+            margin: 1% auto;
             padding: 2rem;
             border-radius: 12px;
-            width: 95%;
-            max-width: 1200px;
-            max-height: 90vh;
+            width: 98%;
+            max-width: none;
+            max-height: 95vh;
             overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
@@ -4792,9 +4792,9 @@
             
             // Enhanced HTML with better formatting and worker display
             let html = `
-                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px; height: 70vh;">
+                <div style="display: grid; grid-template-columns: 300px 1fr; gap: 30px; height: 80vh;">
                     <!-- Left Column: Form Controls -->
-                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div style="display: flex; flex-direction: column; gap: 15px; min-width: 280px;">
                         <div class='form-group'>
                             <label><strong>Day</strong></label>
                             <select id='addShiftDay' class='form-control' style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
@@ -4827,7 +4827,7 @@
                             <label><strong>Current Schedule</strong></label>
                             <div id='addShiftCurrentSchedule' style='margin-bottom: 10px; padding: 12px; background-color: #f8f9fa; border-radius: 6px; font-size: 0.9em; border-left: 4px solid #007bff;'></div>
                             <label><strong>Assign Worker(s)</strong></label>
-                            <div id='addShiftWorkersList' style='height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; border-radius: 6px; background-color: white;'></div>
+                            <div id='addShiftWorkersList' style='height: 500px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; border-radius: 6px; background-color: white;'></div>
                         </div>
                     </div>
                 </div>
