@@ -6,3 +6,4 @@ https://raw.githubusercontent.com/finn1817/Fredonia-Workplace-Dashboard/refs/hea
 
 # Fredonia Name Logo
 
+https://raw.githubusercontent.com/finn1817/Fredonia-Workplace-Dashboard/refs/heads/main/images/sunyfredname.webp
