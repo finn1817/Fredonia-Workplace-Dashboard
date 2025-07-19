@@ -1928,11 +1928,11 @@
             
             try {
                 await loadWorkplaceData();
-                await loadWorkplaceNotes();
+                // await loadWorkplaceNotes(); // OLD NOTES FUNCTION REMOVED
                 await loadAnnouncements(); // Load announcements
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">✅ Ready! Select an option above to get started.</div>';
                 hideAllForms();
-                document.getElementById('workplaceNotesSection').style.display = 'block';
+                // document.getElementById('workplaceNotesSection').style.display = 'block'; // OLD NOTES SECTION REMOVED
                 document.getElementById('announcementsSection').style.display = 'block'; // Show announcements section
             } catch (error) {
                 console.error('Error loading workplace:', error);
@@ -1999,26 +1999,26 @@
             }
         }
 
-        // Load and display workplace notes
-        async function loadWorkplaceNotes() {
-            const notesDiv = document.getElementById('workplaceNotesContent');
-            if (!selectedWorkplace) {
-                notesDiv.innerHTML = '<div class="info">No workplace selected.</div>';
-                return;
-            }
-            const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace));
-            const notes = docSnap.exists() && docSnap.data().notes ? docSnap.data().notes : '';
-            if (user.isAdmin) {
-                notesDiv.innerHTML = `<textarea id='workplaceNotesTextarea' rows='4' style='width:100%;border-radius:8px;padding:1rem;'>${notes}</textarea><button class='btn btn-success' id='saveNotesBtn' style='margin-top:0.5rem;'>💾 Save Notes</button>`;
-                document.getElementById('saveNotesBtn').onclick = async function() {
-                    const newNotes = document.getElementById('workplaceNotesTextarea').value;
-                    await updateDoc(doc(db, 'workplaces', selectedWorkplace), { notes: newNotes, updated_at: new Date().toISOString(), updated_by: user.email });
-                    showNotification('✅ Notes updated!', 'success');
-                };
-            } else {
-                notesDiv.innerHTML = `<div style='background:#f8f9fa;padding:1rem;border-radius:8px;'>${notes ? notes.replace(/\n/g, '<br>') : '<span style="color:#888;">No notes for this workplace.</span>'}</div>`;
-            }
-        }
+        // OLD NOTES FUNCTION - REMOVED IN FAVOR OF ANNOUNCEMENTS
+        // async function loadWorkplaceNotes() {
+        //     const notesDiv = document.getElementById('workplaceNotesContent');
+        //     if (!selectedWorkplace) {
+        //         notesDiv.innerHTML = '<div class="info">No workplace selected.</div>';
+        //         return;
+        //     }
+        //     const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace));
+        //     const notes = docSnap.exists() && docSnap.data().notes ? docSnap.data().notes : '';
+        //     if (user.isAdmin) {
+        //         notesDiv.innerHTML = `<textarea id='workplaceNotesTextarea' rows='4' style='width:100%;border-radius:8px;padding:1rem;'>${notes}</textarea><button class='btn btn-success' id='saveNotesBtn' style='margin-top:0.5rem;'>💾 Save Notes</button>`;
+        //         document.getElementById('saveNotesBtn').onclick = async function() {
+        //             const newNotes = document.getElementById('workplaceNotesTextarea').value;
+        //             await updateDoc(doc(db, 'workplaces', selectedWorkplace), 'notes', newNotes);
+        //             showNotification('✅ Notes updated!', 'success');
+        //         };
+        //     } else {
+        //         notesDiv.innerHTML = `<div style='background:#f8f9fa;padding:1rem;border-radius:8px;'>${notes ? notes.replace(/\n/g, '<br>') : '<span style="color:#888;">No notes for this workplace.</span>'}</div>`;
+        //     }
+        // }
 
         // --- ENHANCED ANNOUNCEMENTS SYSTEM ---
         // Load and display announcements
