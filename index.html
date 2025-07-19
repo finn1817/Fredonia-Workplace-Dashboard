@@ -273,6 +273,11 @@
                     throw new Error('Invalid password');
                 }
                 
+                // Check if account is suspended
+                if (userData.suspended === true) {
+                    throw new Error('Account suspended');
+                }
+                
                 // Update login time in database
                 const userDocRef = doc(authDb, 'users', userData.id);
                 await updateDoc(userDocRef, {
@@ -311,6 +316,9 @@
                         break;
                     case 'Invalid password':
                         errorMsg.textContent = 'Incorrect password. Please try again.';
+                        break;
+                    case 'Account suspended':
+                        errorMsg.textContent = '🚫 This account has been suspended. Please contact an administrator.';
                         break;
                     default:
                         errorMsg.textContent = 'Login failed. Please check your credentials and try again.';
