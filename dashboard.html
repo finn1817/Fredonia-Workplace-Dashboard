@@ -1228,6 +1228,213 @@
             color: #666;
             font-size: 0.75rem;
         }
+
+        /* Print Styles for Clean Schedule Printing */
+        @media print {
+            /* Hide all non-essential elements */
+            .header, .sidebar, .modal, .btn, .notification, 
+            .admin-controls, .user-controls, .workplace-selector,
+            .form-container, .request-forms, .announcement-form,
+            .email-change-form, .password-change-form {
+                display: none !important;
+            }
+
+            /* Reset page margins and background */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+
+            body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                font-family: 'Arial', sans-serif !important;
+                line-height: 1.4 !important;
+            }
+
+            /* Main container adjustments */
+            .main-content {
+                margin: 0 !important;
+                padding: 20px !important;
+                width: 100% !important;
+                max-width: none !important;
+            }
+
+            /* Schedule container */
+            .schedule-container {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+
+            /* Schedule header */
+            .schedule-header {
+                text-align: center !important;
+                margin-bottom: 30px !important;
+                padding: 20px 0 !important;
+                border-bottom: 2px solid #333 !important;
+            }
+
+            .schedule-header h1 {
+                font-size: 28px !important;
+                margin: 0 0 10px 0 !important;
+                color: #333 !important;
+                font-weight: bold !important;
+            }
+
+            .schedule-header p {
+                font-size: 16px !important;
+                margin: 5px 0 !important;
+                color: #666 !important;
+            }
+
+            /* Summary cards */
+            .summary-cards {
+                display: flex !important;
+                justify-content: center !important;
+                gap: 40px !important;
+                margin-bottom: 30px !important;
+                page-break-inside: avoid !important;
+            }
+
+            .summary-card {
+                background: #f8f9fa !important;
+                border: 2px solid #333 !important;
+                border-radius: 8px !important;
+                padding: 15px 25px !important;
+                text-align: center !important;
+                min-width: 150px !important;
+            }
+
+            .summary-card .number {
+                font-size: 32px !important;
+                font-weight: bold !important;
+                color: #333 !important;
+                margin-bottom: 5px !important;
+            }
+
+            .summary-card .label {
+                font-size: 14px !important;
+                color: #666 !important;
+                text-transform: uppercase !important;
+                font-weight: bold !important;
+            }
+
+            /* Schedule grid */
+            .schedule-grid {
+                display: grid !important;
+                grid-template-columns: repeat(7, 1fr) !important;
+                gap: 15px !important;
+                margin: 0 !important;
+            }
+
+            /* Day columns */
+            .day-column {
+                background: white !important;
+                border: 2px solid #333 !important;
+                border-radius: 8px !important;
+                padding: 15px !important;
+                min-height: 200px !important;
+                page-break-inside: avoid !important;
+            }
+
+            .day-header {
+                text-align: center !important;
+                font-size: 18px !important;
+                font-weight: bold !important;
+                color: #333 !important;
+                margin-bottom: 15px !important;
+                padding-bottom: 10px !important;
+                border-bottom: 1px solid #ccc !important;
+                text-transform: uppercase !important;
+            }
+
+            /* Shifts */
+            .shift {
+                background: #f8f9fa !important;
+                border: 1px solid #333 !important;
+                border-radius: 6px !important;
+                padding: 12px !important;
+                margin-bottom: 10px !important;
+                page-break-inside: avoid !important;
+            }
+
+            .shift:last-child {
+                margin-bottom: 0 !important;
+            }
+
+            .shift-time {
+                font-size: 14px !important;
+                font-weight: bold !important;
+                color: #333 !important;
+                margin-bottom: 8px !important;
+            }
+
+            .shift-worker {
+                font-size: 13px !important;
+                color: #666 !important;
+                font-weight: normal !important;
+            }
+
+            .shift.work-study {
+                background: #e3f2fd !important;
+                border-color: #2196f3 !important;
+            }
+
+            .shift.work-study .shift-time {
+                color: #1976d2 !important;
+            }
+
+            /* Empty day styling */
+            .day-column.empty {
+                background: #f8f9fa !important;
+                border-style: dashed !important;
+                border-color: #ccc !important;
+            }
+
+            .day-column.empty .day-header {
+                color: #999 !important;
+            }
+
+            /* Page breaks */
+            .day-column {
+                page-break-inside: avoid !important;
+            }
+
+            /* Footer */
+            .print-footer {
+                display: block !important;
+                text-align: center !important;
+                margin-top: 30px !important;
+                padding-top: 20px !important;
+                border-top: 1px solid #ccc !important;
+                font-size: 12px !important;
+                color: #666 !important;
+            }
+
+            .print-footer::before {
+                content: "Generated on " attr(data-date) " | Workplace Scheduler Dashboard";
+            }
+
+            /* Hide all other elements */
+            .schedule-container > *:not(.schedule-header):not(.summary-cards):not(.schedule-grid):not(.print-footer) {
+                display: none !important;
+            }
+
+            /* Ensure proper spacing */
+            .schedule-container {
+                margin-bottom: 20px !important;
+            }
+
+            /* Force background colors to print */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
     </style>
 </head>
 
@@ -1293,6 +1500,7 @@
                     <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
                     <button class="btn btn-secondary" onclick="viewWorkers()" id="viewWorkersBtn">👥 View Workers</button>
                     <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
+                    <button class="btn btn-secondary" onclick="printSchedule()" id="printScheduleBtn">🖨️ Print Schedule</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
@@ -4877,6 +5085,10 @@
             }
             
             html += '</div>';
+            
+            // Add print footer
+            html += `<div class="print-footer" data-date="${new Date().toLocaleDateString()}"></div>`;
+            
             document.getElementById('scheduleDisplay').innerHTML = html;
         }
 
@@ -4961,25 +5173,9 @@
         };
 
         window.printSchedule = function() {
-            // Add print-specific styles
-            const printStyle = document.createElement('style');
-            printStyle.textContent = `
-                @media print {
-                    body * { visibility: hidden; }
-                    .schedule-display, .schedule-display * { visibility: visible; }
-                    .schedule-display { position: absolute; left: 0; top: 0; width: 100%; }
-                    .no-print { display: none !important; }
-                    .print-only { display: block !important; }
-                }
-            `;
-            document.head.appendChild(printStyle);
-            
+            // The print styles are now handled by the CSS @media print rules
+            // Just trigger the print dialog
             window.print();
-            
-            // Remove print styles after printing
-            setTimeout(() => {
-                document.head.removeChild(printStyle);
-            }, 1000);
         };
 
         window.analyzeSchedule = function() {
