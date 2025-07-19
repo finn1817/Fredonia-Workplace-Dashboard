@@ -832,6 +832,16 @@
             color: white;
         }
 
+        .status-badge.pending {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .status-badge.approved {
+            background: #28a745;
+            color: white;
+        }
+
         .swap-details {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1544,8 +1554,20 @@
             appId: "1:153631302747:web:2c731351893dca19510b7e"
         };
 
+        const authConfig = {
+            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+            projectId: "my-admin-dashboard-b9c89",
+            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+            messagingSenderId: "1001105953619",
+            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+            measurementId: "G-DGTX5YCKYF"
+        };
+
         const workplaceApp = initializeApp(workplaceConfig);
+        const authApp = initializeApp(authConfig, 'authApp');
         const db = getFirestore(workplaceApp);
+        const authDb = getFirestore(authApp);
 
         // Global state
         let selectedWorkplace = null;
@@ -5244,23 +5266,7 @@
                     return;
                 }
                 
-                // Import the auth database configuration using dynamic imports
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                // Use the AUTH database config (where user accounts are stored)
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 // Update password in AUTH database using correct document ID
                 const userDocRef = doc(authDb, 'users', user.uid);
@@ -5311,22 +5317,7 @@
             }
             
             try {
-                // Import auth database
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, collection, addDoc, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 // Check if user already has 2 pending requests
                 const pendingRequestsQuery = query(
@@ -5390,21 +5381,7 @@
             listDiv.innerHTML = '<div class="loading">Loading your email change requests...</div>';
             
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, collection, query, where, orderBy, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 const requestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
@@ -6307,21 +6284,7 @@
             listDiv.innerHTML = '<div class="loading">Loading email change requests...</div>';
             
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, collection, query, where, orderBy, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 let requestsQuery;
                 if (filter === 'all') {
@@ -6402,21 +6365,7 @@
             }
             
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, doc, updateDoc, collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 // Update the request status
                 const requestRef = doc(authDb, 'emailChangeRequests', requestId);
@@ -6499,21 +6448,7 @@
             const notes = prompt('Please provide a reason for denying this request (optional):');
             
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 // Update the request status
                 const requestRef = doc(authDb, 'emailChangeRequests', requestId);
@@ -6540,21 +6475,7 @@
             if (!notes) return;
             
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 const requestRef = doc(authDb, 'emailChangeRequests', requestId);
                 await updateDoc(requestRef, {
@@ -6574,21 +6495,7 @@
         // Export email change requests
         window.exportEmailChangeRequests = async function() {
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, collection, query, orderBy, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 const requestsQuery = query(
                     collection(authDb, 'emailChangeRequests'),
@@ -6625,21 +6532,7 @@
         async function updateEmailChangeRequestsBadge() {
             if (!user.isAdmin) return;
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                const { getFirestore, collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-                
-                const authConfig = {
-                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
-                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
-                    projectId: "my-admin-dashboard-b9c89",
-                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
-                    messagingSenderId: "1001105953619",
-                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
-                    measurementId: "G-DGTX5YCKYF"
-                };
-                
-                const authApp = initializeApp(authConfig, 'authApp');
-                const authDb = getFirestore(authApp);
+                // Use pre-initialized auth database
                 
                 const snapshot = await getDocs(query(
                     collection(authDb, 'emailChangeRequests'),
