@@ -606,6 +606,15 @@
             animation: pulse 2s infinite;
         }
 
+        .shift.multiple-workers {
+            border-left: 4px solid #007bff;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+        }
+
+        .shift.multiple-workers:hover {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        }
+
         @keyframes pulse {
             0% { box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(255, 87, 34, 0); }
@@ -2415,24 +2424,45 @@
                         continue;
                     }
                     
-                    // Add worker to shift
-                    if (!shiftAssignments.has(shiftKey)) {
-                        shiftAssignments.set(shiftKey, new Set());
+                    // ENHANCED: Check if there's already a shift at this time that can accommodate this worker
+                    const existingShift = schedule[day]?.find(s => s.start === slotStart && s.end === slotEnd);
+                    
+                    if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
+                        // Add worker to existing shift
+                        existingShift.assigned.push(`${w.first_name} ${w.last_name}`);
+                        existingShift.raw_assigned.push(email);
+                        existingShift.all_available.push(w);
+                        existingShift.is_work_study = true;
+                        
+                        // Add worker to shift tracking
+                        if (!shiftAssignments.has(shiftKey)) {
+                            shiftAssignments.set(shiftKey, new Set());
+                        }
+                        shiftAssignments.get(shiftKey).add(email);
+                        
+                        console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} added to existing shift ${slotStart}-${slotEnd} on ${day}`);
+                    } else {
+                        // Create new shift
+                        if (!shiftAssignments.has(shiftKey)) {
+                            shiftAssignments.set(shiftKey, new Set());
+                        }
+                        shiftAssignments.get(shiftKey).add(email);
+                        
+                        if (!schedule[day]) schedule[day] = [];
+                        
+                        schedule[day].push({
+                            start: slotStart,
+                            end: slotEnd,
+                            assigned: [`${w.first_name} ${w.last_name}`],
+                            available: [`${w.first_name} ${w.last_name}`],
+                            raw_assigned: [email],
+                            all_available: [w],
+                            is_work_study: true,
+                            forced_shift: true // Mark as forced to ensure it's not overridden
+                        });
+                        
+                        console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} created new shift ${slotStart}-${slotEnd} on ${day}`);
                     }
-                    shiftAssignments.get(shiftKey).add(email);
-                    
-                    if (!schedule[day]) schedule[day] = [];
-                    
-                    schedule[day].push({
-                        start: slotStart,
-                        end: slotEnd,
-                        assigned: [`${w.first_name} ${w.last_name}`],
-                        available: [`${w.first_name} ${w.last_name}`],
-                        raw_assigned: [email],
-                        all_available: [w],
-                        is_work_study: true,
-                        forced_shift: true // Mark as forced to ensure it's not overridden
-                    });
                     
                     // CRITICAL FIX: Add hours only once
                     assignedHours[email] += duration;
@@ -2481,25 +2511,47 @@
                                     
                                     const currentWorkers = shiftAssignments.get(shiftKey) || new Set();
                                     if (currentWorkers.size < maxWorkersPerShift) {
-                                        // Add worker to shift tracking
-                                        if (!shiftAssignments.has(shiftKey)) {
-                                            shiftAssignments.set(shiftKey, new Set());
+                                        // ENHANCED: Check if there's already a shift at this time
+                                        const existingShift = schedule[day]?.find(s => s.start === slotStart && s.end === slotEnd);
+                                        
+                                        if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
+                                            // Add worker to existing shift
+                                            existingShift.assigned.push(`${w.first_name} ${w.last_name}`);
+                                            existingShift.raw_assigned.push(email);
+                                            existingShift.all_available.push(w);
+                                            existingShift.is_work_study = true;
+                                            existingShift.fallback_assignment = true;
+                                            
+                                            // Add worker to shift tracking
+                                            if (!shiftAssignments.has(shiftKey)) {
+                                                shiftAssignments.set(shiftKey, new Set());
+                                            }
+                                            shiftAssignments.get(shiftKey).add(email);
+                                            
+                                            console.log(`Fallback assignment: ${w.first_name} ${w.last_name} added to existing shift ${slotStart}-${slotEnd}`);
+                                        } else {
+                                            // Create new shift
+                                            if (!shiftAssignments.has(shiftKey)) {
+                                                shiftAssignments.set(shiftKey, new Set());
+                                            }
+                                            shiftAssignments.get(shiftKey).add(email);
+                                            
+                                            if (!schedule[day]) schedule[day] = [];
+                                            
+                                            schedule[day].push({
+                                                start: slotStart,
+                                                end: slotEnd,
+                                                assigned: [`${w.first_name} ${w.last_name}`],
+                                                available: [`${w.first_name} ${w.last_name}`],
+                                                raw_assigned: [email],
+                                                all_available: [w],
+                                                is_work_study: true,
+                                                forced_shift: true,
+                                                fallback_assignment: true
+                                            });
+                                            
+                                            console.log(`Fallback assignment: ${w.first_name} ${w.last_name} created new shift ${slotStart}-${slotEnd}`);
                                         }
-                                        shiftAssignments.get(shiftKey).add(email);
-                                        
-                                        if (!schedule[day]) schedule[day] = [];
-                                        
-                                        schedule[day].push({
-                                            start: slotStart,
-                                            end: slotEnd,
-                                            assigned: [`${w.first_name} ${w.last_name}`],
-                                            available: [`${w.first_name} ${w.last_name}`],
-                                            raw_assigned: [email],
-                                            all_available: [w],
-                                            is_work_study: true,
-                                            forced_shift: true,
-                                            fallback_assignment: true
-                                        });
                                         
                                         // CRITICAL FIX: Add hours only once
                                         assignedHours[email] += assignDuration;
@@ -2550,25 +2602,47 @@
                                         continue;
                                     }
                                     
-                                    // Add worker to shift tracking
-                                    if (!shiftAssignments.has(shiftKey)) {
-                                        shiftAssignments.set(shiftKey, new Set());
+                                    // ENHANCED: Check if there's already a shift at this time
+                                    const existingShift = schedule[day]?.find(s => s.start === slotStart && s.end === slotEnd);
+                                    
+                                    if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
+                                        // Add worker to existing shift
+                                        existingShift.assigned.push(`${w.first_name} ${w.last_name}`);
+                                        existingShift.raw_assigned.push(email);
+                                        existingShift.all_available.push(w);
+                                        existingShift.is_work_study = true;
+                                        existingShift.last_resort_assignment = true;
+                                        
+                                        // Add worker to shift tracking
+                                        if (!shiftAssignments.has(shiftKey)) {
+                                            shiftAssignments.set(shiftKey, new Set());
+                                        }
+                                        shiftAssignments.get(shiftKey).add(email);
+                                        
+                                        console.log(`LAST RESORT assignment: ${w.first_name} ${w.last_name} added to existing shift ${slotStart}-${slotEnd}`);
+                                    } else {
+                                        // Create new shift
+                                        if (!shiftAssignments.has(shiftKey)) {
+                                            shiftAssignments.set(shiftKey, new Set());
+                                        }
+                                        shiftAssignments.get(shiftKey).add(email);
+                                        
+                                        if (!schedule[day]) schedule[day] = [];
+                                        
+                                        schedule[day].push({
+                                            start: slotStart,
+                                            end: slotEnd,
+                                            assigned: [`${w.first_name} ${w.last_name}`],
+                                            available: [`${w.first_name} ${w.last_name}`],
+                                            raw_assigned: [email],
+                                            all_available: [w],
+                                            is_work_study: true,
+                                            forced_shift: true,
+                                            last_resort_assignment: true
+                                        });
+                                        
+                                        console.log(`LAST RESORT assignment: ${w.first_name} ${w.last_name} created new shift ${slotStart}-${slotEnd}`);
                                     }
-                                    shiftAssignments.get(shiftKey).add(email);
-                                    
-                                    if (!schedule[day]) schedule[day] = [];
-                                    
-                                    schedule[day].push({
-                                        start: slotStart,
-                                        end: slotEnd,
-                                        assigned: [`${w.first_name} ${w.last_name}`],
-                                        available: [`${w.first_name} ${w.last_name}`],
-                                        raw_assigned: [email],
-                                        all_available: [w],
-                                        is_work_study: true,
-                                        forced_shift: true,
-                                        last_resort_assignment: true
-                                    });
                                     
                                     // CRITICAL FIX: Add hours only once
                                     assignedHours[email] += assignDuration;
@@ -2763,36 +2837,49 @@
 
                                 const chosen = availableWorkers.slice(0, maxWorkersPerShift);
 
-                                // CRITICAL FIX: Assign shifts with duplicate checking using new tracking
-                                for (const x of chosen) {
+                                // ENHANCED: Create a single consolidated shift for multiple workers
+                                if (chosen.length > 0) {
                                     const shiftStart = hourToTime(cur);
                                     const shiftEnd = hourToTime(finalEndShift);
                                     const shiftKey = `${day}_${shiftStart}_${shiftEnd}`;
                                     
-                                    // CRITICAL FIX: Check for duplicate assignment
-                                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(x.email)) {
-                                        console.warn(`⚠️ Worker ${x.first_name} ${x.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping assignment`);
-                                        continue;
+                                    // Collect all workers for this shift
+                                    const assignedWorkers = [];
+                                    const rawAssigned = [];
+                                    
+                                    for (const x of chosen) {
+                                        // CRITICAL FIX: Check for duplicate assignment
+                                        if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(x.email)) {
+                                            console.warn(`⚠️ Worker ${x.first_name} ${x.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping assignment`);
+                                            continue;
+                                        }
+                                        
+                                        // Add worker to shift tracking
+                                        if (!shiftAssignments.has(shiftKey)) {
+                                            shiftAssignments.set(shiftKey, new Set());
+                                        }
+                                        shiftAssignments.get(shiftKey).add(x.email);
+                                        
+                                        // CRITICAL FIX: Add hours only once
+                                        assignedHours[x.email] += finalDuration;
+                                        console.log(`Adding ${x.first_name} ${x.last_name} to shift: ${shiftStart}-${shiftEnd}`);
+                                        
+                                        assignedWorkers.push(`${x.first_name} ${x.last_name}`);
+                                        rawAssigned.push(x.email);
                                     }
                                     
-                                    // Add worker to shift tracking
-                                    if (!shiftAssignments.has(shiftKey)) {
-                                        shiftAssignments.set(shiftKey, new Set());
+                                    // Create a single consolidated shift with all workers
+                                    if (assignedWorkers.length > 0) {
+                                        schedule[day].push({
+                                            start: shiftStart,
+                                            end: shiftEnd,
+                                            assigned: assignedWorkers,
+                                            available: availableWorkers.map(y => `${y.first_name} ${y.last_name}`),
+                                            raw_assigned: rawAssigned,
+                                            all_available: availableWorkers,
+                                            workers_count: assignedWorkers.length
+                                        });
                                     }
-                                    shiftAssignments.get(shiftKey).add(x.email);
-                                    
-                                    // CRITICAL FIX: Add hours only once
-                                    assignedHours[x.email] += finalDuration;
-                                    console.log(`Creating shift: ${shiftStart}-${shiftEnd} for ${x.first_name} ${x.last_name}`);
-                                    
-                                    schedule[day].push({
-                                        start: shiftStart,
-                                        end: shiftEnd,
-                                        assigned: [`${x.first_name} ${x.last_name}`],
-                                        available: availableWorkers.map(y => `${y.first_name} ${y.last_name}`),
-                                        raw_assigned: [x.email],
-                                        all_available: availableWorkers
-                                    });
                                 }
 
                                 // Mark unfilled if we couldn't fill all positions
@@ -2947,25 +3034,46 @@
                         continue;
                     }
                     
-                    // Add worker to shift tracking
-                    if (!shiftAssignments.has(shiftKey)) {
-                        shiftAssignments.set(shiftKey, new Set());
+                    // ENHANCED: Check if there's already a shift at this time that can accommodate this worker
+                    const existingShift = schedule[us.day]?.find(s => s.start === us.start && s.end === us.end);
+                    
+                    if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
+                        // Add worker to existing shift
+                        existingShift.assigned.push(`${chosen.first_name} ${chosen.last_name}`);
+                        existingShift.raw_assigned.push(chosen.email);
+                        existingShift.all_available.push(chosen);
+                        existingShift.forced = true;
+                        
+                        // Add worker to shift tracking
+                        if (!shiftAssignments.has(shiftKey)) {
+                            shiftAssignments.set(shiftKey, new Set());
+                        }
+                        shiftAssignments.get(shiftKey).add(chosen.email);
+                        
+                        console.log(`Forced assignment: ${chosen.first_name} ${chosen.last_name} added to existing shift ${us.start}-${us.end}`);
+                    } else {
+                        // Create new shift
+                        if (!shiftAssignments.has(shiftKey)) {
+                            shiftAssignments.set(shiftKey, new Set());
+                        }
+                        shiftAssignments.get(shiftKey).add(chosen.email);
+                        
+                        // CRITICAL FIX: Add hours only once
+                        assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
+                        
+                        if (!schedule[us.day]) schedule[us.day] = [];
+                        schedule[us.day].push({
+                            start: us.start,
+                            end: us.end,
+                            assigned: [`${chosen.first_name} ${chosen.last_name}`],
+                            available: eligible.map(w => `${w.first_name} ${w.last_name}`),
+                            raw_assigned: [chosen.email],
+                            all_available: eligible,
+                            forced: true
+                        });
+                        
+                        console.log(`Forced assignment: ${chosen.first_name} ${chosen.last_name} created new shift ${us.start}-${us.end}`);
                     }
-                    shiftAssignments.get(shiftKey).add(chosen.email);
-                    
-                    // CRITICAL FIX: Add hours only once
-                    assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
-                    
-                    if (!schedule[us.day]) schedule[us.day] = [];
-                    schedule[us.day].push({
-                        start: us.start,
-                        end: us.end,
-                        assigned: [`${chosen.first_name} ${chosen.last_name}`],
-                        available: eligible.map(w => `${w.first_name} ${w.last_name}`),
-                        raw_assigned: [chosen.email],
-                        all_available: eligible,
-                        forced: true
-                    });
                     forcedAssignments.push({
                         day: us.day,
                         start: us.start,
@@ -3029,25 +3137,47 @@
                                         continue;
                                     }
                                     
-                                    // Add worker to shift tracking
-                                    if (!shiftAssignments.has(shiftKey)) {
-                                        shiftAssignments.set(shiftKey, new Set());
+                                    // ENHANCED: Check if there's already a shift at this time
+                                    const existingShift = schedule[day]?.find(s => s.start === slotStart && s.end === slotEnd);
+                                    
+                                    if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
+                                        // Add worker to existing shift
+                                        existingShift.assigned.push(`${w.first_name} ${w.last_name}`);
+                                        existingShift.raw_assigned.push(w.email);
+                                        existingShift.all_available.push(w);
+                                        existingShift.is_work_study = true;
+                                        existingShift.emergency_assignment = true;
+                                        
+                                        // Add worker to shift tracking
+                                        if (!shiftAssignments.has(shiftKey)) {
+                                            shiftAssignments.set(shiftKey, new Set());
+                                        }
+                                        shiftAssignments.get(shiftKey).add(w.email);
+                                        
+                                        console.log(`EMERGENCY assignment: ${w.first_name} ${w.last_name} added to existing shift ${slotStart}-${slotEnd}`);
+                                    } else {
+                                        // Create new shift
+                                        if (!shiftAssignments.has(shiftKey)) {
+                                            shiftAssignments.set(shiftKey, new Set());
+                                        }
+                                        shiftAssignments.get(shiftKey).add(w.email);
+                                        
+                                        if (!schedule[day]) schedule[day] = [];
+                                        
+                                        schedule[day].push({
+                                            start: slotStart,
+                                            end: slotEnd,
+                                            assigned: [`${w.first_name} ${w.last_name}`],
+                                            available: [`${w.first_name} ${w.last_name}`],
+                                            raw_assigned: [w.email],
+                                            all_available: [w],
+                                            is_work_study: true,
+                                            forced_shift: true,
+                                            emergency_assignment: true
+                                        });
+                                        
+                                        console.log(`EMERGENCY assignment: ${w.first_name} ${w.last_name} created new shift ${slotStart}-${slotEnd}`);
                                     }
-                                    shiftAssignments.get(shiftKey).add(w.email);
-                                    
-                                    if (!schedule[day]) schedule[day] = [];
-                                    
-                                    schedule[day].push({
-                                        start: slotStart,
-                                        end: slotEnd,
-                                        assigned: [`${w.first_name} ${w.last_name}`],
-                                        available: [`${w.first_name} ${w.last_name}`],
-                                        raw_assigned: [w.email],
-                                        all_available: [w],
-                                        is_work_study: true,
-                                        forced_shift: true,
-                                        emergency_assignment: true
-                                    });
                                     
                                     assignedHours[w.email] += assignDuration;
                                     console.log(`EMERGENCY assignment: ${w.first_name} ${w.last_name} force assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
@@ -4599,6 +4729,7 @@
             const unfilledShifts = Object.values(schedule).flat().filter(s => s.assigned.includes('Unfilled') || s.assigned.includes('COVERAGE GAP')).length;
             const filledShifts = totalShifts - unfilledShifts;
             const coveragePercentage = totalShifts > 0 ? ((filledShifts / totalShifts) * 100).toFixed(1) : 0;
+            const multipleWorkerShifts = Object.values(schedule).flat().filter(s => s.assigned.length > 1).length;
             
             let html = '<div class="schedule-display">';
             
@@ -4629,6 +4760,10 @@
                     <div class="stat-card">
                         <div class="stat-number">${coverageGaps.length}</div>
                         <div class="stat-label">Coverage Gaps</div>
+                    </div>
+                    <div class="stat-card" style="background: #007bff;">
+                        <div class="stat-number">${multipleWorkerShifts}</div>
+                        <div class="stat-label">Team Shifts</div>
                     </div>
                 </div>
             `;
@@ -4662,6 +4797,7 @@
                     else if (unfilled) shiftClass += ' unfilled';
                     else if (workStudy) shiftClass += ' work-study';
                     if (isForced) shiftClass += ' forced-shift';
+                    if (shift.assigned.length > 1) shiftClass += ' multiple-workers';
                     
                     html += `
                         <div class="${shiftClass}">
@@ -4671,7 +4807,10 @@
                                 ${isGap ? '<span style="color: #ff5722; margin-left: 0.5rem;">(CRITICAL GAP)</span>' : ''}
                                 ${isForced ? '<span style="color: #e53935; margin-left: 0.5rem; font-weight: bold;">(FORCED)</span>' : ''}
                                 <div style="margin-top: 0.25rem; font-size: 0.9rem;">
-                                    ${shift.assigned.join(', ')}
+                                    ${shift.assigned.length > 1 ? 
+                                        `<span style="color: #007bff; font-weight: 600;">👥 ${shift.assigned.length} Workers:</span> ${shift.assigned.join(', ')}` :
+                                        shift.assigned.join(', ')
+                                    }
                                 </div>
                             </div>
                             ${user.isAdmin ? `
