@@ -1508,14 +1508,7 @@
         const timeToHour = (timeStr) => {
             if (!timeStr) return 0;
             const [h, m] = timeStr.split(':').map(Number);
-            // Handle midnight (00:00) correctly - convert to 0 hours
-            if (h === 0) {
-                return m / 60; // 00:00 becomes 0.0, 00:30 becomes 0.5, etc.
-            }
-            // Handle 12-hour format midnight (12:00 AM) correctly - convert to 0 hours
-            if (h === 12) {
-                return m / 60; // 12:00 becomes 0.0, 12:30 becomes 0.5, etc.
-            }
+            // Convert to 24-hour format for internal calculations
             return h + (m / 60);
         };
 
@@ -2941,10 +2934,12 @@
                                 <div class="time-input">
                                     <label>Start:</label>
                                     <input type="time" class="start-time" value="09:00">
+                                    <small style="color: #666; font-size: 0.8rem;">9:00 AM</small>
                                 </div>
                                 <div class="time-input">
                                     <label>End:</label>
                                     <input type="time" class="end-time" value="17:00">
+                                    <small style="color: #666; font-size: 0.8rem;">5:00 PM</small>
                                 </div>
                                 <button class="btn btn-danger btn-sm" onclick="removeTimeBlock('${day}', 0)" style="display: none;">🗑️</button>
                             </div>
@@ -2958,10 +2953,12 @@
                                     <div class="time-input">
                                         <label>Start:</label>
                                         <input type="time" class="start-time" value="${hourBlock.start}">
+                                        <small style="color: #666; font-size: 0.8rem;">${formatTime(hourBlock.start)}</small>
                                     </div>
                                     <div class="time-input">
                                         <label>End:</label>
                                         <input type="time" class="end-time" value="${hourBlock.end}">
+                                        <small style="color: #666; font-size: 0.8rem;">${formatTime(hourBlock.end)}</small>
                                     </div>
                                     <button class="btn btn-danger btn-sm" onclick="removeTimeBlock('${day}', ${index})">🗑️</button>
                                 </div>
@@ -2989,7 +2986,25 @@
             
             document.getElementById('hoursModalContent').innerHTML = html;
             document.getElementById('hoursModal').style.display = 'block';
+            
+            // Add real-time AM/PM display updates
+            addTimeDisplayListeners();
         };
+
+        // Add real-time AM/PM display updates
+        function addTimeDisplayListeners() {
+            const timeInputs = document.querySelectorAll('.time-input input[type="time"]');
+            timeInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    const timeBlock = this.closest('.time-block');
+                    const timeInput = this.closest('.time-input');
+                    const smallElement = timeInput.querySelector('small');
+                    if (smallElement) {
+                        smallElement.textContent = formatTime(this.value);
+                    }
+                });
+            });
+        }
 
         // New simplified hours management functions
         window.toggleDayHours = function(day) {
@@ -3018,10 +3033,12 @@
                     <div class="time-input">
                         <label>Start:</label>
                         <input type="time" class="start-time" value="09:00">
+                        <small style="color: #666; font-size: 0.8rem;">9:00 AM</small>
                     </div>
                     <div class="time-input">
                         <label>End:</label>
                         <input type="time" class="end-time" value="17:00">
+                        <small style="color: #666; font-size: 0.8rem;">5:00 PM</small>
                     </div>
                     <button class="btn btn-danger btn-sm" onclick="removeTimeBlock('${day}', ${newIndex})">🗑️</button>
                 </div>
@@ -3030,6 +3047,18 @@
             // Insert before the "Add Time Block" button
             const addButton = timeBlocksDiv.querySelector('button[onclick*="addTimeBlock"]');
             timeBlocksDiv.insertBefore(newBlock, addButton);
+            
+            // Add listeners to the new block
+            const newInputs = newBlock.querySelectorAll('input[type="time"]');
+            newInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    const timeInput = this.closest('.time-input');
+                    const smallElement = timeInput.querySelector('small');
+                    if (smallElement) {
+                        smallElement.textContent = formatTime(this.value);
+                    }
+                });
+            });
         };
 
         window.removeTimeBlock = function(day, index) {
@@ -3090,10 +3119,15 @@
                             const start = startInput.value;
                             const end = endInput.value;
                             
-                            if (timeToHour(end) <= timeToHour(start)) {
-                                showNotification(`❌ ${day}: End time must be after start time`, 'error');
-                                hasErrors = true;
-                                return;
+                            // Handle overnight shifts properly
+                            let startHour = timeToHour(start);
+                            let endHour = timeToHour(end);
+                            
+                            // If end time is earlier than start time, it's an overnight shift
+                            if (endHour <= startHour) {
+                                // This is valid for overnight shifts (e.g., 2 PM to 12 AM)
+                                // The system will handle this correctly in scheduling
+                                console.log(`✅ Valid overnight shift for ${day}: ${start} to ${end}`);
                             }
                             
                             dayHours.push({ start, end });
