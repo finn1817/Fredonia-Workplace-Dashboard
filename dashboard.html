@@ -2196,6 +2196,9 @@
             document.getElementById('generateBtn').style.display = 'none';
         }
 
+        // Set current user for role-based access
+        window.currentUser = user;
+
         // Firebase setup
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
         import { 
@@ -2229,6 +2232,7 @@
         // Global state
         let selectedWorkplace = null;
         let workers = [];
+        let workplaces = []; // <-- Added for role-based access
         let hours = {};
         let editingWorkerId = null;
         let schedule = {};
@@ -6284,6 +6288,19 @@
                 const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
                 console.log(`✅ Connected! Found ${workplacesSnapshot.size} workplaces in database.`);
                 showNotification('✅ Database connection successful', 'success');
+                
+                // Load workplaces for role initialization
+                workplaces = [];
+                workplacesSnapshot.forEach(doc => {
+                    workplaces.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Initialize user role and permissions
+                if (window.initializeUserRole && window.currentUser) {
+                    initializeUserRole(window.currentUser);
+                    console.log('✅ User role initialized:', currentUserRole);
+                }
+                
             } catch (error) {
                 console.error('❌ Connection test failed:', error);
                 showNotification('❌ Database connection failed', 'error');
