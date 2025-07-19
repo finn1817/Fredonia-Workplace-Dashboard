@@ -5291,23 +5291,37 @@
 
         // 4. Handle shift swap request form submission
         document.getElementById('shiftSwapRequestForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const requesterShiftData = JSON.parse(document.getElementById('swapRequesterShiftTime').value || '{}');
-            const targetWorkerEmail = document.getElementById('swapTargetWorker').value;
-            const targetShiftDate = document.getElementById('swapTargetShiftDate').value;
-            const targetShiftTime = document.getElementById('swapTargetShiftTime').value;
-            const reason = document.getElementById('swapReason').value.trim();
-            
-            if (!requesterShiftData.day || !targetWorkerEmail || !targetShiftDate || !targetShiftTime) {
-                showNotification('❌ Please fill in all required fields', 'error');
-                return;
-            }
+            try {
+                console.log('DEBUG: Form submission started');
+                e.preventDefault();
+                
+                console.log('DEBUG: Getting form values...');
+                const requesterShiftData = JSON.parse(document.getElementById('swapRequesterShiftTime').value || '{}');
+                const targetWorkerEmail = document.getElementById('swapTargetWorker').value;
+                const targetShiftDate = document.getElementById('swapTargetShiftDate').value;
+                const targetShiftTime = document.getElementById('swapTargetShiftTime').value;
+                const reason = document.getElementById('swapReason').value.trim();
+                
+                console.log('DEBUG: Form values:', { requesterShiftData, targetWorkerEmail, targetShiftDate, targetShiftTime, reason });
+                
+                if (!requesterShiftData.day || !targetWorkerEmail || !targetShiftDate || !targetShiftTime) {
+                    showNotification('❌ Please fill in all required fields', 'error');
+                    return;
+                }
             
             try {
                 console.log('DEBUG: Submitting shift swap request...');
                 console.log('DEBUG: Workplace:', selectedWorkplace);
                 console.log('DEBUG: User:', user.email);
+                
+                // Get target worker data directly from Firestore
+                console.log('DEBUG: Getting worker data for:', targetWorkerEmail);
+                const workersSnap = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                const targetWorker = workersSnap.docs.find(doc => doc.data().Email === targetWorkerEmail);
+                const targetWorkerName = targetWorker ? 
+                    `${targetWorker.data()['First Name']} ${targetWorker.data()['Last Name']}` : 
+                    targetWorkerEmail;
+                console.log('DEBUG: Target worker name:', targetWorkerName);
                 
                 // Create shift swap request
                 await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), {
@@ -5321,7 +5335,7 @@
                         shiftIndex: requesterShiftData.shiftIndex
                     },
                     targetWorkerId: targetWorkerEmail,
-                    targetWorkerName: workers.find(w => w.email === targetWorkerEmail)?.first_name + ' ' + workers.find(w => w.email === targetWorkerEmail)?.last_name,
+                    targetWorkerName: targetWorkerName,
                     targetWorkerEmail: targetWorkerEmail,
                     targetWorkerShift: {
                         date: targetShiftDate,
@@ -5343,6 +5357,10 @@
                 console.error('DEBUG: Error submitting shift swap request:', error);
                 showNotification('❌ Failed to submit shift swap request', 'error');
             }
+        } catch (outerError) {
+            console.error('DEBUG: Outer error in form submission:', outerError);
+            showNotification('❌ Form submission failed', 'error');
+        }
         });
 
         // 5. Load and display shift swap requests
