@@ -203,7 +203,7 @@
 
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-        import { getFirestore, collection, query, where, getDocs, addDoc } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+        import { getFirestore, collection, query, where, getDocs, addDoc, updateDoc, doc } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
         // AUTH DATABASE CONFIG
         const authConfig = {
@@ -272,6 +272,12 @@
                 if (userData.password !== password) {
                     throw new Error('Invalid password');
                 }
+                
+                // Update login time in database
+                const userDocRef = doc(authDb, 'users', userData.id);
+                await updateDoc(userDocRef, {
+                    loginTime: new Date().toISOString()
+                });
                 
                 // Store user info including admin status and profile fields
                 const userInfo = {
@@ -371,17 +377,26 @@
                     errorMsg.style.display = 'block';
                     return;
                 }
-                // Add user
-                await addDoc(usersRef, {
+                // Add user with initial login time
+                const newUserRef = await addDoc(usersRef, {
                     firstName,
                     lastName,
                     phone,
                     email,
                     password,
-                    isAdmin: 0
+                    isAdmin: 0,
+                    loginTime: new Date().toISOString()
                 });
                 // Log in the user
-                localStorage.setItem('user', JSON.stringify({ email, isAdmin: false, loginTime: new Date().toISOString() }));
+                localStorage.setItem('user', JSON.stringify({ 
+                    email, 
+                    isAdmin: false, 
+                    loginTime: new Date().toISOString(),
+                    uid: newUserRef.id,
+                    firstName,
+                    lastName,
+                    phone
+                }));
                 window.location.href = 'dashboard.html';
             } catch (err) {
                 errorMsg.textContent = 'Registration failed. Please try again.';

@@ -4205,7 +4205,14 @@
                         const name = data.authUser ? `${data.authUser.firstName} ${data.authUser.lastName}` : 
                                    (data.workplaceWorker ? `${data.workplaceWorker.first_name} ${data.workplaceWorker.last_name}` : 'Unknown');
                         const phone = data.authUser?.phone || '-';
-                        const lastLogin = data.authUser?.loginTime ? new Date(data.authUser.loginTime).toLocaleDateString() : 'Never';
+                        const lastLogin = data.authUser?.loginTime ? 
+                            new Date(data.authUser.loginTime).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            }) : 'Never';
                         
                         const roleBadge = data.role === 'ADMIN' ? 
                             '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">ADMIN</span>' :
