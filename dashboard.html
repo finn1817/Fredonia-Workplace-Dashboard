@@ -6317,37 +6317,40 @@
                         document.getElementById('userDashboard').style.display = 'none';
                         document.getElementById('userBadge').style.display = 'none';
                         
-                        // Add super admin header if user is super admin
-                        if (userData.isSuperAdmin) {
-                            // Remove existing header if it exists
-                            const existingHeader = document.getElementById('superAdminHeader');
-                            if (existingHeader) {
-                                existingHeader.remove();
-                            }
-                            
-                            const header = document.createElement('div');
-                            header.id = 'superAdminHeader';
-                            header.style.cssText = `
-                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                color: white;
-                                text-align: center;
-                                padding: 1rem;
-                                font-size: 1.5rem;
-                                font-weight: bold;
-                                text-transform: uppercase;
-                                letter-spacing: 2px;
-                                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                                margin-bottom: 1rem;
-                                position: sticky;
-                                top: 0;
-                                z-index: 1000;
-                            `;
-                            header.textContent = '🛡️ SUPER ADMIN DASHBOARD 🛡️';
-                            
-                            // Insert at the top of the page
-                            const mainContent = document.querySelector('.container');
-                            if (mainContent) {
-                                mainContent.insertBefore(header, mainContent.firstChild);
+                        // Show admin header for ALL admin types, not just super admins
+                        if (userData.isSuperAdmin || userData.isAdmin) { // Changed this condition
+                            // Add admin header logic here
+                            if (userData.isSuperAdmin) {
+                                // Remove existing header if it exists
+                                const existingHeader = document.getElementById('superAdminHeader');
+                                if (existingHeader) {
+                                    existingHeader.remove();
+                                }
+                                
+                                const header = document.createElement('div');
+                                header.id = 'superAdminHeader';
+                                header.style.cssText = `
+                                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                    color: white;
+                                    text-align: center;
+                                    padding: 1rem;
+                                    font-size: 1.5rem;
+                                    font-weight: bold;
+                                    text-transform: uppercase;
+                                    letter-spacing: 2px;
+                                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                                    margin-bottom: 1rem;
+                                    position: sticky;
+                                    top: 0;
+                                    z-index: 1000;
+                                `;
+                                header.textContent = '🛡️ SUPER ADMIN DASHBOARD 🛡️';
+                                
+                                // Insert at the top of the page
+                                const mainContent = document.querySelector('.container');
+                                if (mainContent) {
+                                    mainContent.insertBefore(header, mainContent.firstChild);
+                                }
                             }
                         }
                     } else {
@@ -6469,6 +6472,11 @@
                     initializeUserRole(window.currentUser);
                     console.log('✅ User role initialized:', currentUserRole);
                     console.log('🔍 Current user workplaces:', currentUserWorkplaces);
+                    
+                    // Update UI for user role
+                    if (window.updateUIForUserRole) {
+                        window.updateUIForUserRole();
+                    }
                     
                     // Load admin users for admin tab
                     if (window.currentUser && (window.currentUser.isAdmin || window.currentUser.isSuperAdmin)) {
@@ -9087,16 +9095,10 @@
         window.hasPermission = function(action, workplaceId = null) {
             switch(currentUserRole) {
                 case USER_ROLES.SUPER_ADMIN:
-                    return true; // Super admin has all permissions
                 case USER_ROLES.WORKPLACE_ADMIN:
-                    // Workplace admin can only manage their assigned workplaces
-                    if (workplaceId && !currentUserWorkplaces.includes(workplaceId)) {
-                        return false;
-                    }
-                    // Workplace admins have the same permissions as super admins for now
+                    // Both admin types have the same UI permissions now
                     return true;
                 case USER_ROLES.USER:
-                    // Regular user permissions
                     const userActions = ['view_schedule', 'view_own_profile'];
                     return userActions.includes(action);
                 default:
@@ -9144,23 +9146,25 @@
 
         // Update UI elements based on user role
         window.updateUIForUserRole = function() {
-            // Hide/show admin features
+            const isAdmin = (currentUserRole === USER_ROLES.SUPER_ADMIN || currentUserRole === USER_ROLES.WORKPLACE_ADMIN);
+            
+            // show/hide admin features - both admin types see everything
             const adminElements = document.querySelectorAll('.admin-only');
             const superAdminElements = document.querySelectorAll('.super-admin-only');
             const workplaceAdminElements = document.querySelectorAll('.workplace-admin-only');
             
             adminElements.forEach(el => {
-                el.style.display = (currentUserRole === USER_ROLES.SUPER_ADMIN || currentUserRole === USER_ROLES.WORKPLACE_ADMIN) ? '' : 'none';
+                el.style.display = isAdmin ? '' : 'none';
             });
             
+            // Both admin types should see "super admin" elements
             superAdminElements.forEach(el => {
-                const shouldShow = (currentUserRole === USER_ROLES.SUPER_ADMIN || currentUserRole === USER_ROLES.WORKPLACE_ADMIN);
-                el.style.display = shouldShow ? '' : 'none';
-                console.log('🔍 Super admin element:', el.textContent, 'should show:', shouldShow, 'current role:', currentUserRole);
+                el.style.display = isAdmin ? '' : 'none';
             });
             
+            // Remove workplace-admin-only distinction or make it show for both
             workplaceAdminElements.forEach(el => {
-                el.style.display = (currentUserRole === USER_ROLES.WORKPLACE_ADMIN) ? '' : 'none';
+                el.style.display = isAdmin ? '' : 'none';
             });
 
             // Update workplace selector
