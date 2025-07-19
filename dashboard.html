@@ -1795,7 +1795,8 @@
 
                 const optimalShifts = findWorkStudyShifts(windows);
 
-                // Assign the shifts found
+                // Assign the shifts found with fallback logic
+                let assignedAny = false;
                 for (const [day, start, end, duration] of optimalShifts) {
                     const slotStart = hourToTime(start);
                     const slotEnd = hourToTime(end);
@@ -1821,15 +1822,130 @@
                         
                         assignedHours[email] += duration;
                         remaining -= duration;
+                        assignedAny = true;
                     } else {
                         // If slot is full, try to find an alternative slot
-                        console.warn(`Work study student ${w.first_name} ${w.last_name} could not be assigned to ${slotStart}-${slotEnd} (slot full)`);
+                        console.warn(`Work study student ${w.first_name} ${w.last_name} could not be assigned to ${slotStart}-${slotEnd} (slot full), looking for alternatives...`);
+                    }
+                }
+                
+                // If we couldn't assign any shifts from optimal solution, try fallback assignment
+                if (!assignedAny && remaining > 0.1) {
+                    console.warn(`Work study student ${w.first_name} ${w.last_name} needs fallback assignment for ${remaining.toFixed(1)} hours`);
+                    
+                    // Find any available slots that can accommodate the remaining hours
+                    for (const [day, ops] of Object.entries(hoursOfOperation)) {
+                        if (remaining <= 0.1) break;
+                        
+                        for (const op of ops) {
+                            if (remaining <= 0.1) break;
+                            
+                            let opStart = timeToHour(op.start);
+                            let opEnd = timeToHour(op.end);
+                            if (opEnd <= opStart) opEnd += 24;
+
+                            for (const a of w.availability[day] || []) {
+                                if (remaining <= 0.1) break;
+                                
+                                const s = Math.max(opStart, a.start_hour);
+                                const e = Math.min(opEnd, a.end_hour);
+                                if (e > s) {
+                                    const availableDuration = e - s;
+                                    const assignDuration = Math.min(availableDuration, remaining);
+                                    
+                                    // Check if this slot is available
+                                    const slotStart = hourToTime(s);
+                                    const slotEnd = hourToTime(s + assignDuration);
+                                    const existingShifts = (schedule[day] || []).filter(shift => 
+                                        shift.start === slotStart && shift.end === slotEnd
+                                    );
+                                    
+                                    if (existingShifts.length < maxWorkersPerShift) {
+                                        if (!schedule[day]) schedule[day] = [];
+                                        
+                                        schedule[day].push({
+                                            start: slotStart,
+                                            end: slotEnd,
+                                            assigned: [`${w.first_name} ${w.last_name}`],
+                                            available: [`${w.first_name} ${w.last_name}`],
+                                            raw_assigned: [email],
+                                            all_available: [w],
+                                            is_work_study: true,
+                                            forced_shift: true,
+                                            fallback_assignment: true
+                                        });
+                                        
+                                        assignedHours[email] += assignDuration;
+                                        remaining -= assignDuration;
+                                        console.log(`Fallback assignment: ${w.first_name} ${w.last_name} assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
                 // Log if we couldn't assign exactly 5 hours
                 if (Math.abs(remaining) > 0.1) {
-                    console.warn(`Work study student ${w.first_name} ${w.last_name} assigned ${(5 - remaining).toFixed(1)} hours instead of 5`);
+                    console.error(`🚨 CRITICAL: Work study student ${w.first_name} ${w.last_name} assigned ${(5 - remaining).toFixed(1)} hours instead of 5 - INSUFFICIENT AVAILABILITY`);
+                    
+                    // LAST RESORT: Force assignment even if it means going over limits
+                    console.warn(`🔄 LAST RESORT: Attempting forced assignment for ${w.first_name} ${w.last_name}`);
+                    
+                    for (const [day, ops] of Object.entries(hoursOfOperation)) {
+                        if (remaining <= 0.1) break;
+                        
+                        for (const op of ops) {
+                            if (remaining <= 0.1) break;
+                            
+                            let opStart = timeToHour(op.start);
+                            let opEnd = timeToHour(op.end);
+                            if (opEnd <= opStart) opEnd += 24;
+
+                            for (const a of w.availability[day] || []) {
+                                if (remaining <= 0.1) break;
+                                
+                                const s = Math.max(opStart, a.start_hour);
+                                const e = Math.min(opEnd, a.end_hour);
+                                if (e > s) {
+                                    const availableDuration = e - s;
+                                    const assignDuration = Math.min(availableDuration, remaining);
+                                    
+                                    // Force assignment regardless of existing shifts
+                                    const slotStart = hourToTime(s);
+                                    const slotEnd = hourToTime(s + assignDuration);
+                                    
+                                    if (!schedule[day]) schedule[day] = [];
+                                    
+                                    schedule[day].push({
+                                        start: slotStart,
+                                        end: slotEnd,
+                                        assigned: [`${w.first_name} ${w.last_name}`],
+                                        available: [`${w.first_name} ${w.last_name}`],
+                                        raw_assigned: [email],
+                                        all_available: [w],
+                                        is_work_study: true,
+                                        forced_shift: true,
+                                        last_resort_assignment: true
+                                    });
+                                    
+                                    assignedHours[email] += assignDuration;
+                                    remaining -= assignDuration;
+                                    console.log(`LAST RESORT assignment: ${w.first_name} ${w.last_name} forced assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (Math.abs(remaining) > 0.1) {
+                        console.error(`🚨 FAILED: Work study student ${w.first_name} ${w.last_name} still has ${remaining.toFixed(1)} unassigned hours after last resort attempt`);
+                    } else {
+                        console.log(`✅ SUCCESS: Work study student ${w.first_name} ${w.last_name} got exactly 5 hours after last resort assignment`);
+                    }
+                } else {
+                    console.log(`✅ Work study student ${w.first_name} ${w.last_name} successfully assigned exactly 5 hours`);
                 }
             }
 
@@ -1902,8 +2018,11 @@
                                     // Skip work study students who already have 5 hours
                                     if (wsStatus[xEmail] && assignedHours[xEmail] >= 5) continue;
                                     
-                                    // Skip work study students who haven't been assigned yet (they get priority in Phase 1)
-                                    if (wsStatus[xEmail] && assignedHours[xEmail] === 0) continue;
+                                    // CRITICAL: Never skip work study students with 0 hours - they MUST be assigned first
+                                    if (wsStatus[xEmail] && assignedHours[xEmail] === 0) {
+                                        console.warn(`🚨 CRITICAL: Work study student ${x.first_name} ${x.last_name} has 0 hours but is being considered for regular assignment - this should not happen!`);
+                                        // Continue to include them in regular assignment as fallback
+                                    }
                                     
                                     if (isWorkerAvailable(x, day, cur, endShift) && 
                                         assignedHours[xEmail] + shiftDuration <= maxHoursPerWorker) {
@@ -1911,8 +2030,40 @@
                                     }
                                 }
 
-                                // Sort by fairness
+                                // Sort by priority: work study students with 0 hours get absolute priority
                                 availableWorkers.sort((a, b) => {
+                                    const aIsWS = wsStatus[a.email];
+                                    const bIsWS = wsStatus[b.email];
+                                    const aHours = assignedHours[a.email] || 0;
+                                    const bHours = assignedHours[b.email] || 0;
+                                    
+                                    // Work study students with 0 hours get absolute priority
+                                    if (aIsWS && aHours === 0 && !bIsWS) return -1;
+                                    if (bIsWS && bHours === 0 && !aIsWS) return 1;
+                                    if (aIsWS && aHours === 0 && bIsWS && bHours === 0) {
+                                        // Among work study students with 0 hours, sort by availability
+                                        const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
+                                        const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                        return ratioA - ratioB;
+                                    }
+                                    
+                                    // Then work study students with less than 5 hours
+                                    if (aIsWS && aHours < 5 && !bIsWS) return -1;
+                                    if (bIsWS && bHours < 5 && !aIsWS) return 1;
+                                    if (aIsWS && aHours < 5 && bIsWS && bHours < 5) {
+                                        return aHours - bHours; // Fewer hours first
+                                    }
+                                    
+                                    // Then regular workers with 0 hours
+                                    if (!aIsWS && aHours === 0 && bIsWS) return -1;
+                                    if (!bIsWS && bHours === 0 && aIsWS) return 1;
+                                    if (!aIsWS && aHours === 0 && !bIsWS && bHours === 0) {
+                                        const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
+                                        const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                        return ratioA - ratioB;
+                                    }
+                                    
+                                    // Finally, sort by fairness ratio
                                     const ratioA = assignedHours[a.email] / Math.max(availabilityHours[a.email], 1);
                                     const ratioB = assignedHours[b.email] / Math.max(availabilityHours[b.email], 1);
                                     return ratioA - ratioB;
@@ -2108,6 +2259,69 @@
                     return null;
                 })
                 .filter(Boolean);
+            
+            // EMERGENCY FIX: Force assign any work study students who still have 0 hours
+            const unassignedWorkStudy = workersData.filter(w => wsStatus[w.email] && assignedHours[w.email] === 0);
+            if (unassignedWorkStudy.length > 0) {
+                console.error(`🚨 EMERGENCY: ${unassignedWorkStudy.length} work study students still have 0 hours! Force assigning...`);
+                
+                for (const w of unassignedWorkStudy) {
+                    console.warn(`🔄 EMERGENCY: Force assigning ${w.first_name} ${w.last_name} to any available slot`);
+                    
+                    // Find ANY available slot and force assign
+                    for (const [day, ops] of Object.entries(hoursOfOperation)) {
+                        if (assignedHours[w.email] >= 5) break;
+                        
+                        for (const op of ops) {
+                            if (assignedHours[w.email] >= 5) break;
+                            
+                            let opStart = timeToHour(op.start);
+                            let opEnd = timeToHour(op.end);
+                            if (opEnd <= opStart) opEnd += 24;
+
+                            for (const a of w.availability[day] || []) {
+                                if (assignedHours[w.email] >= 5) break;
+                                
+                                const s = Math.max(opStart, a.start_hour);
+                                const e = Math.min(opEnd, a.end_hour);
+                                if (e > s) {
+                                    const availableDuration = e - s;
+                                    const remainingNeeded = 5 - assignedHours[w.email];
+                                    const assignDuration = Math.min(availableDuration, remainingNeeded);
+                                    
+                                    // Force create a shift regardless of existing coverage
+                                    const slotStart = hourToTime(s);
+                                    const slotEnd = hourToTime(s + assignDuration);
+                                    
+                                    if (!schedule[day]) schedule[day] = [];
+                                    
+                                    schedule[day].push({
+                                        start: slotStart,
+                                        end: slotEnd,
+                                        assigned: [`${w.first_name} ${w.last_name}`],
+                                        available: [`${w.first_name} ${w.last_name}`],
+                                        raw_assigned: [w.email],
+                                        all_available: [w],
+                                        is_work_study: true,
+                                        forced_shift: true,
+                                        emergency_assignment: true
+                                    });
+                                    
+                                    assignedHours[w.email] += assignDuration;
+                                    console.log(`EMERGENCY assignment: ${w.first_name} ${w.last_name} force assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (assignedHours[w.email] === 0) {
+                        console.error(`🚨 FAILED: Could not assign ANY hours to work study student ${w.first_name} ${w.last_name} - NO AVAILABILITY MATCHES OPERATING HOURS`);
+                    } else {
+                        console.log(`✅ SUCCESS: Emergency assignment gave ${w.first_name} ${w.last_name} ${assignedHours[w.email].toFixed(1)} hours`);
+                    }
+                }
+            }
             
             if (finalWsValidation.length > 0) {
                 console.error('🚨 CRITICAL: Work study validation failed. The following students do not have exactly 5 hours:', 
