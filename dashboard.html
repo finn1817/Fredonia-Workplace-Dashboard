@@ -2991,6 +2991,11 @@
                 workers = [];
                 workersSnapshot.forEach(doc => {
                     try {
+                        // Skip the _metadata document - it's not a real worker
+                        if (doc.id === '_metadata') {
+                            return;
+                        }
+                        
                         const data = doc.data();
                         const availability = parseAvailability(data['Days & Times Available'] || '');
                         
@@ -5380,6 +5385,10 @@
               const existingSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
               const existingEmails = new Set();
               existingSnapshot.forEach(doc => {
+                // Skip the _metadata document - it's not a real worker
+                if (doc.id === '_metadata') {
+                  return;
+                }
                 const data = doc.data();
                 if (data['Email']) existingEmails.add(data['Email'].toLowerCase());
               });
@@ -6683,6 +6692,10 @@
                     const workersSnap = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
                     let deleteCount = 0;
                     for (const docSnap of workersSnap.docs) {
+                        // Skip the _metadata document - it's not a real worker
+                        if (docSnap.id === '_metadata') {
+                            continue;
+                        }
                         await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', docSnap.id));
                         deleteCount++;
                     }
@@ -7150,7 +7163,13 @@
                 // Get target worker data directly from Firestore
                 console.log('DEBUG: Getting worker data for:', targetWorkerEmail);
                 const workersSnap = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
-                const targetWorker = workersSnap.docs.find(doc => doc.data().Email === targetWorkerEmail);
+                const targetWorker = workersSnap.docs.find(doc => {
+                    // Skip the _metadata document - it's not a real worker
+                    if (doc.id === '_metadata') {
+                        return false;
+                    }
+                    return doc.data().Email === targetWorkerEmail;
+                });
                 const targetWorkerName = targetWorker ? 
                     `${targetWorker.data()['First Name']} ${targetWorker.data()['Last Name']}` : 
                     targetWorkerEmail;
