@@ -397,7 +397,105 @@
             color: #856404;
             padding: 1rem;
             border-radius: 8px;
+        }
+
+        /* Announcements Styling */
+        .announcements-grid {
+            display: grid;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .announcement-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .announcement-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+
+        .announcement-card.high-priority {
+            border-left-color: #dc3545;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
+        }
+
+        .announcement-card.medium-priority {
+            border-left-color: #ffc107;
+            background: linear-gradient(135deg, #fffbf0 0%, #fff3cd 100%);
+        }
+
+        .announcement-card.low-priority {
+            border-left-color: #28a745;
+            background: linear-gradient(135deg, #f0fff4 0%, #d4edda 100%);
+        }
+
+        .announcement-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
             margin-bottom: 1rem;
+        }
+
+        .announcement-subject {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+
+        .announcement-meta {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .priority-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .priority-badge.high {
+            background: #dc3545;
+            color: white;
+        }
+
+        .priority-badge.medium {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .priority-badge.low {
+            background: #28a745;
+            color: white;
+        }
+
+        .announcement-message {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+            white-space: pre-wrap;
+        }
+
+        .announcement-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .announcement-actions .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
         }
 
         .success {
@@ -847,6 +945,17 @@
         <div id="workplaceNotesContent"></div>
     </div>
 
+    <!-- Enhanced Announcements Board -->
+    <div id="announcementsSection" class="workplace-section" style="margin-top:1.5rem; display:none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3>📢 Workplace Announcements</h3>
+            <button class="btn btn-success" id="addAnnouncementBtn" style="display: none;">➕ Add Announcement</button>
+        </div>
+        <div id="announcementsContent">
+            <div class="loading">Loading announcements...</div>
+        </div>
+    </div>
+
     <!-- My Account Modal (for all users) -->
     <div id="myAccountModal" class="modal">
         <div class="modal-content" style="max-width: 500px;">
@@ -949,6 +1058,38 @@
             <div id="timeOffRequestsList" style="max-height: 60vh; overflow-y: auto;">
                 <div class="loading">Loading time off requests...</div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal for Add/Edit Announcement -->
+    <div id="announcementModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 id="announcementModalTitle">📢 Add Announcement</h3>
+                <span class="close" onclick="closeModal('announcementModal')">&times;</span>
+            </div>
+            <form id="announcementForm">
+                <div class="form-group">
+                    <label for="announcementSubject">Subject</label>
+                    <input type="text" id="announcementSubject" required placeholder="Enter announcement subject...">
+                </div>
+                <div class="form-group">
+                    <label for="announcementMessage">Message</label>
+                    <textarea id="announcementMessage" rows="6" required placeholder="Enter announcement message..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="announcementPriority">Priority</label>
+                    <select id="announcementPriority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button type="submit" class="btn btn-success" id="saveAnnouncementBtn">💾 Save Announcement</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('announcementModal')">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1788,9 +1929,11 @@
             try {
                 await loadWorkplaceData();
                 await loadWorkplaceNotes();
+                await loadAnnouncements(); // Load announcements
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">✅ Ready! Select an option above to get started.</div>';
                 hideAllForms();
                 document.getElementById('workplaceNotesSection').style.display = 'block';
+                document.getElementById('announcementsSection').style.display = 'block'; // Show announcements section
             } catch (error) {
                 console.error('Error loading workplace:', error);
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="error">❌ Error loading workplace data. Please try again.</div>';
@@ -1876,6 +2019,173 @@
                 notesDiv.innerHTML = `<div style='background:#f8f9fa;padding:1rem;border-radius:8px;'>${notes ? notes.replace(/\n/g, '<br>') : '<span style="color:#888;">No notes for this workplace.</span>'}</div>`;
             }
         }
+
+        // --- ENHANCED ANNOUNCEMENTS SYSTEM ---
+        // Load and display announcements
+        async function loadAnnouncements() {
+            const announcementsDiv = document.getElementById('announcementsContent');
+            const addBtn = document.getElementById('addAnnouncementBtn');
+            
+            if (!selectedWorkplace) {
+                announcementsDiv.innerHTML = '<div class="info">No workplace selected.</div>';
+                return;
+            }
+
+            try {
+                // Show/hide add button for admins
+                if (user.isAdmin) {
+                    addBtn.style.display = 'inline-block';
+                } else {
+                    addBtn.style.display = 'none';
+                }
+
+                // Load announcements from Firestore
+                const announcementsSnapshot = await getDocs(
+                    collection(db, 'workplaces', selectedWorkplace, 'announcements')
+                );
+
+                if (announcementsSnapshot.empty) {
+                    announcementsDiv.innerHTML = '<div class="info">No announcements yet.</div>';
+                    return;
+                }
+
+                // Convert to array and sort by creation date (newest first)
+                const announcements = [];
+                announcementsSnapshot.forEach(doc => {
+                    announcements.push({ id: doc.id, ...doc.data() });
+                });
+                announcements.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+                // Build announcements display
+                let html = '<div class="announcements-grid">';
+                
+                announcements.forEach(announcement => {
+                    const createdDate = new Date(announcement.createdAt).toLocaleDateString();
+                    const priorityClass = announcement.priority || 'medium';
+                    const priorityBadge = announcement.priority || 'medium';
+                    
+                    html += `
+                        <div class="announcement-card ${priorityClass}-priority">
+                            <div class="announcement-header">
+                                <h4 class="announcement-subject">${announcement.subject}</h4>
+                                <div class="announcement-meta">
+                                    <span class="priority-badge ${priorityBadge}">${priorityBadge}</span>
+                                    <span>${createdDate}</span>
+                                    ${user.isAdmin ? `<span>by ${announcement.createdBy}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="announcement-message">${announcement.message.replace(/\n/g, '<br>')}</div>
+                            ${user.isAdmin ? `
+                                <div class="announcement-actions">
+                                    <button class="btn btn-info" onclick="editAnnouncement('${announcement.id}')">✏️ Edit</button>
+                                    <button class="btn btn-danger" onclick="deleteAnnouncement('${announcement.id}')">🗑️ Delete</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                announcementsDiv.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error loading announcements:', error);
+                announcementsDiv.innerHTML = '<div class="error">Failed to load announcements.</div>';
+            }
+        }
+
+        // Add announcement button handler
+        if (user.isAdmin) {
+            document.getElementById('addAnnouncementBtn').onclick = function() {
+                document.getElementById('announcementModalTitle').textContent = '📢 Add Announcement';
+                document.getElementById('announcementSubject').value = '';
+                document.getElementById('announcementMessage').value = '';
+                document.getElementById('announcementPriority').value = 'medium';
+                document.getElementById('announcementModal').style.display = 'block';
+            };
+        }
+
+        // Announcement form submission
+        const announcementForm = document.getElementById('announcementForm');
+        announcementForm.onsubmit = async function(e) {
+            e.preventDefault();
+            
+            const subject = document.getElementById('announcementSubject').value.trim();
+            const message = document.getElementById('announcementMessage').value.trim();
+            const priority = document.getElementById('announcementPriority').value;
+            
+            if (!selectedWorkplace) {
+                showNotification('❌ Please select a workplace first', 'error');
+                return;
+            }
+            
+            if (!subject || !message) {
+                showNotification('❌ Subject and message are required', 'error');
+                return;
+            }
+            
+            try {
+                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'announcements'), {
+                    subject,
+                    message,
+                    priority,
+                    createdBy: user.email,
+                    createdAt: new Date().toISOString(),
+                    isActive: true
+                });
+                
+                showNotification('✅ Announcement created successfully!', 'success');
+                closeModal('announcementModal');
+                loadAnnouncements(); // Reload the announcements
+                
+            } catch (error) {
+                console.error('Error creating announcement:', error);
+                showNotification('❌ Failed to create announcement', 'error');
+            }
+        };
+
+        // Edit announcement
+        window.editAnnouncement = async function(announcementId) {
+            try {
+                const announcementDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'announcements', announcementId));
+                if (!announcementDoc.exists()) {
+                    showNotification('❌ Announcement not found', 'error');
+                    return;
+                }
+                
+                const announcement = announcementDoc.data();
+                
+                document.getElementById('announcementModalTitle').textContent = '📢 Edit Announcement';
+                document.getElementById('announcementSubject').value = announcement.subject;
+                document.getElementById('announcementMessage').value = announcement.message;
+                document.getElementById('announcementPriority').value = announcement.priority || 'medium';
+                
+                // Store the announcement ID for updating
+                document.getElementById('announcementModal').setAttribute('data-edit-id', announcementId);
+                document.getElementById('announcementModal').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading announcement for edit:', error);
+                showNotification('❌ Failed to load announcement', 'error');
+            }
+        };
+
+        // Delete announcement
+        window.deleteAnnouncement = async function(announcementId) {
+            if (!confirm('Are you sure you want to delete this announcement? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'announcements', announcementId));
+                showNotification('✅ Announcement deleted successfully!', 'success');
+                loadAnnouncements(); // Reload the announcements
+                
+            } catch (error) {
+                console.error('Error deleting announcement:', error);
+                showNotification('❌ Failed to delete announcement', 'error');
+            }
+        };
 
         // Enhanced admin functions with permission checks
         window.showManageHours = async function() {
