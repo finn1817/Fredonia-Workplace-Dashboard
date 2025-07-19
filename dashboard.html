@@ -4169,10 +4169,14 @@
                         </select>
                         <select id="userFilterStatus" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
                             <option value="all">All Status</option>
-                            <option value="active">Has Account or In Scheduler</option>
-                            <option value="inactive">No Account or Not In Scheduler</option>
                             <option value="connected">Fully Connected (Both)</option>
-                            <option value="disconnected">Partially Connected</option>
+                            <option value="auth_only">Has Account Only</option>
+                            <option value="scheduler_only">In Scheduler Only</option>
+                            <option value="neither">No Account & Not In Scheduler</option>
+                            <option value="suspended">Suspended Accounts</option>
+                            <option value="active">Active Accounts</option>
+                            <option value="never_logged_in">Never Logged In</option>
+                            <option value="recent_login">Logged In Recently (7 days)</option>
                         </select>
                     </div>
                 `;
@@ -4494,6 +4498,23 @@
             }
         }
 
+        // Helper function to check if login was recent (within 7 days)
+        function isRecentLogin(loginText) {
+            if (!loginText || loginText === 'Never') return false;
+            
+            try {
+                // Parse the login text (format: "Dec 15, 2024, 02:30 PM")
+                const loginDate = new Date(loginText);
+                const now = new Date();
+                const diffTime = Math.abs(now - loginDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                return diffDays <= 7;
+            } catch (error) {
+                return false;
+            }
+        }
+
         function filterUsers() {
             const searchTerm = document.getElementById('userSearchInput')?.value.toLowerCase() || '';
             const roleFilter = document.getElementById('userFilterRole')?.value || 'all';
@@ -4511,12 +4532,16 @@
                 const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
                 const matchesRole = roleFilter === 'all' || role.includes(roleFilter);
                 
-                // Fixed status filtering to properly check for the actual text content
+                // Enhanced status filtering with more specific options
                 const matchesStatus = statusFilter === 'all' || 
-                    (statusFilter === 'active' && (authStatus.includes('has account') || schedulerStatus.includes('in scheduler'))) ||
-                    (statusFilter === 'inactive' && (authStatus.includes('no account') || schedulerStatus.includes('not in scheduler'))) ||
                     (statusFilter === 'connected' && authStatus.includes('has account') && schedulerStatus.includes('✅ in scheduler')) ||
-                    (statusFilter === 'disconnected' && (authStatus.includes('no account') || schedulerStatus.includes('not in scheduler')));
+                    (statusFilter === 'auth_only' && authStatus.includes('has account') && schedulerStatus.includes('❌ not in scheduler')) ||
+                    (statusFilter === 'scheduler_only' && authStatus.includes('❌ no account') && schedulerStatus.includes('✅ in scheduler')) ||
+                    (statusFilter === 'neither' && authStatus.includes('❌ no account') && schedulerStatus.includes('❌ not in scheduler')) ||
+                    (statusFilter === 'suspended' && authStatus.includes('has account') && row.querySelector('small')?.textContent?.includes('SUSPENDED')) ||
+                    (statusFilter === 'active' && authStatus.includes('has account') && !row.querySelector('small')?.textContent?.includes('SUSPENDED')) ||
+                    (statusFilter === 'never_logged_in' && row.cells[7]?.textContent === 'Never') ||
+                    (statusFilter === 'recent_login' && row.cells[7]?.textContent !== 'Never' && isRecentLogin(row.cells[7]?.textContent));
                 
                 row.style.display = matchesSearch && matchesRole && matchesStatus ? '' : 'none';
             });
