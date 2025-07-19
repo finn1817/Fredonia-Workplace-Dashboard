@@ -4582,8 +4582,19 @@
             };
         }
 
-        // Enhanced schedule display with coverage analysis
+        // Enhanced schedule display with coverage analysis and real-time updates
         function displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, isCurrent = false, coverageGaps = []) {
+            // Update the global schedule variable for real-time analysis
+            window.currentSchedule = schedule;
+            window.currentAssignedHours = assignedHours;
+            
+            // Store analysis data for real-time updates
+            window.scheduleAnalysisData = {
+                coverageGaps,
+                lowHours,
+                unassigned,
+                isCurrent
+            };
             const totalShifts = Object.values(schedule).flat().length;
             const unfilledShifts = Object.values(schedule).flat().filter(s => s.assigned.includes('Unfilled') || s.assigned.includes('COVERAGE GAP')).length;
             const filledShifts = totalShifts - unfilledShifts;
@@ -4869,11 +4880,21 @@
             const wsWithCorrectHours = wsWorkers.filter(w => Math.abs(assignedHours[w.email] - 5) < 0.1).length;
             const wsCompliance = wsWorkers.length > 0 ? (wsWithCorrectHours / wsWorkers.length * 100).toFixed(1) : 100;
 
+            // Enhanced validation and error detection
+            const { coverageGaps } = validateScheduleCoverage(schedule, hours);
+            const wsIssues = wsWorkers
+                .filter(w => Math.abs(assignedHours[w.email] - 5) > 0.1)
+                .map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`);
+            
+            const lowHoursWorkers = workers
+                .filter(w => !w.work_study && assignedHours[w.email] < 3)
+                .map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`);
+
             const modal = document.createElement('div');
             modal.className = 'modal';
             modal.style.display = 'block';
             modal.innerHTML = `
-                <div class="modal-content">
+                <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
                     <div class="modal-header">
                         <h3>📊 Schedule Analysis</h3>
                         <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
@@ -4895,19 +4916,61 @@
                             </div>
                         </div>
                         
-                        <h4>Recommendations</h4>
-                        <ul style="margin: 1rem 0;">
-                            ${coverage < 90 ? '<li>🔴 <strong>Critical:</strong> Schedule has low coverage. Consider adjusting hours or recruiting more workers.</li>' : ''}
-                            ${wsCompliance < 100 ? '<li>🟡 <strong>Work Study:</strong> Some work study students don\'t have exactly 5 hours.</li>' : ''}
-                            ${unfilledCount > 0 ? '<li>🔴 <strong>Unfilled Shifts:</strong> ' + unfilledCount + ' shifts need workers assigned.</li>' : ''}
-                            ${coverage >= 90 && wsCompliance == 100 && unfilledCount == 0 ? '<li>🟢 <strong>Excellent:</strong> Schedule meets all requirements!</li>' : ''}
-                        </ul>
+                        ${coverageGaps.length > 0 ? `
+                        <div class="error" style="background: #ffebee; border: 1px solid #ffcdd2; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                            <h4 style="color: #d32f2f; margin: 0 0 0.5rem 0;">🚨 Critical Coverage Gaps</h4>
+                            <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                                ${coverageGaps.map(gap => 
+                                    `<li><strong>${gap.day}</strong> ${formatTime(gap.start)} - ${formatTime(gap.end)} (${gap.duration.toFixed(1)} hours uncovered)</li>`
+                                ).join('')}
+                            </ul>
+                            <p style="margin: 0.5rem 0 0 0; font-weight: 600; color: #d32f2f;">Action needed: These time periods have no worker coverage during operating hours.</p>
+                        </div>
+                        ` : ''}
+                        
+                        ${wsIssues.length > 0 ? `
+                        <div class="warning" style="background: #fff3e0; border: 1px solid #ffcc02; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                            <h4 style="color: #f57c00; margin: 0 0 0.5rem 0;">🎓 Work Study Issues</h4>
+                            <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                                ${wsIssues.map(issue => `<li>${issue}</li>`).join('')}
+                            </ul>
+                            <p style="margin: 0.5rem 0 0 0; font-weight: 600; color: #f57c00;">Note: Work study students must have exactly 5 hours per week.</p>
+                        </div>
+                        ` : ''}
+                        
+                        ${lowHoursWorkers.length > 0 ? `
+                        <div class="warning" style="background: #fff3e0; border: 1px solid #ffcc02; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                            <h4 style="color: #f57c00; margin: 0 0 0.5rem 0;">⏰ Workers with Insufficient Hours</h4>
+                            <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                                ${lowHoursWorkers.map(worker => `<li>${worker}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                        
+                        <h4>Overall Assessment</h4>
+                        <div style="background: ${coverage >= 90 && wsCompliance == 100 && coverageGaps.length == 0 && wsIssues.length == 0 && lowHoursWorkers.length == 0 ? '#e8f5e8' : '#fff3e0'}; border: 1px solid ${coverage >= 90 && wsCompliance == 100 && coverageGaps.length == 0 && wsIssues.length == 0 && lowHoursWorkers.length == 0 ? '#4caf50' : '#ffcc02'}; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                            ${coverage >= 90 && wsCompliance == 100 && coverageGaps.length == 0 && wsIssues.length == 0 && lowHoursWorkers.length == 0 ? 
+                                '<p style="margin: 0; color: #2e7d32; font-weight: 600;">✅ Excellent: Schedule meets all requirements!</p>' :
+                                '<p style="margin: 0; color: #f57c00; font-weight: 600;">⚠️ Schedule needs attention. Review the issues above.</p>'
+                            }
+                        </div>
                         
                         <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Close</button>
                     </div>
                 </div>
             `;
             document.body.appendChild(modal);
+        };
+
+        // Real-time analysis update function
+        window.updateScheduleAnalysis = function() {
+            // Check if analysis modal is currently open
+            const existingModal = document.querySelector('.modal');
+            if (existingModal && existingModal.querySelector('h3')?.textContent.includes('Schedule Analysis')) {
+                // Close the existing modal and reopen with updated data
+                existingModal.remove();
+                setTimeout(() => analyzeSchedule(), 100);
+            }
         };
 
         // Enhanced current schedule viewing
@@ -5539,6 +5602,8 @@
                 showNotification('✅ Shift added (not yet saved to database)', 'success');
                 closeModal('addShiftModal');
                 displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                // Update analysis in real-time if modal is open
+                updateScheduleAnalysis();
                 // Save to Firestore
                 if (currentScheduleId) {
                     const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
@@ -5548,6 +5613,8 @@
                         updated_by: user.email
                     });
                     showNotification('✅ Shift added and saved to database!', 'success');
+                    // Update analysis in real-time if modal is open
+                    updateScheduleAnalysis();
                 } else {
                     showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
                 }
@@ -5668,6 +5735,8 @@
                 showNotification('✅ Shift updated (not yet saved to database)', 'success');
                 closeModal('editShiftModal');
                 displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                // Update analysis in real-time if modal is open
+                updateScheduleAnalysis();
                 // Save to Firestore
                 if (currentScheduleId) {
                     const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
@@ -5677,6 +5746,8 @@
                         updated_by: user.email
                     }).then(() => {
                         showNotification('✅ Shift changes saved to database!', 'success');
+                        // Update analysis in real-time if modal is open
+                        updateScheduleAnalysis();
                     }).catch((err) => {
                         showNotification('❌ Failed to save shift changes to database', 'error');
                         console.error('Error saving shift edit:', err);
@@ -5847,6 +5918,8 @@
             schedule[day].splice(shiftIndex, 1);
             showNotification('🗑️ Shift removed (not yet saved to database)', 'success');
             displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+            // Update analysis in real-time if modal is open
+            updateScheduleAnalysis();
             // Save to Firestore
             if (currentScheduleId) {
                 const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
@@ -5856,6 +5929,8 @@
                     updated_by: user.email
                 });
                 showNotification('🗑️ Shift removed and saved to database!', 'success');
+                // Update analysis in real-time if modal is open
+                updateScheduleAnalysis();
             } else {
                 showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
             }
