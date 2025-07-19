@@ -4225,13 +4225,22 @@
                         const schedulerStatusBadge = data.workplaceStatus === 'IN_SCHEDULER' ?
                             '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">✅ IN SCHEDULER</span>' :
                             '<span style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">❌ NOT IN SCHEDULER</span>';
+                        
+                        // Get suspension status from auth user data
+                        const isSuspended = data.authUser?.suspended || false;
+                        const suspendButtonText = isSuspended ? '🔄 Unsuspend' : '⏸️ Suspend';
+                        const suspendButtonClass = isSuspended ? 'btn-success' : 'btn-secondary';
+                        const suspendButtonDisabled = data.role === 'ADMIN' || data.email === user.email ? 'disabled' : '';
 
                         html += `
-                            <tr style="border-bottom: 1px solid #dee2e6;">
+                            <tr style="border-bottom: 1px solid #dee2e6; ${isSuspended ? 'background-color: #fff5f5; opacity: 0.7;' : ''}">
                                 <td style="padding: 1rem;">
                                     <input type="checkbox" class="user-checkbox" data-email="${data.email}">
                                 </td>
-                                <td style="padding: 1rem; font-weight: 600;">${name}</td>
+                                <td style="padding: 1rem; font-weight: 600;">
+                                    ${name}
+                                    ${isSuspended ? '<br><small style="color: #dc3545; font-weight: normal;">🚫 SUSPENDED</small>' : ''}
+                                </td>
                                 <td style="padding: 1rem;">${data.email}</td>
                                 <td style="padding: 1rem;">${roleBadge}</td>
                                 <td style="padding: 1rem;">${authStatusBadge}</td>
@@ -4242,7 +4251,7 @@
                                     <div style="display: flex; gap: 0.5rem;">
                                         <button class="btn btn-info" onclick="viewUser('${data.email}')" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">👁️ View</button>
                                         <button class="btn btn-warning" onclick="editUser('${data.email}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">✏️ Edit</button>
-                                        <button class="btn btn-secondary" onclick="suspendUser('${data.email}')" style="background: #6c757d; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">⏸️ Suspend</button>
+                                        <button class="btn ${suspendButtonClass}" onclick="suspendUser('${data.email}')" style="background: ${isSuspended ? '#28a745' : '#6c757d'}; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;" ${suspendButtonDisabled}>${suspendButtonText}</button>
                                         <button class="btn btn-danger" onclick="deleteUser('${data.email}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">🗑️ Delete</button>
                                     </div>
                                 </td>
@@ -4523,27 +4532,399 @@
         }
 
         // Enhanced user management functions
-        window.viewUser = function(email) {
-            showNotification(`Viewing user: ${email}`, 'info');
-            // TODO: Implement detailed user view modal
-        };
-
-        window.editUser = function(email) {
-            showNotification(`Editing user: ${email}`, 'info');
-            // TODO: Implement user edit modal
-        };
-
-        window.suspendUser = function(email) {
-            if (confirm(`Are you sure you want to suspend ${email}?`)) {
-                showNotification(`Suspending user: ${email}`, 'warning');
-                // TODO: Implement user suspension
+        window.viewUser = async function(email) {
+            try {
+                // Get user data from both databases
+                const authApp = getApp('authApp');
+                const authDb = getFirestore(authApp);
+                
+                const usersRef = collection(authDb, 'users');
+                const q = query(usersRef, where('email', '==', email));
+                const querySnapshot = await getDocs(q);
+                
+                let userData = null;
+                querySnapshot.forEach((doc) => {
+                    userData = { id: doc.id, ...doc.data() };
+                });
+                
+                if (!userData) {
+                    showNotification('❌ User not found', 'error');
+                    return;
+                }
+                
+                // Find workplace worker data
+                const workplaceWorker = workers.find(w => w.email.toLowerCase() === email.toLowerCase());
+                
+                // Create detailed user view
+                const lastLogin = userData.loginTime ? 
+                    new Date(userData.loginTime).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    }) : 'Never';
+                
+                const suspendedStatus = userData.suspended ? 
+                    '<span style="color: #dc3545; font-weight: bold;">SUSPENDED</span>' : 
+                    '<span style="color: #28a745; font-weight: bold;">ACTIVE</span>';
+                
+                const modalContent = `
+                    <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 600px; margin: 2rem auto;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                            <h2 style="margin: 0; color: #333;">👤 User Details</h2>
+                            <button onclick="closeModal('userViewModal')" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #999;">×</button>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                            <div>
+                                <strong>Name:</strong><br>
+                                ${userData.firstName} ${userData.lastName}
+                            </div>
+                            <div>
+                                <strong>Email:</strong><br>
+                                ${userData.email}
+                            </div>
+                            <div>
+                                <strong>Role:</strong><br>
+                                ${userData.isAdmin ? 'ADMIN' : 'USER'}
+                            </div>
+                            <div>
+                                <strong>Status:</strong><br>
+                                ${suspendedStatus}
+                            </div>
+                            <div>
+                                <strong>Phone:</strong><br>
+                                ${userData.phone || '-'}
+                            </div>
+                            <div>
+                                <strong>Last Login:</strong><br>
+                                ${lastLogin}
+                            </div>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 2rem;">
+                            <h3 style="margin: 0 0 1rem 0; color: #333;">Database Status</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div>
+                                    <strong>Auth Database:</strong><br>
+                                    <span style="color: #28a745;">✅ Account Exists</span>
+                                </div>
+                                <div>
+                                    <strong>Workplace Database:</strong><br>
+                                    ${workplaceWorker ? 
+                                        '<span style="color: #28a745;">✅ In Scheduler</span>' : 
+                                        '<span style="color: #dc3545;">❌ Not In Scheduler</span>'
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${workplaceWorker ? `
+                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 2rem;">
+                            <h3 style="margin: 0 0 1rem 0; color: #333;">Workplace Information</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div>
+                                    <strong>Work Study:</strong><br>
+                                    ${workplaceWorker.work_study ? 'Yes' : 'No'}
+                                </div>
+                                <div>
+                                    <strong>Availability:</strong><br>
+                                    <small>${workplaceWorker.availability_text || 'No availability set'}</small>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                            <button onclick="editUser('${email}')" class="btn btn-warning">✏️ Edit User</button>
+                            <button onclick="closeModal('userViewModal')" class="btn btn-secondary">Close</button>
+                        </div>
+                    </div>
+                `;
+                
+                // Create modal if it doesn't exist
+                let modal = document.getElementById('userViewModal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'userViewModal';
+                    modal.style.cssText = `
+                        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                        background: rgba(0,0,0,0.5); z-index: 10000; display: none;
+                    `;
+                    document.body.appendChild(modal);
+                }
+                
+                modal.innerHTML = modalContent;
+                modal.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error viewing user:', error);
+                showNotification('❌ Error loading user details', 'error');
             }
         };
 
-        window.deleteUser = function(email) {
-            if (confirm(`Are you sure you want to delete ${email}? This action cannot be undone.`)) {
-                showNotification(`Deleting user: ${email}`, 'error');
-                // TODO: Implement user deletion
+        window.editUser = async function(email) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            
+            try {
+                // Get user data from auth database
+                const authApp = getApp('authApp');
+                const authDb = getFirestore(authApp);
+                
+                const usersRef = collection(authDb, 'users');
+                const q = query(usersRef, where('email', '==', email));
+                const querySnapshot = await getDocs(q);
+                
+                let userData = null;
+                querySnapshot.forEach((doc) => {
+                    userData = { id: doc.id, ...doc.data() };
+                });
+                
+                if (!userData) {
+                    showNotification('❌ User not found', 'error');
+                    return;
+                }
+                
+                // Prevent editing own account
+                if (userData.email === user.email) {
+                    showNotification('❌ Cannot edit your own account', 'error');
+                    return;
+                }
+                
+                // Create edit modal
+                const modalContent = `
+                    <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 500px; margin: 2rem auto;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                            <h2 style="margin: 0; color: #333;">✏️ Edit User</h2>
+                            <button onclick="closeModal('userEditModal')" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #999;">×</button>
+                        </div>
+                        
+                        <form id="editUserForm">
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Name:</label>
+                                <input type="text" id="editFirstName" value="${userData.firstName || ''}" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; margin-right: 0.5rem;" placeholder="First Name">
+                                <input type="text" id="editLastName" value="${userData.lastName || ''}" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.5rem;" placeholder="Last Name">
+                            </div>
+                            
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Email:</label>
+                                <input type="email" id="editEmail" value="${userData.email}" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;" readonly>
+                            </div>
+                            
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Phone:</label>
+                                <input type="tel" id="editPhone" value="${userData.phone || ''}" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;" placeholder="Phone Number">
+                            </div>
+                            
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Role:</label>
+                                <select id="editIsAdmin" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                    <option value="0" ${!userData.isAdmin ? 'selected' : ''}>USER</option>
+                                    <option value="1" ${userData.isAdmin ? 'selected' : ''}>ADMIN</option>
+                                </select>
+                            </div>
+                            
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Status:</label>
+                                <select id="editSuspended" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                    <option value="false" ${!userData.suspended ? 'selected' : ''}>ACTIVE</option>
+                                    <option value="true" ${userData.suspended ? 'selected' : ''}>SUSPENDED</option>
+                                </select>
+                            </div>
+                            
+                            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                                <button type="button" onclick="closeModal('userEditModal')" class="btn btn-secondary">Cancel</button>
+                                <button type="submit" class="btn btn-success">💾 Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+                
+                // Create modal if it doesn't exist
+                let modal = document.getElementById('userEditModal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'userEditModal';
+                    modal.style.cssText = `
+                        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                        background: rgba(0,0,0,0.5); z-index: 10000; display: none;
+                    `;
+                    document.body.appendChild(modal);
+                }
+                
+                modal.innerHTML = modalContent;
+                modal.style.display = 'block';
+                
+                // Handle form submission
+                document.getElementById('editUserForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const firstName = document.getElementById('editFirstName').value.trim();
+                    const lastName = document.getElementById('editLastName').value.trim();
+                    const phone = document.getElementById('editPhone').value.trim();
+                    const isAdmin = parseInt(document.getElementById('editIsAdmin').value);
+                    const suspended = document.getElementById('editSuspended').value === 'true';
+                    
+                    if (!firstName || !lastName) {
+                        showNotification('❌ First and last name are required', 'error');
+                        return;
+                    }
+                    
+                    try {
+                        // Update user in database
+                        const userDocRef = doc(authDb, 'users', userData.id);
+                        await updateDoc(userDocRef, {
+                            firstName,
+                            lastName,
+                            phone,
+                            isAdmin,
+                            suspended
+                        });
+                        
+                        showNotification('✅ User updated successfully!', 'success');
+                        closeModal('userEditModal');
+                        
+                        // Refresh the user list
+                        await displayEnhancedWorkersInModal();
+                        
+                    } catch (error) {
+                        console.error('Error updating user:', error);
+                        showNotification('❌ Error updating user', 'error');
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error editing user:', error);
+                showNotification('❌ Error loading user details', 'error');
+            }
+        };
+
+        window.suspendUser = async function(email) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            
+            try {
+                // Get user data from auth database
+                const authApp = getApp('authApp');
+                const authDb = getFirestore(authApp);
+                
+                const usersRef = collection(authDb, 'users');
+                const q = query(usersRef, where('email', '==', email));
+                const querySnapshot = await getDocs(q);
+                
+                let userData = null;
+                querySnapshot.forEach((doc) => {
+                    userData = { id: doc.id, ...doc.data() };
+                });
+                
+                if (!userData) {
+                    showNotification('❌ User not found', 'error');
+                    return;
+                }
+                
+                // Prevent suspending own account
+                if (userData.email === user.email) {
+                    showNotification('❌ Cannot suspend your own account', 'error');
+                    return;
+                }
+                
+                // Prevent suspending other admins
+                if (userData.isAdmin) {
+                    showNotification('❌ Cannot suspend admin accounts', 'error');
+                    return;
+                }
+                
+                const action = userData.suspended ? 'unsuspend' : 'suspend';
+                const confirmMessage = userData.suspended ? 
+                    `Are you sure you want to unsuspend ${userData.firstName} ${userData.lastName}?` :
+                    `Are you sure you want to suspend ${userData.firstName} ${userData.lastName}?`;
+                
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+                
+                // Update suspension status
+                const userDocRef = doc(authDb, 'users', userData.id);
+                await updateDoc(userDocRef, {
+                    suspended: !userData.suspended
+                });
+                
+                const successMessage = userData.suspended ? 
+                    `✅ ${userData.firstName} ${userData.lastName} has been unsuspended` :
+                    `⚠️ ${userData.firstName} ${userData.lastName} has been suspended`;
+                
+                showNotification(successMessage, userData.suspended ? 'success' : 'warning');
+                
+                // Refresh the user list
+                await displayEnhancedWorkersInModal();
+                
+            } catch (error) {
+                console.error('Error suspending user:', error);
+                showNotification('❌ Error updating user status', 'error');
+            }
+        };
+
+        window.deleteUser = async function(email) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            
+            try {
+                // Get user data from auth database
+                const authApp = getApp('authApp');
+                const authDb = getFirestore(authApp);
+                
+                const usersRef = collection(authDb, 'users');
+                const q = query(usersRef, where('email', '==', email));
+                const querySnapshot = await getDocs(q);
+                
+                let userData = null;
+                querySnapshot.forEach((doc) => {
+                    userData = { id: doc.id, ...doc.data() };
+                });
+                
+                if (!userData) {
+                    showNotification('❌ User not found', 'error');
+                    return;
+                }
+                
+                // Prevent deleting own account
+                if (userData.email === user.email) {
+                    showNotification('❌ Cannot delete your own account', 'error');
+                    return;
+                }
+                
+                // Prevent deleting other admins
+                if (userData.isAdmin) {
+                    showNotification('❌ Cannot delete admin accounts', 'error');
+                    return;
+                }
+                
+                const confirmMessage = `Are you sure you want to delete ${userData.firstName} ${userData.lastName} (${userData.email})? This action cannot be undone and will remove the user from the authentication database.`;
+                
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+                
+                // Delete user from auth database
+                const userDocRef = doc(authDb, 'users', userData.id);
+                await deleteDoc(userDocRef);
+                
+                showNotification(`🗑️ ${userData.firstName} ${userData.lastName} has been deleted`, 'error');
+                
+                // Refresh the user list
+                await displayEnhancedWorkersInModal();
+                
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                showNotification('❌ Error deleting user', 'error');
             }
         };
 
@@ -4629,7 +5010,10 @@
 
         // Modal functions
         window.closeModal = function(modalId) {
-            document.getElementById(modalId).style.display = 'none';
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'none';
+            }
         };
 
         // Enhanced worker management with validation
