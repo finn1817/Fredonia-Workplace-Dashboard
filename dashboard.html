@@ -2185,18 +2185,8 @@
         }
         
         document.getElementById('userEmail').textContent = user.email;
-        if (user.isAdmin) {
-            document.getElementById('adminBadge').style.display = 'inline';
-            document.getElementById('adminSection').style.display = 'block';
-            document.getElementById('userBadge').style.display = 'none';
-        } else {
-            document.getElementById('adminBadge').style.display = 'none';
-            document.getElementById('userBadge').style.display = 'inline';
-            // Hide admin-only buttons for non-admin users
-            document.getElementById('generateBtn').style.display = 'none';
-        }
-
-        // Set current user for role-based access
+        
+        // Set current user for role-based access (will be updated with full data from database)
         window.currentUser = user;
 
         // Firebase setup
@@ -6281,6 +6271,45 @@
             showNotification('💡 Alternative suggestions feature - Enhanced implementation coming soon!', 'info');
         };
 
+        // Load user data from workplace database
+        async function loadUserData() {
+            try {
+                console.log('🔍 Loading user data from workplace database...');
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, where('email', '==', window.currentUser.email));
+                const querySnapshot = await getDocs(q);
+                
+                if (!querySnapshot.empty) {
+                    const userDoc = querySnapshot.docs[0];
+                    const userData = userDoc.data();
+                    
+                    // Update current user with full data from database
+                    window.currentUser = { ...userData, id: userDoc.id };
+                    console.log('🔍 Updated user data:', window.currentUser);
+                    
+                    // Update UI based on admin status
+                    if (userData.isSuperAdmin || userData.isAdmin) {
+                        document.getElementById('adminBadge').style.display = 'inline';
+                        document.getElementById('adminSection').style.display = 'block';
+                        document.getElementById('userBadge').style.display = 'none';
+                    } else {
+                        document.getElementById('adminBadge').style.display = 'none';
+                        document.getElementById('userBadge').style.display = 'inline';
+                        // Hide admin-only buttons for non-admin users
+                        document.getElementById('generateBtn').style.display = 'none';
+                    }
+                    
+                    return true;
+                } else {
+                    console.log('❌ User not found in workplace database');
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ Error loading user data:', error);
+                return false;
+            }
+        }
+
         // Test Firebase connection
         async function testConnection() {
             try {
@@ -6295,10 +6324,17 @@
                     workplaces.push({ id: doc.id, ...doc.data() });
                 });
                 
-                // Initialize user role and permissions
-                if (window.initializeUserRole && window.currentUser) {
+                // Load user data and initialize role
+                const userLoaded = await loadUserData();
+                if (userLoaded && window.initializeUserRole && window.currentUser) {
+                    console.log('🔍 Current user data:', window.currentUser);
                     initializeUserRole(window.currentUser);
                     console.log('✅ User role initialized:', currentUserRole);
+                    console.log('🔍 Current user workplaces:', currentUserWorkplaces);
+                } else {
+                    console.log('❌ Missing initializeUserRole or currentUser');
+                    console.log('window.initializeUserRole exists:', !!window.initializeUserRole);
+                    console.log('window.currentUser exists:', !!window.currentUser);
                 }
                 
             } catch (error) {
@@ -8950,16 +8986,27 @@
 
         // Initialize user role and permissions
         window.initializeUserRole = function(user) {
-            if (user.isSuperAdmin) {
+            console.log('🔍 Initializing user role for:', user);
+            console.log('🔍 User isSuperAdmin:', user.isSuperAdmin);
+            console.log('🔍 User isAdmin:', user.isAdmin);
+            console.log('🔍 Available workplaces:', workplaces);
+            
+            if (user.isSuperAdmin === true) {
                 currentUserRole = USER_ROLES.SUPER_ADMIN;
                 currentUserWorkplaces = workplaces.map(wp => wp.id);
-            } else if (user.isAdmin) {
+                console.log('🔍 Set as SUPER_ADMIN');
+            } else if (user.isAdmin === true || user.isAdmin === 1) {
                 currentUserRole = USER_ROLES.WORKPLACE_ADMIN;
                 currentUserWorkplaces = user.assignedWorkplaces || [];
+                console.log('🔍 Set as WORKPLACE_ADMIN');
             } else {
                 currentUserRole = USER_ROLES.USER;
                 currentUserWorkplaces = [];
+                console.log('🔍 Set as USER');
             }
+            
+            console.log('🔍 Final role:', currentUserRole);
+            console.log('🔍 Final workplaces:', currentUserWorkplaces);
             
             // Update UI based on permissions
             updateUIForUserRole();
