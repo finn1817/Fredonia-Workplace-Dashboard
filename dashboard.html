@@ -1867,6 +1867,9 @@
             
             // CRITICAL FIX: Track which workers are already assigned to prevent double assignment
             const assignedWorkers = new Set();
+            
+            // CRITICAL FIX: Track shift assignments to prevent duplicates
+            const shiftAssignments = new Map(); // key: `${day}_${start}_${end}`, value: Set of worker emails
 
             const wsWorkers = workersData.filter(w => wsStatus[w.email]);
             wsWorkers.sort((a, b) => availabilityHours[a.email] - availabilityHours[b.email]);
@@ -1982,48 +1985,45 @@
                     // CRITICAL FIX: Check if worker is already assigned to this time slot
                     const slotStart = hourToTime(start);
                     const slotEnd = hourToTime(end);
+                    const shiftKey = `${day}_${slotStart}_${slotEnd}`;
                     
                     // Check if this worker is already assigned to this exact time slot
-                    const existingShifts = (schedule[day] || []).filter(s => 
-                        s.start === slotStart && s.end === slotEnd && s.raw_assigned.includes(email)
-                    );
-                    
-                    if (existingShifts.length > 0) {
+                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(email)) {
                         console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping duplicate assignment`);
                         continue;
                     }
                     
                     // Check if this slot is already full with other workers
-                    const slotOccupancy = (schedule[day] || []).filter(s => 
-                        s.start === slotStart && s.end === slotEnd
-                    ).length;
-                    
-                    if (slotOccupancy < maxWorkersPerShift) {
-                        if (!schedule[day]) schedule[day] = [];
-                        
-                        schedule[day].push({
-                            start: slotStart,
-                            end: slotEnd,
-                            assigned: [`${w.first_name} ${w.last_name}`],
-                            available: [`${w.first_name} ${w.last_name}`],
-                            raw_assigned: [email],
-                            all_available: [w],
-                            is_work_study: true,
-                            forced_shift: true // Mark as forced to ensure it's not overridden
-                        });
-                        
-                        // CRITICAL FIX: Only add hours if not already assigned
-                        if (!assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
-                            assignedHours[email] += duration;
-                            assignedWorkers.add(`${email}_${day}_${slotStart}_${slotEnd}`);
-                            console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} assigned ${duration}h at ${slotStart}-${slotEnd} on ${day}`);
-                        }
-                        remaining -= duration;
-                        assignedAny = true;
-                    } else {
-                        // If slot is full, try to find an alternative slot
+                    const currentWorkers = shiftAssignments.get(shiftKey) || new Set();
+                    if (currentWorkers.size >= maxWorkersPerShift) {
                         console.warn(`Work study student ${w.first_name} ${w.last_name} could not be assigned to ${slotStart}-${slotEnd} (slot full), looking for alternatives...`);
+                        continue;
                     }
+                    
+                    // Add worker to shift
+                    if (!shiftAssignments.has(shiftKey)) {
+                        shiftAssignments.set(shiftKey, new Set());
+                    }
+                    shiftAssignments.get(shiftKey).add(email);
+                    
+                    if (!schedule[day]) schedule[day] = [];
+                    
+                    schedule[day].push({
+                        start: slotStart,
+                        end: slotEnd,
+                        assigned: [`${w.first_name} ${w.last_name}`],
+                        available: [`${w.first_name} ${w.last_name}`],
+                        raw_assigned: [email],
+                        all_available: [w],
+                        is_work_study: true,
+                        forced_shift: true // Mark as forced to ensure it's not overridden
+                    });
+                    
+                    // CRITICAL FIX: Add hours only once
+                    assignedHours[email] += duration;
+                    console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} assigned ${duration}h at ${slotStart}-${slotEnd} on ${day}`);
+                    remaining -= duration;
+                    assignedAny = true;
                 }
                 
                 // If we couldn't assign any shifts from optimal solution, try fallback assignment
@@ -2057,13 +2057,21 @@
                                         shift.start === slotStart && shift.end === slotEnd
                                     );
                                     
-                                    // CRITICAL FIX: Check for duplicate assignment
-                                    if (assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
+                                    // CRITICAL FIX: Check for duplicate assignment using new tracking
+                                    const shiftKey = `${day}_${slotStart}_${slotEnd}`;
+                                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(email)) {
                                         console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping fallback assignment`);
                                         continue;
                                     }
                                     
-                                    if (existingShifts.length < maxWorkersPerShift) {
+                                    const currentWorkers = shiftAssignments.get(shiftKey) || new Set();
+                                    if (currentWorkers.size < maxWorkersPerShift) {
+                                        // Add worker to shift tracking
+                                        if (!shiftAssignments.has(shiftKey)) {
+                                            shiftAssignments.set(shiftKey, new Set());
+                                        }
+                                        shiftAssignments.get(shiftKey).add(email);
+                                        
                                         if (!schedule[day]) schedule[day] = [];
                                         
                                         schedule[day].push({
@@ -2078,12 +2086,9 @@
                                             fallback_assignment: true
                                         });
                                         
-                                        // CRITICAL FIX: Only add hours if not already assigned
-                                        if (!assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
-                                            assignedHours[email] += assignDuration;
-                                            assignedWorkers.add(`${email}_${day}_${slotStart}_${slotEnd}`);
-                                            console.log(`Fallback assignment: ${w.first_name} ${w.last_name} assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
-                                        }
+                                        // CRITICAL FIX: Add hours only once
+                                        assignedHours[email] += assignDuration;
+                                        console.log(`Fallback assignment: ${w.first_name} ${w.last_name} assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
                                         remaining -= assignDuration;
                                         break;
                                     }
@@ -2123,11 +2128,18 @@
                                     const slotStart = hourToTime(s);
                                     const slotEnd = hourToTime(s + assignDuration);
                                     
-                                    // CRITICAL FIX: Check for duplicate assignment even in last resort
-                                    if (assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
+                                    // CRITICAL FIX: Check for duplicate assignment using new tracking
+                                    const shiftKey = `${day}_${slotStart}_${slotEnd}`;
+                                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(email)) {
                                         console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping last resort assignment`);
                                         continue;
                                     }
+                                    
+                                    // Add worker to shift tracking
+                                    if (!shiftAssignments.has(shiftKey)) {
+                                        shiftAssignments.set(shiftKey, new Set());
+                                    }
+                                    shiftAssignments.get(shiftKey).add(email);
                                     
                                     if (!schedule[day]) schedule[day] = [];
                                     
@@ -2143,12 +2155,9 @@
                                         last_resort_assignment: true
                                     });
                                     
-                                    // CRITICAL FIX: Only add hours if not already assigned
-                                    if (!assignedWorkers.has(`${email}_${day}_${slotStart}_${slotEnd}`)) {
-                                        assignedHours[email] += assignDuration;
-                                        assignedWorkers.add(`${email}_${day}_${slotStart}_${slotEnd}`);
-                                        console.log(`LAST RESORT assignment: ${w.first_name} ${w.last_name} forced assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
-                                    }
+                                    // CRITICAL FIX: Add hours only once
+                                    assignedHours[email] += assignDuration;
+                                    console.log(`LAST RESORT assignment: ${w.first_name} ${w.last_name} forced assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
                                     remaining -= assignDuration;
                                     break;
                                 }
@@ -2339,23 +2348,27 @@
 
                                 const chosen = availableWorkers.slice(0, maxWorkersPerShift);
 
-                                // CRITICAL FIX: Assign shifts with duplicate checking
+                                // CRITICAL FIX: Assign shifts with duplicate checking using new tracking
                                 for (const x of chosen) {
                                     const shiftStart = hourToTime(cur);
                                     const shiftEnd = hourToTime(finalEndShift);
+                                    const shiftKey = `${day}_${shiftStart}_${shiftEnd}`;
                                     
                                     // CRITICAL FIX: Check for duplicate assignment
-                                    if (assignedWorkers.has(`${x.email}_${day}_${shiftStart}_${shiftEnd}`)) {
+                                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(x.email)) {
                                         console.warn(`⚠️ Worker ${x.first_name} ${x.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping assignment`);
                                         continue;
                                     }
                                     
-                                    // CRITICAL FIX: Only add hours if not already assigned
-                                    if (!assignedWorkers.has(`${x.email}_${day}_${shiftStart}_${shiftEnd}`)) {
-                                        assignedHours[x.email] += finalDuration;
-                                        assignedWorkers.add(`${x.email}_${day}_${shiftStart}_${shiftEnd}`);
-                                        console.log(`Creating shift: ${shiftStart}-${shiftEnd} for ${x.first_name} ${x.last_name}`);
+                                    // Add worker to shift tracking
+                                    if (!shiftAssignments.has(shiftKey)) {
+                                        shiftAssignments.set(shiftKey, new Set());
                                     }
+                                    shiftAssignments.get(shiftKey).add(x.email);
+                                    
+                                    // CRITICAL FIX: Add hours only once
+                                    assignedHours[x.email] += finalDuration;
+                                    console.log(`Creating shift: ${shiftStart}-${shiftEnd} for ${x.first_name} ${x.last_name}`);
                                     
                                     schedule[day].push({
                                         start: shiftStart,
@@ -2512,17 +2525,21 @@
                     const shiftStart = hourToTime(us.start_hour);
                     const shiftEnd = hourToTime(us.end_hour);
                     
-                    // CRITICAL FIX: Check for duplicate assignment
-                    if (assignedWorkers.has(`${chosen.email}_${us.day}_${shiftStart}_${shiftEnd}`)) {
+                    // CRITICAL FIX: Check for duplicate assignment using new tracking
+                    const shiftKey = `${us.day}_${shiftStart}_${shiftEnd}`;
+                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(chosen.email)) {
                         console.warn(`⚠️ Worker ${chosen.first_name} ${chosen.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping unfilled shift assignment`);
                         continue;
                     }
                     
-                    // CRITICAL FIX: Only add hours if not already assigned
-                    if (!assignedWorkers.has(`${chosen.email}_${us.day}_${shiftStart}_${shiftEnd}`)) {
-                        assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
-                        assignedWorkers.add(`${chosen.email}_${us.day}_${shiftStart}_${shiftEnd}`);
+                    // Add worker to shift tracking
+                    if (!shiftAssignments.has(shiftKey)) {
+                        shiftAssignments.set(shiftKey, new Set());
                     }
+                    shiftAssignments.get(shiftKey).add(chosen.email);
+                    
+                    // CRITICAL FIX: Add hours only once
+                    assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
                     
                     if (!schedule[us.day]) schedule[us.day] = [];
                     schedule[us.day].push({
@@ -2589,6 +2606,19 @@
                                     // Force create a shift regardless of existing coverage
                                     const slotStart = hourToTime(s);
                                     const slotEnd = hourToTime(s + assignDuration);
+                                    const shiftKey = `${day}_${slotStart}_${slotEnd}`;
+                                    
+                                    // Check for duplicate assignment
+                                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(w.email)) {
+                                        console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping emergency assignment`);
+                                        continue;
+                                    }
+                                    
+                                    // Add worker to shift tracking
+                                    if (!shiftAssignments.has(shiftKey)) {
+                                        shiftAssignments.set(shiftKey, new Set());
+                                    }
+                                    shiftAssignments.get(shiftKey).add(w.email);
                                     
                                     if (!schedule[day]) schedule[day] = [];
                                     
@@ -2654,6 +2684,24 @@
                     altSols: {},
                     unfilledShifts: [],
                     wsIssues: ['CRITICAL: Schedule generation failed due to validation errors'],
+                    minHoursIssues: [],
+                    coverageGaps: [],
+                    forcedAssignments: []
+                };
+            }
+            
+            // Additional validation: Check if schedule is actually empty
+            const totalShifts = Object.values(schedule).flat().length;
+            if (totalShifts === 0) {
+                console.error('🚨 CRITICAL: Generated schedule is empty - no shifts were created');
+                return {
+                    schedule: {},
+                    assignedHours: {},
+                    lowHours: [],
+                    unassigned: workersData.map(w => `${w.first_name} ${w.last_name}`),
+                    altSols: {},
+                    unfilledShifts: [],
+                    wsIssues: ['CRITICAL: No shifts were generated - check worker availability and operating hours'],
                     minHoursIssues: [],
                     coverageGaps: [],
                     forcedAssignments: []
@@ -3818,6 +3866,16 @@
                     coverageGaps,
                     forcedAssignments
                 } = result;
+                
+                // CRITICAL FIX: Check if schedule generation failed
+                if (Object.keys(generatedSchedule).length === 0) {
+                    console.error('🚨 Schedule generation failed - no schedule was created');
+                    document.getElementById('scheduleDisplay').innerHTML = '<div class="error">❌ Schedule generation failed. Check the console for details.</div>';
+                    showNotification('❌ Schedule generation failed - check worker availability and operating hours', 'error');
+                    setLoading('generateScheduleBtn', false);
+                    return;
+                }
+                
                 // Validate all shifts before saving
                 for (const day of DAYS) {
                     for (const shift of (generatedSchedule[day] || [])) {
@@ -3827,14 +3885,24 @@
                         }
                     }
                 }
+                
                 schedule = generatedSchedule;
-                await saveSchedule(schedule, 'default', {
-                    maxHours,
-                    workersPerShift,
-                    minHours,
-                    ensureFullCoverage,
-                    workersCount: processedWorkers.length
-                });
+                
+                // CRITICAL FIX: Only save if schedule is valid
+                try {
+                    await saveSchedule(schedule, 'default', {
+                        maxHours,
+                        workersPerShift,
+                        minHours,
+                        ensureFullCoverage,
+                        workersCount: processedWorkers.length
+                    });
+                } catch (error) {
+                    console.error('Failed to save schedule:', error);
+                    showNotification('❌ Failed to save schedule to database', 'error');
+                    setLoading('generateScheduleBtn', false);
+                    return;
+                }
                 if (unfilledShifts.length > 0 || wsIssues.length > 0 || minHoursIssues.length > 0 || coverageGaps.length > 0) {
                     showEnhancedIssuesDialog({
                         unfilledShifts,
@@ -4354,17 +4422,83 @@
             }
         };
 
-        // Calculate assigned hours helper
+        // Enhanced time conversion validation
+        function validateTimeConversion(timeStr) {
+            if (!timeStr || typeof timeStr !== 'string') {
+                console.error('Invalid time string:', timeStr);
+                return false;
+            }
+            
+            const timeRegex = /^([0-9]|0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/;
+            if (!timeRegex.test(timeStr)) {
+                console.error('Invalid time format:', timeStr);
+                return false;
+            }
+            
+            return true;
+        }
+        
+        // Calculate assigned hours helper - FIXED VERSION
         function calculateAssignedHours(schedule) {
             const assignedHours = {};
             
+            // Initialize all workers with 0 hours
+            workers.forEach(w => {
+                assignedHours[w.email] = 0;
+            });
+            
+            // Calculate hours from schedule with proper validation
             Object.values(schedule).forEach(shifts => {
                 shifts.forEach(shift => {
-                    const duration = timeToHour(shift.end) - timeToHour(shift.start);
-                    (shift.raw_assigned || []).forEach(email => {
-                        assignedHours[email] = (assignedHours[email] || 0) + duration;
+                    // Skip invalid shifts
+                    if (!shift.start || !shift.end || !shift.raw_assigned) {
+                        console.warn('Skipping invalid shift:', shift);
+                        return;
+                    }
+                    
+                    // Validate time strings before conversion
+                    if (!validateTimeConversion(shift.start) || !validateTimeConversion(shift.end)) {
+                        console.error('Invalid time format in shift:', shift);
+                        return;
+                    }
+                    
+                    // Calculate duration with proper time handling
+                    let startHour = timeToHour(shift.start);
+                    let endHour = timeToHour(shift.end);
+                    
+                    // Handle overnight shifts properly
+                    if (endHour <= startHour) {
+                        endHour += 24;
+                    }
+                    
+                    const duration = endHour - startHour;
+                    
+                    // Validate duration
+                    if (duration <= 0 || duration > 24) {
+                        console.error('Invalid shift duration:', duration, 'for shift:', shift);
+                        return;
+                    }
+                    
+                    // Add hours to each assigned worker
+                    shift.raw_assigned.forEach(email => {
+                        if (assignedHours.hasOwnProperty(email)) {
+                            assignedHours[email] += duration;
+                        } else {
+                            console.warn('Worker email not found in assignedHours:', email);
+                        }
                     });
                 });
+            });
+            
+            // Validate final hours
+            Object.entries(assignedHours).forEach(([email, hours]) => {
+                if (hours < 0) {
+                    console.error('CRITICAL: Negative hours detected for', email, ':', hours);
+                    assignedHours[email] = 0; // Reset to 0 to prevent negative display
+                }
+                if (hours > 40) {
+                    console.warn('Excessive hours detected for', email, ':', hours);
+                }
             });
             
             return assignedHours;
