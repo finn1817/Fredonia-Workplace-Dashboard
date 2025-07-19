@@ -4494,6 +4494,16 @@
                 document.getElementById('timeOffRequestsModal').style.display = 'block';
                 loadTimeOffRequests('all'); // Start with all requests
             };
+            
+            // Admin: Shift Swap Requests button logic
+            document.getElementById('shiftSwapRequestsBtn').onclick = async function() {
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                document.getElementById('shiftSwapRequestsModal').style.display = 'block';
+                loadShiftSwapRequests();
+            };
         }
         // Function to load hour requests for admin
         async function loadHourRequests(filter = 'all') {
@@ -5254,18 +5264,6 @@
 
         // --- SHIFT SWAP REQUEST SYSTEM ---
 
-        // 2. Admin: Shift Swap Requests button
-        if (user.isAdmin) {
-            document.getElementById('shiftSwapRequestsBtn').onclick = async function() {
-                if (!selectedWorkplace) {
-                    showNotification('❌ Please select a workplace first', 'error');
-                    return;
-                }
-                document.getElementById('shiftSwapRequestsModal').style.display = 'block';
-                loadShiftSwapRequests();
-            };
-        }
-
 
 
         // 4. Handle shift swap request form submission
@@ -5284,6 +5282,10 @@
             }
             
             try {
+                console.log('DEBUG: Submitting shift swap request...');
+                console.log('DEBUG: Workplace:', selectedWorkplace);
+                console.log('DEBUG: User:', user.email);
+                
                 // Create shift swap request
                 await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), {
                     requesterId: user.uid || user.email,
@@ -5309,11 +5311,13 @@
                     updatedBy: user.email
                 });
                 
+                console.log('DEBUG: Shift swap request saved successfully!');
                 showNotification('✅ Shift swap request submitted successfully!', 'success');
                 closeModal('shiftSwapRequestModal');
                 document.getElementById('shiftSwapRequestForm').reset();
                 
             } catch (error) {
+                console.error('DEBUG: Error submitting shift swap request:', error);
                 showNotification('❌ Failed to submit shift swap request', 'error');
             }
         });
