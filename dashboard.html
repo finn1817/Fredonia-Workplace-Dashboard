@@ -5233,21 +5233,31 @@
         }
 
         // Zod schema for a shift
-        const ShiftSchema = window.zod.object({
-            start: window.zod.string().regex(/^\d{2}:\d{2}$/),
-            end: window.zod.string().regex(/^\d{2}:\d{2}$/),
-            assigned: window.zod.array(window.zod.string()).min(1),
-            raw_assigned: window.zod.array(window.zod.string()).min(1),
-            // Optional fields
-            available: window.zod.array(window.zod.string()).optional(),
-            all_available: window.zod.array(window.zod.any()).optional(),
-            is_work_study: window.zod.boolean().optional(),
-            isGap: window.zod.boolean().optional(),
-            forced: window.zod.boolean().optional(),
-        });
+        let ShiftSchema;
+        
+        function initializeZodSchema() {
+            if (window.zod) {
+                ShiftSchema = window.zod.object({
+                    start: window.zod.string().regex(/^\d{2}:\d{2}$/),
+                    end: window.zod.string().regex(/^\d{2}:\d{2}$/),
+                    assigned: window.zod.array(window.zod.string()).min(1),
+                    raw_assigned: window.zod.array(window.zod.string()).min(1),
+                    // Optional fields
+                    available: window.zod.array(window.zod.string()).optional(),
+                    all_available: window.zod.array(window.zod.any()).optional(),
+                    is_work_study: window.zod.boolean().optional(),
+                    isGap: window.zod.boolean().optional(),
+                    forced: window.zod.boolean().optional(),
+                });
+            }
+        }
 
         function validateShift(shift) {
             try {
+                if (!ShiftSchema) {
+                    console.warn('Zod schema not initialized, skipping validation');
+                    return true;
+                }
                 ShiftSchema.parse(shift);
                 // Check that end is after start
                 const startHour = timeToHour(shift.start);
@@ -5260,6 +5270,19 @@
                 showNotification('❌ Invalid shift: ' + (err.errors ? err.errors[0].message : err.message), 'error');
                 return false;
             }
+        }
+        
+        // Initialize Zod schema when available
+        if (window.zod) {
+            initializeZodSchema();
+        } else {
+            // Wait for Zod to load
+            const checkZod = setInterval(() => {
+                if (window.zod) {
+                    initializeZodSchema();
+                    clearInterval(checkZod);
+                }
+            }, 100);
         }
 
         // --- SHIFT SWAP REQUEST SYSTEM ---
