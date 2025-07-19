@@ -6311,7 +6311,12 @@
                     console.log('🔍 Updated user data:', window.currentUser);
                     
                     // Update UI based on admin status
-                    if (userData.isSuperAdmin || userData.isAdmin) {
+                    console.log('🔍 User data check:', userData);
+                    console.log('🔍 isAdmin:', userData.isAdmin);
+                    console.log('🔍 isSuperAdmin:', userData.isSuperAdmin);
+                    
+                    if (userData.isAdmin || userData.isSuperAdmin) {
+                        console.log('🔍 Setting admin section visible');
                         document.getElementById('adminBadge').style.display = 'inline';
                         document.getElementById('adminSection').style.display = 'block';
                         document.getElementById('userDashboard').style.display = 'none';
@@ -6351,6 +6356,7 @@
                             }
                         }
                     } else {
+                        console.log('🔍 Setting user dashboard visible');
                         document.getElementById('adminBadge').style.display = 'none';
                         document.getElementById('userBadge').style.display = 'inline';
                         document.getElementById('adminSection').style.display = 'none';
@@ -6720,8 +6726,14 @@
             };
         };
 
-        // Admin section visibility will be handled after user data is loaded
-        // This prevents the section from being hidden before we know the user's role
+        // Show admin section for admins, user dashboard for users
+        if (user.isAdmin) {
+            document.getElementById('adminSection').style.display = 'block';
+            document.getElementById('userDashboard').style.display = 'none';
+        } else {
+            document.getElementById('adminSection').style.display = 'none';
+            document.getElementById('userDashboard').style.display = 'block';
+        }
 
         // My Account modal logic for all users
         document.getElementById('myAccountBtn').onclick = function() {
@@ -9116,9 +9128,11 @@
             if (user.isAdmin === true || user.isAdmin === 1 || user.isSuperAdmin === true) {
                 currentUserRole = USER_ROLES.ADMIN;
                 console.log('🔍 Set as ADMIN');
+                console.log('🔍 Admin section should be visible');
             } else {
                 currentUserRole = USER_ROLES.USER;
                 console.log('🔍 Set as USER');
+                console.log('🔍 User dashboard should be visible');
             }
             
             console.log('🔍 Final role:', currentUserRole);
