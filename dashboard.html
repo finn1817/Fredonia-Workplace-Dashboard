@@ -4653,14 +4653,17 @@
                 <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                         <h3 style="margin: 0;">📊 Advanced Analytics & Logging Dashboard</h3>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button onclick="refreshAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
-                                🔄 Refresh Data
-                            </button>
-                            <button onclick="clearAllLogs()" class="btn btn-danger" style="background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
-                                🗑️ Clear Logs
-                            </button>
-                        </div>
+                                            <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="refreshAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
+                            🔄 Refresh Data
+                        </button>
+                        <button onclick="clearAllLogs()" class="btn btn-danger" style="background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
+                            🗑️ Clear Logs
+                        </button>
+                        <button onclick="testAvailabilityLoading()" class="btn btn-warning" style="background: #ffc107; color: #212529; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
+                            🧪 Test Availability
+                        </button>
+                    </div>
                     </div>
                     
                     <!-- Key Metrics Section -->
@@ -5725,6 +5728,28 @@
             }
         };
         
+        // Test availability loading function
+        window.testAvailabilityLoading = function() {
+            console.log('=== AVAILABILITY TEST ===');
+            console.log('All workers:', workers);
+            
+            workers.forEach((worker, index) => {
+                console.log(`Worker ${index + 1}:`, {
+                    name: `${worker.first_name} ${worker.last_name}`,
+                    email: worker.email,
+                    availability_text: worker.availability_text,
+                    raw_data: worker
+                });
+                
+                if (worker.availability_text) {
+                    console.log(`Testing availability parsing for ${worker.first_name}:`);
+                    loadWorkerAvailability(worker.availability_text);
+                }
+            });
+            
+            showNotification('🧪 Check console for availability test results', 'info');
+        };
+        
         // Initialize session tracking when dashboard loads
         document.addEventListener('DOMContentLoaded', function() {
             initializeSessionTracking();
@@ -5976,6 +6001,9 @@
                 return;
             }
 
+            console.log('Editing worker:', worker);
+            console.log('Worker availability:', worker.availability_text);
+
             editingWorkerId = workerId;
             document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
             
@@ -6161,18 +6189,71 @@
 
         // Load worker availability from existing data
         function loadWorkerAvailability(availabilityText) {
-            if (!availabilityText) return;
+            if (!availabilityText) {
+                console.log('No availability text provided');
+                return;
+            }
+            
+            console.log('Loading availability:', availabilityText);
+            
+            // Clear existing slots first
+            clearAllAvailabilitySlots();
             
             // Parse the existing availability format: "Mon 09:00-17:00, Tue 10:00-16:00"
-            const slots = availabilityText.split(',').map(slot => slot.trim());
+            const slots = availabilityText.split(',').map(slot => slot.trim()).filter(slot => slot.length > 0);
+            
+            console.log('Parsed slots:', slots);
             
             slots.forEach(slot => {
-                const match = slot.match(/^(\w{3})\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+                // More flexible regex to handle various formats
+                // This regex will match: "Mon 09:00-17:00", "Monday 9:00-5:00", etc.
+                const match = slot.match(/^(\w{3,})\s+(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/i);
                 if (match) {
-                    const [, day, startTime, endTime] = match;
+                    const [, dayRaw, startHour, startMin, endHour, endMin] = match;
+                    
+                    // Convert day to 3-letter format
+                    const day = convertDayToShort(dayRaw);
+                    if (!day) {
+                        console.log('Invalid day:', dayRaw);
+                        return;
+                    }
+                    
+                    const startTime = `${startHour.padStart(2, '0')}:${startMin}`;
+                    const endTime = `${endHour.padStart(2, '0')}:${endMin}`;
+                    
+                    console.log('Adding slot:', day, startTime, endTime);
                     addTimeSlot(day, startTime, endTime);
+                } else {
+                    console.log('Could not parse slot:', slot);
+                    console.log('Slot format should be: "Day HH:MM-HH:MM"');
                 }
             });
+        }
+        
+        // Convert day name to 3-letter format
+        function convertDayToShort(dayRaw) {
+            const dayMap = {
+                'sun': 'Sun', 'sunday': 'Sun',
+                'mon': 'Mon', 'monday': 'Mon',
+                'tue': 'Tue', 'tuesday': 'Tue',
+                'wed': 'Wed', 'wednesday': 'Wed',
+                'thu': 'Thu', 'thursday': 'Thu',
+                'fri': 'Fri', 'friday': 'Fri',
+                'sat': 'Sat', 'saturday': 'Sat'
+            };
+            
+            return dayMap[dayRaw.toLowerCase()];
+        }
+        
+        // Format time to 24-hour format with leading zeros
+        function formatTimeTo24Hour(time) {
+            // Handle times like "9:00" or "09:00"
+            const [hours, minutes] = time.split(':');
+            const hour = parseInt(hours);
+            const minute = parseInt(minutes);
+            
+            // Ensure 24-hour format
+            return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
         }
 
         window.deleteWorker = async function(workerId) {
