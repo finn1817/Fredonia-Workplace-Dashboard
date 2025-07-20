@@ -6064,73 +6064,122 @@
 
         // Handle time slot form submission
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded - initializing availability slots');
             initializeAvailabilitySlots();
             
             // Handle time slot form submission
             const timeSlotForm = document.getElementById('timeSlotForm');
             if (timeSlotForm) {
+                console.log('Found timeSlotForm, adding event listener');
                 timeSlotForm.addEventListener('submit', function(e) {
                     e.preventDefault();
+                    console.log('Time slot form submitted');
                     
-                    const startTime = document.getElementById('slotStartTime').value;
-                    const endTime = document.getElementById('slotEndTime').value;
-                    
-                    if (!startTime || !endTime) {
-                        showNotification('❌ Please select both start and end times', 'error');
-                        return;
+                    try {
+                        const startTime = document.getElementById('slotStartTime').value;
+                        const endTime = document.getElementById('slotEndTime').value;
+                        
+                        console.log('Form values:', { startTime, endTime, currentEditingDay });
+                        
+                        if (!startTime || !endTime) {
+                            showNotification('❌ Please select both start and end times', 'error');
+                            return;
+                        }
+                        
+                        if (startTime >= endTime) {
+                            showNotification('❌ End time must be after start time', 'error');
+                            return;
+                        }
+                        
+                        if (!currentEditingDay) {
+                            console.error('currentEditingDay is not set');
+                            showNotification('❌ Error: No day selected', 'error');
+                            return;
+                        }
+                        
+                        addTimeSlot(currentEditingDay, startTime, endTime);
+                        closeModal('timeSlotModal');
+                    } catch (error) {
+                        console.error('Error in time slot form submission:', error);
+                        showNotification('❌ Error adding time slot', 'error');
                     }
-                    
-                    if (startTime >= endTime) {
-                        showNotification('❌ End time must be after start time', 'error');
-                        return;
-                    }
-                    
-                    addTimeSlot(currentEditingDay, startTime, endTime);
-                    closeModal('timeSlotModal');
                 });
+            } else {
+                console.error('timeSlotForm not found');
             }
         });
 
         // Add time slot to the specified day
         function addTimeSlot(day, startTime, endTime) {
-            const slot = {
-                id: Date.now() + Math.random(),
-                day: day,
-                startTime: startTime,
-                endTime: endTime
-            };
-            
-            availabilitySlots[day].push(slot);
-            renderTimeSlot(day, slot);
-            updateAvailabilityField();
+            try {
+                console.log('Adding time slot:', { day, startTime, endTime });
+                console.log('Current availabilitySlots:', availabilitySlots);
+                
+                if (!availabilitySlots[day]) {
+                    console.error('Day not found in availabilitySlots:', day);
+                    availabilitySlots[day] = [];
+                }
+                
+                const slot = {
+                    id: Date.now() + Math.random(),
+                    day: day,
+                    startTime: startTime,
+                    endTime: endTime
+                };
+                
+                console.log('Created slot:', slot);
+                
+                availabilitySlots[day].push(slot);
+                console.log('Updated availabilitySlots:', availabilitySlots);
+                
+                renderTimeSlot(day, slot);
+                updateAvailabilityField();
+                
+                console.log('Time slot added successfully');
+            } catch (error) {
+                console.error('Error in addTimeSlot:', error);
+                showNotification('❌ Error adding time slot', 'error');
+            }
         }
 
         // Render a time slot in the UI
         function renderTimeSlot(day, slot) {
-            const container = document.getElementById(`slots-${day}`);
-            
-            // Remove empty message if it exists
-            const emptyMessage = container.querySelector('.empty-slot-message');
-            if (emptyMessage) {
-                emptyMessage.remove();
+            try {
+                console.log('Rendering time slot:', { day, slot });
+                
+                const container = document.getElementById(`slots-${day}`);
+                if (!container) {
+                    console.error('Container not found for day:', day);
+                    return;
+                }
+                
+                // Remove empty message if it exists
+                const emptyMessage = container.querySelector('.empty-slot-message');
+                if (emptyMessage) {
+                    emptyMessage.remove();
+                }
+                
+                const slotElement = document.createElement('div');
+                slotElement.className = 'time-slot';
+                slotElement.dataset.slotId = slot.id;
+                
+                const startTimeFormatted = formatTimeForDisplay(slot.startTime);
+                const endTimeFormatted = formatTimeForDisplay(slot.endTime);
+                
+                slotElement.innerHTML = `
+                    <div class="time-slot-info">
+                        <div class="time-slot-time">${startTimeFormatted} - ${endTimeFormatted}</div>
+                        <div class="time-slot-day">${getDayName(day)}</div>
+                    </div>
+                    <button type="button" class="remove-slot-btn" onclick="removeTimeSlot('${day}', '${slot.id}')" title="Remove time slot">×</button>
+                `;
+                
+                container.appendChild(slotElement);
+                console.log('Time slot rendered successfully');
+            } catch (error) {
+                console.error('Error in renderTimeSlot:', error);
+                showNotification('❌ Error rendering time slot', 'error');
             }
-            
-            const slotElement = document.createElement('div');
-            slotElement.className = 'time-slot';
-            slotElement.dataset.slotId = slot.id;
-            
-            const startTimeFormatted = formatTimeForDisplay(slot.startTime);
-            const endTimeFormatted = formatTimeForDisplay(slot.endTime);
-            
-            slotElement.innerHTML = `
-                <div class="time-slot-info">
-                    <div class="time-slot-time">${startTimeFormatted} - ${endTimeFormatted}</div>
-                    <div class="time-slot-day">${getDayName(day)}</div>
-                </div>
-                <button type="button" class="remove-slot-btn" onclick="removeTimeSlot('${day}', '${slot.id}')" title="Remove time slot">×</button>
-            `;
-            
-            container.appendChild(slotElement);
         }
 
         // Remove time slot
