@@ -4473,9 +4473,14 @@
                 <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                         <h3 style="margin: 0;">📊 Advanced Analytics & Logging Dashboard</h3>
-                        <button onclick="refreshAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
-                            🔄 Refresh Data
-                        </button>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button onclick="refreshAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
+                                🔄 Refresh Data
+                            </button>
+                            <button onclick="clearAllLogs()" class="btn btn-danger" style="background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
+                                🗑️ Clear Logs
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Key Metrics Section -->
@@ -5040,13 +5045,16 @@
         
         // Log activity function
         function logActivity(action, details, userId = null, ipAddress = null) {
+            // Get current user info safely
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            
             const logEntry = {
                 id: Date.now() + Math.random(),
                 timestamp: new Date().toISOString(),
                 action: action,
                 details: details,
-                userId: userId || user.email,
-                userRole: user.isAdmin ? 'ADMIN' : 'USER',
+                userId: userId || currentUser.email || 'Unknown',
+                userRole: currentUser.isAdmin ? 'ADMIN' : 'USER',
                 ipAddress: ipAddress || 'Unknown',
                 userAgent: navigator.userAgent,
                 sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
@@ -5068,14 +5076,17 @@
         
         // Log security events
         function logSecurityEvent(event, details, severity = 'info', ipAddress = null) {
+            // Get current user info safely
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            
             const securityEntry = {
                 id: Date.now() + Math.random(),
                 timestamp: new Date().toISOString(),
                 event: event,
                 details: details,
                 severity: severity, // 'info', 'warning', 'error', 'critical'
-                userId: user.email,
-                userRole: user.isAdmin ? 'ADMIN' : 'USER',
+                userId: currentUser.email || 'Unknown',
+                userRole: currentUser.isAdmin ? 'ADMIN' : 'USER',
                 ipAddress: ipAddress || 'Unknown',
                 userAgent: navigator.userAgent,
                 sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
@@ -5117,8 +5128,11 @@
                 sessionStorage.setItem('sessionId', Date.now() + Math.random());
             }
             
+            // Get current user info safely
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            
             // Log session start
-            logActivity('session_start', 'User session started', user.email);
+            logActivity('session_start', 'User session started', currentUser.email);
             logSecurityEvent('session_start', 'User session initiated', 'info');
         }
         
@@ -5189,10 +5203,34 @@
             // Combine all activity data
             const allActivityLogs = [
                 ...logs,
-                ...loginAttempts.map(log => ({ ...log, action: 'login_attempt' })),
-                ...successfulLogins.map(log => ({ ...log, action: 'login_success' })),
-                ...failedLogins.map(log => ({ ...log, action: 'login_failed' })),
-                ...registrations.map(log => ({ ...log, action: 'registration_success' }))
+                ...loginAttempts.map(log => ({ 
+                    ...log, 
+                    action: 'login_attempt',
+                    userId: log.email || 'Unknown',
+                    userRole: 'USER',
+                    details: `Login attempt for ${log.email || 'Unknown'}`
+                })),
+                ...successfulLogins.map(log => ({ 
+                    ...log, 
+                    action: 'login_success',
+                    userId: log.email || 'Unknown',
+                    userRole: log.isAdmin ? 'ADMIN' : 'USER',
+                    details: `Successful login for ${log.email || 'Unknown'}`
+                })),
+                ...failedLogins.map(log => ({ 
+                    ...log, 
+                    action: 'login_failed',
+                    userId: log.email || 'Unknown',
+                    userRole: 'USER',
+                    details: `Failed login for ${log.email || 'Unknown'} - ${log.error || 'Unknown error'}`
+                })),
+                ...registrations.map(log => ({ 
+                    ...log, 
+                    action: 'registration_success',
+                    userId: log.email || 'Unknown',
+                    userRole: 'USER',
+                    details: `New user registration: ${log.firstName || ''} ${log.lastName || ''} (${log.email || 'Unknown'})`
+                }))
             ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
             // Update total logs count
@@ -5292,9 +5330,17 @@
                 const storedLogs = localStorage.getItem('activityLogs');
                 const logs = storedLogs ? JSON.parse(storedLogs) : [];
                 
-                const loginCount = logs.filter(log => log.action === 'login').length;
-                const activeUsers = new Set(logs.filter(log => log.action === 'login').map(log => log.userId)).size;
+                // Also get login data
+                const successfulLogins = JSON.parse(localStorage.getItem('successfulLogins') || '[]');
+                const loginAttempts = JSON.parse(localStorage.getItem('loginAttempts') || '[]');
+                
+                const loginCount = successfulLogins.length;
+                const activeUsers = new Set(successfulLogins.map(log => log.email)).size;
                 const recentActivity = logs.filter(log => {
+                    const logDate = new Date(log.timestamp);
+                    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                    return logDate > weekAgo;
+                }).length + loginAttempts.filter(log => {
                     const logDate = new Date(log.timestamp);
                     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
                     return logDate > weekAgo;
@@ -5322,9 +5368,15 @@
                 const storedLogs = localStorage.getItem('securityLogs');
                 const logs = storedLogs ? JSON.parse(storedLogs) : [];
                 
+                // Also get failed login data
+                const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
+                
                 const criticalEvents = logs.filter(log => log.severity === 'critical').length;
-                const warnings = logs.filter(log => log.severity === 'warning').length;
-                const suspiciousIPs = new Set(logs.filter(log => log.ipAddress !== 'Unknown').map(log => log.ipAddress)).size;
+                const warnings = logs.filter(log => log.severity === 'warning').length + failedLogins.length;
+                const suspiciousIPs = new Set([
+                    ...logs.filter(log => log.ipAddress !== 'Unknown').map(log => log.ipAddress),
+                    ...failedLogins.filter(log => log.ipAddress !== 'Unknown').map(log => log.ipAddress)
+                ]).size;
                 
                 securityContainer.innerHTML = `
                     <div style="margin-bottom: 1rem;">
@@ -5472,10 +5524,93 @@
             }, 2000);
         };
         
+        // Function to clear all logs (for testing)
+        window.clearAllLogs = function() {
+            if (confirm('Are you sure you want to clear all logs? This cannot be undone.')) {
+                localStorage.removeItem('activityLogs');
+                localStorage.removeItem('securityLogs');
+                localStorage.removeItem('loginAttempts');
+                localStorage.removeItem('successfulLogins');
+                localStorage.removeItem('failedLogins');
+                localStorage.removeItem('registrations');
+                
+                showNotification('🗑️ All logs cleared!', 'success');
+                
+                // Refresh the analytics
+                setTimeout(() => {
+                    loadActivityLogs();
+                    loadSecurityLogs();
+                    loadInsights();
+                }, 500);
+            }
+        };
+        
         // Initialize session tracking when dashboard loads
         document.addEventListener('DOMContentLoaded', function() {
             initializeSessionTracking();
+            
+            // Generate some sample data if no logs exist (for testing)
+            generateSampleData();
         });
+        
+        // Generate sample data for testing
+        function generateSampleData() {
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            // Only generate sample data if no logs exist
+            const existingLogs = localStorage.getItem('activityLogs');
+            if (existingLogs && JSON.parse(existingLogs).length > 0) {
+                return; // Don't generate if logs already exist
+            }
+            
+            // Generate sample activity logs
+            const sampleLogs = [
+                {
+                    id: Date.now() + 1,
+                    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+                    action: 'view',
+                    details: 'Viewed user management dashboard',
+                    userId: currentUser.email || 'admin@test.com',
+                    userRole: 'ADMIN',
+                    ipAddress: '192.168.1.100',
+                    userAgent: navigator.userAgent,
+                    sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
+                },
+                {
+                    id: Date.now() + 2,
+                    timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), // 1 hour ago
+                    action: 'edit',
+                    details: 'Edited user profile settings',
+                    userId: currentUser.email || 'admin@test.com',
+                    userRole: 'ADMIN',
+                    ipAddress: '192.168.1.100',
+                    userAgent: navigator.userAgent,
+                    sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
+                }
+            ];
+            
+            localStorage.setItem('activityLogs', JSON.stringify(sampleLogs));
+            
+            // Generate sample security logs
+            const sampleSecurityLogs = [
+                {
+                    id: Date.now() + 3,
+                    timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3 hours ago
+                    event: 'session_start',
+                    details: 'User session initiated',
+                    severity: 'info',
+                    userId: currentUser.email || 'admin@test.com',
+                    userRole: 'ADMIN',
+                    ipAddress: '192.168.1.100',
+                    userAgent: navigator.userAgent,
+                    sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
+                }
+            ];
+            
+            localStorage.setItem('securityLogs', JSON.stringify(sampleSecurityLogs));
+            
+            console.log('📊 Sample data generated for testing');
+        }
 
         window.deleteUser = async function(email) {
             if (!user.isAdmin) {
