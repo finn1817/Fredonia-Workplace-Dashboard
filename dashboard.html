@@ -1466,7 +1466,7 @@
                 </div>
 
                 <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                    <button type="submit" class="btn btn-success">💾 Save Worker</button>
+                    <button type="button" class="btn btn-success" onclick="submitWorkerForm()">💾 Save Worker</button>
                     <button type="button" class="btn btn-secondary" onclick="closeModal('workerFormModal')">Cancel</button>
                 </div>
             </form>
@@ -1490,7 +1490,7 @@
                     <input type="time" id="slotEndTime" required>
                 </div>
                 <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                    <button type="submit" class="btn btn-success">➕ Add Slot</button>
+                    <button type="button" class="btn btn-success" onclick="submitTimeSlotForm()">➕ Add Slot</button>
                     <button type="button" class="btn btn-secondary" onclick="closeModal('timeSlotModal')">Cancel</button>
                 </div>
             </form>
@@ -6062,52 +6062,45 @@
             document.getElementById('timeSlotModal').style.display = 'block';
         };
 
-        // Handle time slot form submission
+        // Initialize availability slots on page load
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOMContentLoaded - initializing availability slots');
             initializeAvailabilitySlots();
-            
-            // Handle time slot form submission
-            const timeSlotForm = document.getElementById('timeSlotForm');
-            if (timeSlotForm) {
-                console.log('Found timeSlotForm, adding event listener');
-                timeSlotForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    console.log('Time slot form submitted');
-                    
-                    try {
-                        const startTime = document.getElementById('slotStartTime').value;
-                        const endTime = document.getElementById('slotEndTime').value;
-                        
-                        console.log('Form values:', { startTime, endTime, currentEditingDay });
-                        
-                        if (!startTime || !endTime) {
-                            showNotification('❌ Please select both start and end times', 'error');
-                            return;
-                        }
-                        
-                        if (startTime >= endTime) {
-                            showNotification('❌ End time must be after start time', 'error');
-                            return;
-                        }
-                        
-                        if (!currentEditingDay) {
-                            console.error('currentEditingDay is not set');
-                            showNotification('❌ Error: No day selected', 'error');
-                            return;
-                        }
-                        
-                        addTimeSlot(currentEditingDay, startTime, endTime);
-                        closeModal('timeSlotModal');
-                    } catch (error) {
-                        console.error('Error in time slot form submission:', error);
-                        showNotification('❌ Error adding time slot', 'error');
-                    }
-                });
-            } else {
-                console.error('timeSlotForm not found');
-            }
         });
+        
+        // Manual submission function for time slot form
+        window.submitTimeSlotForm = function() {
+            console.log('Time slot form submitted manually');
+            
+            try {
+                const startTime = document.getElementById('slotStartTime').value;
+                const endTime = document.getElementById('slotEndTime').value;
+                
+                console.log('Form values:', { startTime, endTime, currentEditingDay });
+                
+                if (!startTime || !endTime) {
+                    showNotification('❌ Please select both start and end times', 'error');
+                    return;
+                }
+                
+                if (startTime >= endTime) {
+                    showNotification('❌ End time must be after start time', 'error');
+                    return;
+                }
+                
+                if (!currentEditingDay) {
+                    console.error('currentEditingDay is not set');
+                    showNotification('❌ Error: No day selected', 'error');
+                    return;
+                }
+                
+                addTimeSlot(currentEditingDay, startTime, endTime);
+                closeModal('timeSlotModal');
+            } catch (error) {
+                console.error('Error in time slot form submission:', error);
+                showNotification('❌ Error adding time slot', 'error');
+            }
+        };
 
         // Add time slot to the specified day
         function addTimeSlot(day, startTime, endTime) {
@@ -6327,19 +6320,23 @@
             }
         };
 
-        // Enhanced worker form validation and submission
-        const workerForm = document.getElementById('workerForm');
-        workerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        // Manual submission function for worker form
+        window.submitWorkerForm = async function() {
+            console.log('Worker form submitted manually');
+            
             if (!user.isAdmin) {
                 showNotification('❌ Admin access required', 'error');
-                return;
+                return false;
             }
+            
             const firstName = document.getElementById('workerFirstName').value.trim();
             const lastName = document.getElementById('workerLastName').value.trim();
             const email = document.getElementById('workerEmail').value.trim();
             const workStudy = document.getElementById('workerWorkStudy').value;
             let availability = document.getElementById('workerAvailability').value.trim();
+            
+            console.log('Form data:', { firstName, lastName, email, workStudy, availability });
+            
             // Enhanced validation
             if (!firstName || !lastName) {
                 showNotification('❌ First and last name are required', 'error');
@@ -6401,13 +6398,15 @@
                 if (errorMsg) {
                     showAvailabilityFormatModal(availability, (newVal) => {
                         document.getElementById('workerAvailability').value = newVal;
-                        workerForm.dispatchEvent(new Event('submit', {cancelable: true, bubbles: false}));
+                        submitWorkerForm();
                     }, errorMsg);
                     return;
                 }
             }
-            const submitBtn = document.querySelector('#workerForm button[type="submit"]');
+            
+            const submitBtn = document.querySelector('#workerForm button[type="button"]');
             setLoading(submitBtn.id || 'submitBtn', true);
+            
             const workerData = {
                 'First Name': firstName,
                 'Last Name': lastName,
@@ -6417,6 +6416,9 @@
                 'updated_at': new Date().toISOString(),
                 'updated_by': user.email
             };
+            
+            console.log('Saving worker data:', workerData);
+            
             try {
                 if (editingWorkerId) {
                     await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', editingWorkerId), workerData);
@@ -6435,7 +6437,7 @@
             } finally {
                 setLoading(submitBtn.id || 'submitBtn', false);
             }
-        });
+        };
         // Modal logic for availability format error
         function showAvailabilityFormatModal(lastAttempt, onSuccess, errorMsg) {
             const modal = document.getElementById('availabilityFormatModal');
