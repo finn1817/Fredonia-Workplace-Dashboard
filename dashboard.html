@@ -383,6 +383,86 @@
             gap: 1rem;
         }
 
+        /* Availability Interface Styles */
+        .day-availability-card {
+            background: white;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        .slots-container {
+            min-height: 50px;
+        }
+
+        .time-slot {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .time-slot:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .time-slot-info {
+            flex: 1;
+        }
+
+        .time-slot-time {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .time-slot-day {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .remove-slot-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+        }
+
+        .remove-slot-btn:hover {
+            background: #c82333;
+        }
+
+        .empty-slot-message {
+            color: #6c757d;
+            font-style: italic;
+            text-align: center;
+            padding: 1rem;
+            font-size: 0.9rem;
+        }
+
         .form-row-3 {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -1275,43 +1355,143 @@
 
     <!-- Modal for Add/Edit Worker -->
     <div id="workerFormModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 900px; width: 95%;">
             <div class="modal-header">
                 <h3 id="workerFormTitle">➕ Add Worker</h3>
                 <span class="close" onclick="closeModal('workerFormModal')">&times;</span>
             </div>
             <form id="workerForm">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="workerFirstName">First Name</label>
-                        <input type="text" id="workerFirstName" required>
+                <!-- Basic Information Section -->
+                <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">👤 Basic Information</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="workerFirstName">First Name</label>
+                            <input type="text" id="workerFirstName" required style="width: 100%;">
+                        </div>
+                        <div class="form-group">
+                            <label for="workerLastName">Last Name</label>
+                            <input type="text" id="workerLastName" required style="width: 100%;">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="workerLastName">Last Name</label>
-                        <input type="text" id="workerLastName" required>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="workerEmail">Email</label>
+                            <input type="email" id="workerEmail" required style="width: 100%;">
+                        </div>
+                        <div class="form-group">
+                            <label for="workerWorkStudy">Work Study</label>
+                            <select id="workerWorkStudy" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="workerEmail">Email</label>
-                        <input type="email" id="workerEmail" required>
+
+                <!-- Availability Section -->
+                <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">📅 Weekly Availability</h4>
+                    <p style="color: #666; margin-bottom: 1.5rem; font-size: 0.9rem;">
+                        Click the ➕ button next to each day to add availability slots. You can add multiple time slots per day.
+                    </p>
+                    
+                    <div id="availabilityContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+                        <!-- Sunday -->
+                        <div class="day-availability-card" data-day="Sun">
+                            <div class="day-header">
+                                <h5 style="margin: 0; color: #e74c3c;">Sunday</h5>
+                                <button type="button" class="add-slot-btn" onclick="addAvailabilitySlot('Sun')" style="background: #e74c3c; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.2rem;">➕</button>
+                            </div>
+                            <div class="slots-container" id="slots-Sun"></div>
+                        </div>
+
+                        <!-- Monday -->
+                        <div class="day-availability-card" data-day="Mon">
+                            <div class="day-header">
+                                <h5 style="margin: 0; color: #3498db;">Monday</h5>
+                                <button type="button" class="add-slot-btn" onclick="addAvailabilitySlot('Mon')" style="background: #3498db; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.2rem;">➕</button>
+                            </div>
+                            <div class="slots-container" id="slots-Mon"></div>
+                        </div>
+
+                        <!-- Tuesday -->
+                        <div class="day-availability-card" data-day="Tue">
+                            <div class="day-header">
+                                <h5 style="margin: 0; color: #9b59b6;">Tuesday</h5>
+                                <button type="button" class="add-slot-btn" onclick="addAvailabilitySlot('Tue')" style="background: #9b59b6; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.2rem;">➕</button>
+                            </div>
+                            <div class="slots-container" id="slots-Tue"></div>
+                        </div>
+
+                        <!-- Wednesday -->
+                        <div class="day-availability-card" data-day="Wed">
+                            <div class="day-header">
+                                <h5 style="margin: 0; color: #f39c12;">Wednesday</h5>
+                                <button type="button" class="add-slot-btn" onclick="addAvailabilitySlot('Wed')" style="background: #f39c12; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.2rem;">➕</button>
+                            </div>
+                            <div class="slots-container" id="slots-Wed"></div>
+                        </div>
+
+                        <!-- Thursday -->
+                        <div class="day-availability-card" data-day="Thu">
+                            <div class="day-header">
+                                <h5 style="margin: 0; color: #27ae60;">Thursday</h5>
+                                <button type="button" class="add-slot-btn" onclick="addAvailabilitySlot('Thu')" style="background: #27ae60; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.2rem;">➕</button>
+                            </div>
+                            <div class="slots-container" id="slots-Thu"></div>
+                        </div>
+
+                        <!-- Friday -->
+                        <div class="day-availability-card" data-day="Fri">
+                            <div class="day-header">
+                                <h5 style="margin: 0; color: #e67e22;">Friday</h5>
+                                <button type="button" class="add-slot-btn" onclick="addAvailabilitySlot('Fri')" style="background: #e67e22; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.2rem;">➕</button>
+                            </div>
+                            <div class="slots-container" id="slots-Fri"></div>
+                        </div>
+
+                        <!-- Saturday -->
+                        <div class="day-availability-card" data-day="Sat">
+                            <div class="day-header">
+                                <h5 style="margin: 0; color: #34495e;">Saturday</h5>
+                                <button type="button" class="add-slot-btn" onclick="addAvailabilitySlot('Sat')" style="background: #34495e; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 1.2rem;">➕</button>
+                            </div>
+                            <div class="slots-container" id="slots-Sat"></div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="workerWorkStudy">Work Study</label>
-                        <select id="workerWorkStudy">
-                            <option value="No">No</option>
-                            <option value="Yes">Yes</option>
-                        </select>
-                    </div>
+
+                    <!-- Hidden field to store the formatted availability -->
+                    <input type="hidden" id="workerAvailability" name="workerAvailability">
                 </div>
-                <div class="form-group">
-                    <label for="workerAvailability">Availability (e.g., "Mon 09:00-17:00, Tue 10:00-16:00")</label>
-                    <textarea id="workerAvailability" rows="3" placeholder="Mon 09:00-17:00, Tue 10:00-16:00, Wed 08:00-14:00"></textarea>
-                    <small style="color: #666; font-style: italic;">Format: Day HH:MM-HH:MM, Day HH:MM-HH:MM</small>
-                </div>
+
                 <div style="display: flex; gap: 1rem; margin-top: 1rem;">
                     <button type="submit" class="btn btn-success">💾 Save Worker</button>
                     <button type="button" class="btn btn-secondary" onclick="closeModal('workerFormModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Time Slot -->
+    <div id="timeSlotModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 id="timeSlotModalTitle">⏰ Add Time Slot</h3>
+                <span class="close" onclick="closeModal('timeSlotModal')">&times;</span>
+            </div>
+            <form id="timeSlotForm">
+                <div class="form-group">
+                    <label for="slotStartTime">Start Time</label>
+                    <input type="time" id="slotStartTime" required>
+                </div>
+                <div class="form-group">
+                    <label for="slotEndTime">End Time</label>
+                    <input type="time" id="slotEndTime" required>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button type="submit" class="btn btn-success">➕ Add Slot</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('timeSlotModal')">Cancel</button>
                 </div>
             </form>
         </div>
@@ -5776,6 +5956,10 @@
             editingWorkerId = null;
             document.getElementById('workerFormTitle').textContent = '➕ Add Worker';
             document.getElementById('workerForm').reset();
+            
+            // Clear all availability slots
+            clearAllAvailabilitySlots();
+            
             closeModal('workersModal');
             document.getElementById('workerFormModal').style.display = 'block';
         };
@@ -5799,11 +5983,197 @@
             document.getElementById('workerLastName').value = worker.last_name;
             document.getElementById('workerEmail').value = worker.email;
             document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
-            document.getElementById('workerAvailability').value = worker.availability_text;
+            
+            // Clear existing slots and load worker's availability
+            clearAllAvailabilitySlots();
+            loadWorkerAvailability(worker.availability_text);
             
             closeModal('workersModal');
             document.getElementById('workerFormModal').style.display = 'block';
         };
+
+        // Availability Management Functions
+        let currentEditingDay = null;
+        let availabilitySlots = {};
+
+        // Initialize availability slots object
+        function initializeAvailabilitySlots() {
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            days.forEach(day => {
+                availabilitySlots[day] = [];
+            });
+        }
+
+        // Clear all availability slots
+        function clearAllAvailabilitySlots() {
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            days.forEach(day => {
+                const container = document.getElementById(`slots-${day}`);
+                if (container) {
+                    container.innerHTML = '<div class="empty-slot-message">No time slots added</div>';
+                }
+                availabilitySlots[day] = [];
+            });
+        }
+
+        // Add availability slot
+        window.addAvailabilitySlot = function(day) {
+            currentEditingDay = day;
+            const dayNames = {
+                'Sun': 'Sunday',
+                'Mon': 'Monday',
+                'Tue': 'Tuesday',
+                'Wed': 'Wednesday',
+                'Thu': 'Thursday',
+                'Fri': 'Friday',
+                'Sat': 'Saturday'
+            };
+            
+            document.getElementById('timeSlotModalTitle').textContent = `⏰ Add Time Slot - ${dayNames[day]}`;
+            document.getElementById('timeSlotForm').reset();
+            document.getElementById('timeSlotModal').style.display = 'block';
+        };
+
+        // Handle time slot form submission
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeAvailabilitySlots();
+            
+            // Handle time slot form submission
+            const timeSlotForm = document.getElementById('timeSlotForm');
+            if (timeSlotForm) {
+                timeSlotForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const startTime = document.getElementById('slotStartTime').value;
+                    const endTime = document.getElementById('slotEndTime').value;
+                    
+                    if (!startTime || !endTime) {
+                        showNotification('❌ Please select both start and end times', 'error');
+                        return;
+                    }
+                    
+                    if (startTime >= endTime) {
+                        showNotification('❌ End time must be after start time', 'error');
+                        return;
+                    }
+                    
+                    addTimeSlot(currentEditingDay, startTime, endTime);
+                    closeModal('timeSlotModal');
+                });
+            }
+        });
+
+        // Add time slot to the specified day
+        function addTimeSlot(day, startTime, endTime) {
+            const slot = {
+                id: Date.now() + Math.random(),
+                day: day,
+                startTime: startTime,
+                endTime: endTime
+            };
+            
+            availabilitySlots[day].push(slot);
+            renderTimeSlot(day, slot);
+            updateAvailabilityField();
+        }
+
+        // Render a time slot in the UI
+        function renderTimeSlot(day, slot) {
+            const container = document.getElementById(`slots-${day}`);
+            
+            // Remove empty message if it exists
+            const emptyMessage = container.querySelector('.empty-slot-message');
+            if (emptyMessage) {
+                emptyMessage.remove();
+            }
+            
+            const slotElement = document.createElement('div');
+            slotElement.className = 'time-slot';
+            slotElement.dataset.slotId = slot.id;
+            
+            const startTimeFormatted = formatTimeForDisplay(slot.startTime);
+            const endTimeFormatted = formatTimeForDisplay(slot.endTime);
+            
+            slotElement.innerHTML = `
+                <div class="time-slot-info">
+                    <div class="time-slot-time">${startTimeFormatted} - ${endTimeFormatted}</div>
+                    <div class="time-slot-day">${getDayName(day)}</div>
+                </div>
+                <button type="button" class="remove-slot-btn" onclick="removeTimeSlot('${day}', '${slot.id}')" title="Remove time slot">×</button>
+            `;
+            
+            container.appendChild(slotElement);
+        }
+
+        // Remove time slot
+        window.removeTimeSlot = function(day, slotId) {
+            availabilitySlots[day] = availabilitySlots[day].filter(slot => slot.id !== slotId);
+            
+            const container = document.getElementById(`slots-${day}`);
+            const slotElement = container.querySelector(`[data-slot-id="${slotId}"]`);
+            if (slotElement) {
+                slotElement.remove();
+            }
+            
+            // Show empty message if no slots remain
+            if (availabilitySlots[day].length === 0) {
+                container.innerHTML = '<div class="empty-slot-message">No time slots added</div>';
+            }
+            
+            updateAvailabilityField();
+        };
+
+        // Format time for display (convert 24h to 12h with AM/PM)
+        function formatTimeForDisplay(time24) {
+            const [hours, minutes] = time24.split(':');
+            const hour = parseInt(hours);
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            const hour12 = hour % 12 || 12;
+            return `${hour12}:${minutes} ${ampm}`;
+        }
+
+        // Get day name
+        function getDayName(dayCode) {
+            const dayNames = {
+                'Sun': 'Sunday',
+                'Mon': 'Monday',
+                'Tue': 'Tuesday',
+                'Wed': 'Wednesday',
+                'Thu': 'Thursday',
+                'Fri': 'Friday',
+                'Sat': 'Saturday'
+            };
+            return dayNames[dayCode] || dayCode;
+        }
+
+        // Update the hidden availability field with formatted data
+        function updateAvailabilityField() {
+            const availabilityParts = [];
+            
+            Object.keys(availabilitySlots).forEach(day => {
+                availabilitySlots[day].forEach(slot => {
+                    availabilityParts.push(`${day} ${slot.startTime}-${slot.endTime}`);
+                });
+            });
+            
+            document.getElementById('workerAvailability').value = availabilityParts.join(', ');
+        }
+
+        // Load worker availability from existing data
+        function loadWorkerAvailability(availabilityText) {
+            if (!availabilityText) return;
+            
+            // Parse the existing availability format: "Mon 09:00-17:00, Tue 10:00-16:00"
+            const slots = availabilityText.split(',').map(slot => slot.trim());
+            
+            slots.forEach(slot => {
+                const match = slot.match(/^(\w{3})\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+                if (match) {
+                    const [, day, startTime, endTime] = match;
+                    addTimeSlot(day, startTime, endTime);
+                }
+            });
+        }
 
         window.deleteWorker = async function(workerId) {
             if (!user.isAdmin) {
