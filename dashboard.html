@@ -6159,7 +6159,11 @@
                     return;
                 }
                 
-                if (startTime >= endTime) {
+                // Convert times to comparable format for proper validation
+                const startHour = timeToHour(startTime);
+                const endHour = timeToHour(endTime);
+                
+                if (startHour >= endHour) {
                     showNotification('❌ End time must be after start time', 'error');
                     return;
                 }
