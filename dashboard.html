@@ -2022,8 +2022,9 @@
             
             for (const [day, hours] of Object.entries(hoursOfOperation)) {
                 for (const hour of hours) {
-                    const opStart = timeToHour(hour.start);
-                    const opEnd = timeToHour(hour.end);
+                    let opStart = timeToHour(hour.start);
+                    let opEnd = timeToHour(hour.end);
+                    if (opEnd === 0 && hour.end === '00:00') opEnd = 24;
                     
                     // Check if this time period is covered by any shift
                     const dayShifts = schedule[day] || [];
@@ -2031,8 +2032,9 @@
                     
                     dayShifts.forEach(shift => {
                         if (!shift.assigned.includes('Unfilled')) {
-                            const shiftStart = timeToHour(shift.start);
-                            const shiftEnd = timeToHour(shift.end);
+                            let shiftStart = timeToHour(shift.start);
+                            let shiftEnd = timeToHour(shift.end);
+                            if (shiftEnd === 0 && shift.end === '00:00') shiftEnd = 24;
                             coveredPeriods.push([shiftStart, shiftEnd]);
                         }
                     });
@@ -2312,18 +2314,18 @@
             
             for (const [day, hours] of Object.entries(hoursOfOperation)) {
                 for (const hour of hours) {
-                    const opStart = timeToHour(hour.start);
+                    let opStart = timeToHour(hour.start);
                     let opEnd = timeToHour(hour.end);
-                    if (opEnd <= opStart) opEnd += 24;
+                    if (opEnd === 0 && hour.end === '00:00') opEnd = 24;
                     
                     const dayShifts = schedule[day] || [];
                     const coveredPeriods = [];
                     
                     dayShifts.forEach(shift => {
                         if (shift.assigned && shift.assigned.length > 0 && !shift.assigned.includes('Unfilled')) {
-                            const shiftStart = timeToHour(shift.start);
+                            let shiftStart = timeToHour(shift.start);
                             let shiftEnd = timeToHour(shift.end);
-                            if (shiftEnd <= shiftStart) shiftEnd += 24;
+                            if (shiftEnd === 0 && shift.end === '00:00') shiftEnd = 24;
                             coveredPeriods.push([shiftStart, shiftEnd]);
                         }
                     });
@@ -7868,7 +7870,7 @@
                 }
                 
                 // For overnight shifts (end time is midnight), we need to add 24 hours to end time for comparison
-                const adjustedEndHour = endHour === 0 ? 24 : endHour;
+                const adjustedEndHour = (endHour === 0 && end === '00:00') ? 24 : endHour;
                 if (adjustedEndHour <= startHour) {
                     showNotification('❌ End time must be after start time', 'error');
                     return;
@@ -7885,8 +7887,8 @@
                 const shiftEndHour = timeToHour(end);
                 
                 // For overnight shifts, adjust the end time
-                const adjustedShiftEndHour = shiftEndHour === 0 ? 24 : shiftEndHour;
-                const adjustedOpEndHour = opEndHour === 0 ? 24 : opEndHour;
+                const adjustedShiftEndHour = (shiftEndHour === 0 && end === '00:00') ? 24 : shiftEndHour;
+                const adjustedOpEndHour = (opEndHour === 0 && opHours.end === '00:00') ? 24 : opEndHour;
                 
                 if (shiftStartHour < opStartHour || adjustedShiftEndHour > adjustedOpEndHour) {
                     showNotification(`❌ Shift must be within operating hours: ${formatTime(opHours.start)} - ${formatTime(opHours.end)}`, 'error');
@@ -8010,7 +8012,7 @@
                 }
                 
                 // For overnight shifts (end time is midnight), we need to add 24 hours to end time for comparison
-                const adjustedEndHour = endHour === 0 ? 24 : endHour;
+                const adjustedEndHour = (endHour === 0 && newEnd === '00:00') ? 24 : endHour;
                 if (adjustedEndHour <= startHour) {
                     showNotification('❌ End time must be after start time', 'error');
                     return;
@@ -8022,8 +8024,8 @@
                 const shiftEndHour = timeToHour(newEnd);
                 
                 // For overnight shifts, adjust the end time
-                const adjustedShiftEndHour = shiftEndHour === 0 ? 24 : shiftEndHour;
-                const adjustedOpEndHour = opEndHour === 0 ? 24 : opEndHour;
+                const adjustedShiftEndHour = (shiftEndHour === 0 && newEnd === '00:00') ? 24 : shiftEndHour;
+                const adjustedOpEndHour = (opEndHour === 0 && opHours.end === '00:00') ? 24 : opEndHour;
                 
                 if (shiftStartHour < opStartHour || adjustedShiftEndHour > adjustedOpEndHour) {
                     showNotification(`❌ Shift must be within operating hours: ${formatTime(opHours.start)} - ${formatTime(opHours.end)}`, 'error');
@@ -9887,8 +9889,9 @@
                 
                 // Check that end is after start
                 const startHour = timeToHour(shift.start);
-                const endHour = timeToHour(shift.end);
-                if (endHour <= startHour && endHour !== 0) { // Allow midnight (00:00)
+                let endHour = timeToHour(shift.end);
+                if (endHour === 0 && shift.end === '00:00') endHour = 24;
+                if (endHour <= startHour) { // Allow midnight (00:00)
                     throw new Error('End time must be after start time');
                 }
                 
