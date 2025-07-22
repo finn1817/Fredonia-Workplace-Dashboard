@@ -2584,6 +2584,27 @@
                 availabilityHours[w.email] = calculateAvailabilityHours(w);
             });
             
+            // Enhanced Fair Distribution: Calculate target hours for non-Work Study workers
+            const nonWorkStudyWorkers = workersData.filter(w => !wsStatus[w.email]);
+            const workStudyWorkers = workersData.filter(w => wsStatus[w.email]);
+            const totalWorkStudyHours = workStudyWorkers.length * 5; // Work Study gets exactly 5 hours each
+            
+            // Calculate total operating hours to determine fair distribution
+            let totalOperatingHours = 0;
+            for (const [day, ops] of Object.entries(hoursOfOperation)) {
+                for (const op of ops) {
+                    const opStart = timeToHour(op.start);
+                    let opEnd = timeToHourWithMidnight(op.end, op.end === '00:00');
+                    totalOperatingHours += (opEnd - opStart) * maxWorkersPerShift; // Total shift-hours needed
+                }
+            }
+            
+            // Calculate target hours per non-Work Study worker for fair distribution
+            const remainingHours = Math.max(0, totalOperatingHours - totalWorkStudyHours);
+            const fairTargetHours = nonWorkStudyWorkers.length > 0 ? remainingHours / nonWorkStudyWorkers.length : 0;
+            
+            console.log(`📊 Fair Distribution Setup: ${totalOperatingHours} total hours, ${totalWorkStudyHours} for Work Study, ${remainingHours} remaining for ${nonWorkStudyWorkers.length} regular workers = ${fairTargetHours.toFixed(1)} target per worker`);
+            
             // CRITICAL FIX: Track which workers are already assigned to prevent double assignment
             const assignedWorkers = new Set();
             
@@ -3124,7 +3145,19 @@
                                         return ratioA - ratioB;
                                     }
                                     
-                                    // Finally, sort by fairness ratio
+                                    // Enhanced Fair Distribution: For regular workers only (never affects Work Study priority)
+                                    if (!aIsWS && !bIsWS && fairTargetHours > 0) {
+                                        // Calculate how far each worker is from their fair target
+                                        const aDeficit = fairTargetHours - aHours; // Positive = below target, negative = above target
+                                        const bDeficit = fairTargetHours - bHours;
+                                        
+                                        // Prioritize workers furthest below their target (largest deficit)
+                                        if (Math.abs(aDeficit - bDeficit) > 0.1) { // Only if significant difference
+                                            return bDeficit - aDeficit; // Worker with larger deficit gets priority
+                                        }
+                                    }
+                                    
+                                    // Finally, fallback to original fairness ratio for edge cases
                                     const ratioA = assignedHours[a.email] / Math.max(availabilityHours[a.email], 1);
                                     const ratioB = assignedHours[b.email] / Math.max(availabilityHours[b.email], 1);
                                     return ratioA - ratioB;
