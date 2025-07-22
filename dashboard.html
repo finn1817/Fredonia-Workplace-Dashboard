@@ -6163,7 +6163,14 @@
                 const startHour = timeToHour(startTime);
                 const endHour = timeToHour(endTime);
                 
+                console.log('DEBUG: Time validation:', {
+                    startTime, endTime, 
+                    startHour, endHour,
+                    comparison: startHour >= endHour
+                });
+                
                 if (startHour >= endHour) {
+                    console.log('DEBUG: Validation failed - start >= end');
                     showNotification('❌ End time must be after start time', 'error');
                     return;
                 }
