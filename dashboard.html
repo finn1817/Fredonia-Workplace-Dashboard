@@ -1973,6 +1973,18 @@
             return h + (m / 60);
         };
 
+        // Helper function for handling midnight crossover in time ranges
+        const timeToHourWithMidnight = (timeStr, isMidnightNext = false) => {
+            if (!timeStr) return 0;
+            const [h, m] = timeStr.split(':').map(Number);
+            let hour = h + (m / 60);
+            // Handle midnight (00:00) as 24:00 for overnight shifts
+            if (hour === 0 && timeStr === '00:00' && isMidnightNext) {
+                hour = 24;
+            }
+            return hour;
+        };
+
         const hourToTime = (hour) => {
             const h = Math.floor(hour);
             const m = Math.round((hour - h) * 60);
@@ -2036,7 +2048,38 @@
 
         const isWorkerAvailable = (worker, day, startHour, endHour) => {
             const dayAvail = worker.availability[day] || [];
-            return dayAvail.some(slot => slot.start_hour <= startHour && endHour <= slot.end_hour);
+            return dayAvail.some(slot => {
+                let slotStart = slot.start_hour;
+                let slotEnd = slot.end_hour;
+                
+                // Handle overnight availability slots (e.g., 22:00 to 6:00 next day)
+                if (slotEnd < slotStart) {
+                    // This is an overnight slot, split it into two parts
+                    // Part 1: start to midnight (24:00)
+                    // Part 2: midnight to end (treat as next day)
+                    return (slotStart <= startHour && startHour < 24 && endHour <= 24) ||
+                           (0 <= startHour && endHour <= slotEnd);
+                }
+                
+                // Handle overnight shift requests (endHour > 24 means crossing midnight)
+                if (endHour > 24) {
+                    // Split the request: today part and tomorrow part
+                    const todayEnd = 24;
+                    const tomorrowStart = 0;
+                    const tomorrowEnd = endHour - 24;
+                    
+                    // Check if availability covers both parts
+                    const coversTodayPart = slotStart <= startHour && todayEnd <= slotEnd;
+                    const coversTomorrowPart = dayAvail.some(tomorrowSlot => 
+                        tomorrowSlot.start_hour <= tomorrowStart && tomorrowEnd <= tomorrowSlot.end_hour
+                    );
+                    
+                    return coversTodayPart && coversTomorrowPart;
+                }
+                
+                // Normal same-day check
+                return slotStart <= startHour && endHour <= slotEnd;
+            });
         };
 
         // Enhanced loading state management
@@ -2097,8 +2140,7 @@
             for (const [day, hours] of Object.entries(hoursOfOperation)) {
                 for (const hour of hours) {
                     let opStart = timeToHour(hour.start);
-                    let opEnd = timeToHour(hour.end);
-                    if (opEnd === 0 && hour.end === '00:00') opEnd = 24;
+                    let opEnd = timeToHourWithMidnight(hour.end, hour.end === '00:00');
                     
                     // Check if this time period is covered by any shift
                     const dayShifts = schedule[day] || [];
@@ -2107,8 +2149,7 @@
                     dayShifts.forEach(shift => {
                         if (!shift.assigned.includes('Unfilled')) {
                             let shiftStart = timeToHour(shift.start);
-                            let shiftEnd = timeToHour(shift.end);
-                            if (shiftEnd === 0 && shift.end === '00:00') shiftEnd = 24;
+                            let shiftEnd = timeToHourWithMidnight(shift.end, shift.end === '00:00');
                             coveredPeriods.push([shiftStart, shiftEnd]);
                         }
                     });
@@ -2389,8 +2430,7 @@
             for (const [day, hours] of Object.entries(hoursOfOperation)) {
                 for (const hour of hours) {
                     let opStart = timeToHour(hour.start);
-                    let opEnd = timeToHour(hour.end);
-                    if (opEnd === 0 && hour.end === '00:00') opEnd = 24;
+                    let opEnd = timeToHourWithMidnight(hour.end, hour.end === '00:00');
                     
                     const dayShifts = schedule[day] || [];
                     const coveredPeriods = [];
@@ -2398,8 +2438,7 @@
                     dayShifts.forEach(shift => {
                         if (shift.assigned && shift.assigned.length > 0 && !shift.assigned.includes('Unfilled')) {
                             let shiftStart = timeToHour(shift.start);
-                            let shiftEnd = timeToHour(shift.end);
-                            if (shiftEnd === 0 && shift.end === '00:00') shiftEnd = 24;
+                            let shiftEnd = timeToHourWithMidnight(shift.end, shift.end === '00:00');
                             coveredPeriods.push([shiftStart, shiftEnd]);
                         }
                     });
@@ -6146,13 +6185,9 @@
         
         // Manual submission function for time slot form
         window.submitTimeSlotForm = function() {
-            console.log('Time slot form submitted manually');
-            
             try {
                 const startTime = document.getElementById('slotStartTime').value;
                 const endTime = document.getElementById('slotEndTime').value;
-                
-                console.log('Form values:', { startTime, endTime, currentEditingDay });
                 
                 if (!startTime || !endTime) {
                     showNotification('❌ Please select both start and end times', 'error');
@@ -6161,16 +6196,9 @@
                 
                 // Convert times to comparable format for proper validation
                 const startHour = timeToHour(startTime);
-                const endHour = timeToHour(endTime);
-                
-                console.log('DEBUG: Time validation:', {
-                    startTime, endTime, 
-                    startHour, endHour,
-                    comparison: startHour >= endHour
-                });
+                const endHour = timeToHourWithMidnight(endTime, endTime === '00:00');
                 
                 if (startHour >= endHour) {
-                    console.log('DEBUG: Validation failed - start >= end');
                     showNotification('❌ End time must be after start time', 'error');
                     return;
                 }
@@ -9972,11 +10000,10 @@
                     throw new Error('Invalid time format. Use HH:MM format');
                 }
                 
-                // Check that end is after start
+                // Check that end is after start using consistent midnight handling
                 const startHour = timeToHour(shift.start);
-                let endHour = timeToHour(shift.end);
-                if (endHour === 0 && shift.end === '00:00') endHour = 24;
-                if (endHour <= startHour) { // Allow midnight (00:00)
+                const endHour = timeToHourWithMidnight(shift.end, shift.end === '00:00');
+                if (endHour <= startHour) {
                     throw new Error('End time must be after start time');
                 }
                 
