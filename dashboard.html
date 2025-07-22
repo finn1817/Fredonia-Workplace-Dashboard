@@ -3766,11 +3766,10 @@
             
             try {
                 await loadWorkplaceData();
-                // await loadWorkplaceNotes(); // OLD NOTES FUNCTION REMOVED
+                await loadCurrentScheduleData(); // Load schedule data for "Who's Working Now" functionality
                 await loadAnnouncements(); // Load announcements
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">✅ Ready! Select an option above to get started.</div>';
                 hideAllForms();
-                // document.getElementById('workplaceNotesSection').style.display = 'block'; // OLD NOTES SECTION REMOVED
                 document.getElementById('announcementsSection').style.display = 'block'; // Show announcements section
             } catch (error) {
                 console.error('Error loading workplace:', error);
@@ -3782,6 +3781,45 @@
                 await loadUserDashboard();
             }
         };
+
+        // Load current schedule data silently for "Who's Working Now" functionality
+        async function loadCurrentScheduleData() {
+            try {
+                // Find current schedule (same logic as viewCurrentSchedule)
+                const currentSnapshot = await getDocs(query(
+                    collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                    where('isCurrent', '==', true)
+                ));
+                
+                let currentDoc = null;
+                if (!currentSnapshot.empty) {
+                    currentDoc = currentSnapshot.docs[0];
+                } else {
+                    // Fallback to most recent schedule if no current is set
+                    const snapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'schedules'),
+                        orderBy('createdAt', 'desc')
+                    ));
+                    
+                    if (!snapshot.empty) {
+                        currentDoc = snapshot.docs[0];
+                    }
+                }
+                
+                if (currentDoc) {
+                    currentScheduleId = currentDoc.id;
+                    const scheduleData = currentDoc.data();
+                    schedule = scheduleData.days; // Populate global schedule for "Who's Working Now"
+                    console.log('✅ Schedule data loaded silently for Who\'s Working Now functionality');
+                } else {
+                    console.log('⚠️ No current schedule found');
+                    schedule = {}; // Clear schedule if none found
+                }
+            } catch (error) {
+                console.error('Error loading current schedule data:', error);
+                schedule = {}; // Clear schedule on error
+            }
+        }
 
         // Enhanced data loading with better error handling
         async function loadWorkplaceData() {
@@ -8393,7 +8431,7 @@
                 return;
             }
             if (!schedule || Object.keys(schedule).length === 0) {
-                showNotification('❌ No schedule loaded. View the current schedule first.', 'error');
+                showNotification('❌ No current schedule found for this workplace.', 'error');
                 return;
             }
             // Get current day and time
@@ -8402,7 +8440,13 @@
             const curHour = now.getHours() + now.getMinutes() / 60;
             const shifts = (schedule[day] || []).filter(shift => {
                 const start = timeToHour(shift.start);
-                const end = timeToHour(shift.end);
+                let end = timeToHour(shift.end);
+                
+                // Handle overnight shifts (e.g., 22:00 to 6:00 next day)
+                if (end <= start) {
+                    end += 24;
+                }
+                
                 return start <= curHour && curHour < end && shift.assigned && shift.assigned.length > 0 && !shift.assigned.includes('Unfilled') && !shift.assigned.includes('COVERAGE GAP');
             });
             let html = `<div class='modal-content'><div class='modal-header'><h3>🕒 Who's Working Now?</h3><span class='close' onclick="closeModal('whosWorkingNowModal')">&times;</span></div>`;
@@ -9416,8 +9460,17 @@
                         myShiftsByDay[day].forEach(shift => {
                             if (shift.start && shift.end) {
                                 const startHour = timeToHour(shift.start);
-                                const endHour = timeToHour(shift.end);
-                                totalHours += (endHour - startHour);
+                                let endHour = timeToHour(shift.end);
+                                
+                                // Handle midnight crossover (e.g., 10:00 PM to 2:00 AM next day)
+                                if (endHour <= startHour) {
+                                    // This is an overnight shift, add 24 hours to end time
+                                    endHour += 24;
+                                }
+                                
+                                const shiftDuration = endHour - startHour;
+                                totalHours += shiftDuration;
+                                console.log(`DEBUG: Shift ${shift.start}-${shift.end}: start=${startHour}, end=${endHour}, duration=${shiftDuration}`);
                             }
                         });
                     }
