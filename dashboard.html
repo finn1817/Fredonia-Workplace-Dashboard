@@ -3210,8 +3210,26 @@
                                     }
                                 }
 
-                                // Mark unfilled if we couldn't fill all positions
-                                for (let i = 0; i < maxWorkersPerShift - chosen.length; i++) {
+                                // Track unfilled positions (but don't create duplicate shifts for them)
+                                if (chosen.length < maxWorkersPerShift && chosen.length > 0) {
+                                    // Log that this shift could use more workers, but don't create gap shifts
+                                    console.log(`⚠️ Shift ${hourToTime(cur)}-${hourToTime(finalEndShift)} on ${day} has ${chosen.length}/${maxWorkersPerShift} workers - seeking additional workers`);
+                                    
+                                    // Add this as an unfilled shift for later optimization attempts
+                                    unfilledShifts.push({
+                                        day: day,
+                                        start: hourToTime(cur),
+                                        end: hourToTime(finalEndShift),
+                                        start_hour: cur,
+                                        end_hour: finalEndShift,
+                                        currentWorkers: chosen.length,
+                                        targetWorkers: maxWorkersPerShift,
+                                        needsMore: true
+                                    });
+                                } else if (chosen.length === 0) {
+                                    // Only create a coverage gap if NO workers could be assigned
+                                    console.log(`❌ No workers available for ${hourToTime(cur)}-${hourToTime(finalEndShift)} on ${day} - creating coverage gap`);
+                                    
                                     unfilledShifts.push({
                                         day: day,
                                         start: hourToTime(cur),
@@ -3225,15 +3243,133 @@
                                         start: hourToTime(cur),
                                         end: hourToTime(finalEndShift),
                                         assigned: ["⚠️ COVERAGE GAP"],
-                                        available: availableWorkers.map(y => `${y.first_name} ${y.last_name}`),
+                                        available: [],
                                         raw_assigned: [],
-                                        all_available: availableWorkers,
+                                        all_available: [],
                                         isGap: true
                                     });
                                 }
 
                                 cur = finalEndShift;
                             }
+                        }
+                    }
+                }
+            }
+
+            // Phase 3: Fill existing shifts to target worker count
+            console.log('🎯 Phase 3: Attempting to fill existing shifts to target worker count...');
+            
+            for (const day of Object.keys(schedule)) {
+                for (const shift of schedule[day]) {
+                    // Skip gap shifts and work study only shifts
+                    if (shift.isGap || shift.raw_assigned.length >= maxWorkersPerShift) continue;
+                    
+                    const currentWorkers = shift.raw_assigned.length;
+                    const neededWorkers = maxWorkersPerShift - currentWorkers;
+                    
+                    if (neededWorkers > 0) {
+                        const shiftStart = timeToHour(shift.start);
+                        const shiftEnd = timeToHour(shift.end);
+                        const shiftDuration = shiftEnd - shiftStart;
+                        const shiftKey = `${day}_${shift.start}_${shift.end}`;
+                        
+                        console.log(`🔍 Trying to add ${neededWorkers} more workers to ${day} ${shift.start}-${shift.end} (currently has ${currentWorkers})`);
+                        
+                        // Find workers available for this shift who aren't already assigned to it
+                        const candidateWorkers = [];
+                        
+                        for (const worker of workersData) {
+                            const email = worker.email;
+                            
+                            // Skip if worker is already assigned to this shift
+                            if (shift.raw_assigned.includes(email)) continue;
+                            
+                            // Skip work study students who already have 5 hours
+                            if (wsStatus[email] && assignedHours[email] >= 5) continue;
+                            
+                            // Check availability and hour limits
+                            if (isWorkerAvailable(worker, day, shiftStart, shiftEnd) && 
+                                assignedHours[email] + shiftDuration <= maxHoursPerWorker) {
+                                candidateWorkers.push(worker);
+                            }
+                        }
+                        
+                        if (candidateWorkers.length > 0) {
+                            // Sort candidates using same priority logic as main algorithm
+                            candidateWorkers.sort((a, b) => {
+                                const aIsWS = wsStatus[a.email];
+                                const bIsWS = wsStatus[b.email];
+                                const aHours = assignedHours[a.email] || 0;
+                                const bHours = assignedHours[b.email] || 0;
+                                
+                                // Work study students with 0 hours get absolute priority
+                                if (aIsWS && aHours === 0 && !bIsWS) return -1;
+                                if (bIsWS && bHours === 0 && !aIsWS) return 1;
+                                if (aIsWS && aHours === 0 && bIsWS && bHours === 0) {
+                                    const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
+                                    const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                    return ratioA - ratioB;
+                                }
+                                
+                                // Then work study students with less than 5 hours
+                                if (aIsWS && aHours < 5 && !bIsWS) return -1;
+                                if (bIsWS && bHours < 5 && !aIsWS) return 1;
+                                if (aIsWS && aHours < 5 && bIsWS && bHours < 5) {
+                                    return aHours - bHours;
+                                }
+                                
+                                // Then regular workers with 0 hours
+                                if (!aIsWS && aHours === 0 && bIsWS) return -1;
+                                if (!bIsWS && bHours === 0 && aIsWS) return 1;
+                                if (!aIsWS && aHours === 0 && !bIsWS && bHours === 0) {
+                                    const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
+                                    const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                    return ratioA - ratioB;
+                                }
+                                
+                                // Enhanced Fair Distribution for regular workers
+                                if (!aIsWS && !bIsWS && fairTargetHours > 0) {
+                                    const aDeficit = fairTargetHours - aHours;
+                                    const bDeficit = fairTargetHours - bHours;
+                                    if (Math.abs(aDeficit - bDeficit) > 0.1) {
+                                        return bDeficit - aDeficit;
+                                    }
+                                }
+                                
+                                // Finally, fallback to original fairness ratio
+                                const ratioA = assignedHours[a.email] / Math.max(availabilityHours[a.email], 1);
+                                const ratioB = assignedHours[b.email] / Math.max(availabilityHours[b.email], 1);
+                                return ratioA - ratioB;
+                            });
+                            
+                            // Add the best candidates up to the needed count
+                            const workersToAdd = candidateWorkers.slice(0, neededWorkers);
+                            
+                            for (const worker of workersToAdd) {
+                                // Add worker to shift tracking
+                                if (!shiftAssignments.has(shiftKey)) {
+                                    shiftAssignments.set(shiftKey, new Set());
+                                }
+                                shiftAssignments.get(shiftKey).add(worker.email);
+                                
+                                // Add worker to shift
+                                shift.assigned.push(`${worker.first_name} ${worker.last_name}`);
+                                shift.raw_assigned.push(worker.email);
+                                shift.all_available.push(worker);
+                                
+                                // Update worker hours
+                                assignedHours[worker.email] += shiftDuration;
+                                
+                                console.log(`✅ Added ${worker.first_name} ${worker.last_name} to existing shift ${day} ${shift.start}-${shift.end} (${shiftDuration}h)`);
+                            }
+                            
+                            // Update workers count
+                            shift.workers_count = shift.raw_assigned.length;
+                            
+                            console.log(`🎯 Successfully filled shift ${day} ${shift.start}-${shift.end} with ${shift.raw_assigned.length}/${maxWorkersPerShift} workers`);
+                        } else {
+                            console.log(`⚠️ No available workers found to fill ${day} ${shift.start}-${shift.end}`);
                         }
                     }
                 }
