@@ -50,10 +50,11 @@ The **Fredonia Workplace Scheduler Dashboard** is a web-based tool designed to:
 - ![Screenshot 3 ](images/dashboard-overview-3.png)
 - ![Screenshot 4](images/dashboard-overview-4.png)
 - ![Screenshot 5](images/dashboard-overview-5.png)
+- ![Screenshot 6](images/dashboard-overview-6.png)
 
 ---
 
-## Tech Stack
+## Tech Background
 
 - **Frontend:** HTML, CSS, JavaScript (Vanilla, no framework)
 - **Backend/Database:** Firebase Firestore (Cloud) - Connects with & uses 2 seperate joined databases
@@ -112,7 +113,6 @@ The **Fredonia Workplace Scheduler Dashboard** is a web-based tool designed to:
     - **timeOffRequests/**
     - **shiftSwaps/**
 - **users/**
-  - User profile and role info
   - **[users]/**
       - **email/**
       - **firstName/**
@@ -126,7 +126,7 @@ The **Fredonia Workplace Scheduler Dashboard** is a web-based tool designed to:
 
 ## Contributing
  
-Please open an issue or submit a pull request for bug fixes, new features, or improvements!
+Please feel free to open an issue or submit a pull request for bug fixes, new features, or improvements!
 
 ---
 
