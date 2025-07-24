@@ -133,7 +133,5 @@ Please open an issue or submit a pull request for bug fixes, new features, or im
 ## Credits
 
 - Dan Finn [@finn1817](https://www.github.com/finn1817) - Creator / Programmer!
-- Greg Avialiotis [@grega1303](https://www.github.com/grega1303) - Helped with testing!
-
 ---
 
