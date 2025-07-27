@@ -695,6 +695,19 @@
             background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
         }
 
+        .shift.cross-workplace-conflict {
+            border-left: 5px solid #e53935;
+            background: #ffebee;
+            border: 2px solid #e53935;
+            animation: pulse-red 2s infinite;
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(229, 57, 53, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0); }
+        }
+
         @keyframes pulse {
             0% { box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(255, 87, 34, 0); }
@@ -1115,15 +1128,15 @@
         #editShiftModal {
             display: none;
             position: fixed;
-            top: 50%;
+            top: 5%;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translateX(-50%);
             background: #fff;
             border-radius: 16px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.18);
             padding: 2rem 2.5rem;
-            min-width: 600px;
-            max-width: 90vw;
+            min-width: 800px;
+            max-width: 95vw;
             max-height: 90vh;
             overflow-y: auto;
             z-index: 1002;
@@ -1154,20 +1167,29 @@
             margin-bottom: 1rem;
         }
         .edit-shift-workers-list {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 0.75rem;
             margin-bottom: 1.5rem;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 0.5rem;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
         }
         .edit-shift-worker-item {
             background: #f8f9fa;
             border-radius: 8px;
             padding: 0.75rem 1rem;
-            min-width: 220px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.04);
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            border: 2px solid transparent;
+            transition: border-color 0.2s ease;
+        }
+        .edit-shift-worker-item:hover {
+            border-color: #007bff;
         }
         .edit-shift-worker-item input[type="checkbox"] {
             transform: scale(1.2);
@@ -1184,6 +1206,11 @@
             gap: 1rem;
             justify-content: flex-end;
             margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e9ecef;
+            position: sticky;
+            bottom: 0;
+            background: white;
         }
     </style>
 </head>
@@ -3101,6 +3128,28 @@
                                     
                                     if (isWorkerAvailable(x, day, cur, finalEndShift) && 
                                         assignedHours[xEmail] + finalDuration <= maxHoursPerWorker) {
+                                        
+                                        // Add cross-workplace conflict detection (non-blocking)
+                                        checkCrossWorkplaceAvailability(xEmail, day, cur, finalEndShift).then(conflicts => {
+                                            if (conflicts.length > 0) {
+                                                const conflictList = conflicts.map(c => 
+                                                    `${c.workplaceName} (${formatTime(c.shift.start)}-${formatTime(c.shift.end)})`
+                                                ).join(', ');
+                                                console.warn(`⚠️ CROSS-WORKPLACE CONFLICT: ${x.first_name} ${x.last_name} at ${hourToTime(cur)}-${hourToTime(finalEndShift)} on ${day} conflicts with: ${conflictList}`);
+                                                
+                                                // Store conflict for reporting
+                                                if (!window.crossWorkplaceConflicts) window.crossWorkplaceConflicts = [];
+                                                window.crossWorkplaceConflicts.push({
+                                                    worker: `${x.first_name} ${x.last_name}`,
+                                                    email: xEmail,
+                                                    day: day,
+                                                    time: `${hourToTime(cur)}-${hourToTime(finalEndShift)}`,
+                                                    workplace: getWorkplaceName(selectedWorkplace),
+                                                    conflicts: conflicts
+                                                });
+                                            }
+                                        });
+                                        
                                         availableWorkers.push(x);
                                     }
                                 }
@@ -3949,6 +3998,88 @@
             if (!user.isAdmin) {
                 await loadUserDashboard();
             }
+        };
+
+        // Cross-Workplace Availability Check System
+        async function checkCrossWorkplaceAvailability(workerEmail, day, startHour, endHour) {
+            const workplaces = ['esports_lounge', 'esports_arena', 'it_service_center'];
+            const conflicts = [];
+            
+            for (const workplace of workplaces) {
+                if (workplace === selectedWorkplace) continue; // Skip current workplace
+                
+                try {
+                    // Get current schedule for this workplace
+                    const currentSnapshot = await getDocs(query(
+                        collection(db, 'workplaces', workplace, 'schedules'),
+                        where('isCurrent', '==', true)
+                    ));
+                    
+                    if (!currentSnapshot.empty) {
+                        const currentDoc = currentSnapshot.docs[0];
+                        const scheduleData = currentDoc.data();
+                        const workplaceSchedule = scheduleData.days || {};
+                        
+                        // Check if worker is scheduled on this day
+                        const dayShifts = workplaceSchedule[day] || [];
+                        for (const shift of dayShifts) {
+                            if (shift.raw_assigned && shift.raw_assigned.includes(workerEmail)) {
+                                const shiftStart = timeToHour(shift.start);
+                                const shiftEnd = timeToHour(shift.end);
+                                
+                                // Check for time overlap
+                                if (!(endHour <= shiftStart || startHour >= shiftEnd)) {
+                                    conflicts.push({
+                                        workplace: workplace,
+                                        workplaceName: getWorkplaceName(workplace),
+                                        shift: shift,
+                                        day: day
+                                    });
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Could not check ${workplace} for conflicts:`, error);
+                }
+            }
+            
+            return conflicts;
+        }
+
+        // Get user-friendly workplace name
+        function getWorkplaceName(workplaceId) {
+            const names = {
+                'esports_lounge': 'eSports Lounge',
+                'esports_arena': 'eSports Arena', 
+                'it_service_center': 'IT Service Center'
+            };
+            return names[workplaceId] || workplaceId;
+        }
+
+        // Enhanced isWorkerAvailable function that checks cross-workplace conflicts
+        const originalIsWorkerAvailable = isWorkerAvailable;
+        
+        window.isWorkerAvailableWithCrossCheck = async function(worker, day, startHour, endHour) {
+            // First check basic availability
+            if (!originalIsWorkerAvailable(worker, day, startHour, endHour)) {
+                return { available: false, reason: 'Not available based on their availability settings' };
+            }
+            
+            // Then check cross-workplace conflicts
+            const conflicts = await checkCrossWorkplaceAvailability(worker.email, day, startHour, endHour);
+            if (conflicts.length > 0) {
+                const conflictList = conflicts.map(c => 
+                    `${c.workplaceName} (${formatTime(c.shift.start)}-${formatTime(c.shift.end)})`
+                ).join(', ');
+                return { 
+                    available: false, 
+                    reason: `Already scheduled at: ${conflictList}`,
+                    conflicts: conflicts
+                };
+            }
+            
+            return { available: true };
         };
 
         // Load current schedule data silently for "Who's Working Now" functionality
@@ -7179,9 +7310,23 @@
                 html += '</ul></div>';
             }
             
+            // Cross-workplace conflicts
+            if (window.crossWorkplaceConflicts && window.crossWorkplaceConflicts.length > 0) {
+                html += '<div class="warning"><h4>🔄 Cross-Workplace Conflicts Detected:</h4><ul>';
+                window.crossWorkplaceConflicts.forEach(conflict => {
+                    html += `<li><strong>${conflict.worker}</strong> scheduled at <strong>${conflict.day} ${conflict.time}</strong> in <strong>${conflict.workplace}</strong>`;
+                    if (conflict.conflicts.length > 0) {
+                        const conflictList = conflict.conflicts.map(c => `${c.workplaceName} (${formatTime(c.shift.start)}-${formatTime(c.shift.end)})`).join(', ');
+                        html += ` but already scheduled at: ${conflictList}`;
+                    }
+                    html += '</li>';
+                });
+                html += '</ul><p><strong>Important:</strong> These workers are scheduled in multiple workplaces at overlapping times. Please coordinate schedules or reassign shifts to avoid conflicts.</p></div>';
+            }
+            
             // Success message if no major issues
-            if (!coverageGaps?.length && !unfilledShifts.length && !wsIssues.length) {
-                html += '<div class="success"><h4>✅ Schedule Quality: Excellent</h4><p>No critical issues found. The schedule provides complete coverage with proper work study allocation.</p></div>';
+            if (!coverageGaps?.length && !unfilledShifts.length && !wsIssues.length && (!window.crossWorkplaceConflicts || window.crossWorkplaceConflicts.length === 0)) {
+                html += '<div class="success"><h4>✅ Schedule Quality: Excellent</h4><p>No critical issues found. The schedule provides complete coverage with proper work study allocation and no cross-workplace conflicts.</p></div>';
             }
             
             html += '<div style="margin-top: 1rem;"><button class="btn btn-secondary" onclick="closeIssuesDialog()">Close Analysis</button></div></div>';
@@ -7287,6 +7432,19 @@
                     if (isForced) shiftClass += ' forced-shift';
                     if (shift.assigned.length > 1) shiftClass += ' multiple-workers';
                     
+                    // Check for cross-workplace conflicts
+                    let conflictWarning = '';
+                    if (window.crossWorkplaceConflicts && !isGap && !unfilled) {
+                        const conflictsForThisShift = window.crossWorkplaceConflicts.filter(c => 
+                            c.day === day && c.time === `${formatTime(shift.start)}-${formatTime(shift.end)}`
+                        );
+                        if (conflictsForThisShift.length > 0) {
+                            shiftClass += ' cross-workplace-conflict';
+                            const conflictNames = conflictsForThisShift.map(c => c.worker).join(', ');
+                            conflictWarning = `<div style="color: #e53935; font-size: 0.85rem; margin-top: 0.25rem;">⚠️ Cross-workplace conflict: ${conflictNames}</div>`;
+                        }
+                    }
+                    
                     html += `
                         <div class="${shiftClass}">
                             <div>
@@ -7300,6 +7458,7 @@
                                         shift.assigned.join(', ')
                                     }
                                 </div>
+                                ${conflictWarning}
                             </div>
                             ${user.isAdmin ? `
                             <div class="shift-actions no-print">
@@ -7369,6 +7528,7 @@
                         <button class="btn btn-secondary" onclick="printSchedule()">🖨️ Print Schedule</button>
                         <button class="btn btn-warning" onclick="exportScheduleToExcel()">📤 Export Excel</button>
                         <button class="btn btn-info" onclick="analyzeSchedule()">📊 Detailed Analysis</button>
+                        <button class="btn" style="background: #e53935; color: white;" onclick="checkCrossWorkplaceConflicts()">🔄 Check Cross-Workplace Conflicts</button>
                     </div>
                 `;
             } else {
@@ -7885,6 +8045,160 @@
             }
         };
 
+        // Cross-Workplace Conflict Checker
+        window.checkCrossWorkplaceConflicts = async function() {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            
+            if (!schedule || Object.keys(schedule).length === 0) {
+                showNotification('❌ No current schedule to check', 'error');
+                return;
+            }
+            
+            showNotification('🔄 Checking cross-workplace conflicts...', 'info');
+            
+            const conflicts = [];
+            const workplaces = ['esports_lounge', 'esports_arena', 'it_service_center'];
+            
+            for (const day of Object.keys(schedule)) {
+                const dayShifts = schedule[day] || [];
+                
+                for (const shift of dayShifts) {
+                    if (!shift.raw_assigned || shift.isGap) continue;
+                    
+                    for (const workerEmail of shift.raw_assigned) {
+                        const worker = workers.find(w => w.email === workerEmail);
+                        if (!worker) continue;
+                        
+                        const shiftStart = timeToHour(shift.start);
+                        const shiftEnd = timeToHour(shift.end);
+                        
+                        // Check this worker against all other workplaces
+                        for (const workplace of workplaces) {
+                            if (workplace === selectedWorkplace) continue;
+                            
+                            try {
+                                const currentSnapshot = await getDocs(query(
+                                    collection(db, 'workplaces', workplace, 'schedules'),
+                                    where('isCurrent', '==', true)
+                                ));
+                                
+                                if (!currentSnapshot.empty) {
+                                    const currentDoc = currentSnapshot.docs[0];
+                                    const scheduleData = currentDoc.data();
+                                    const workplaceSchedule = scheduleData.days || {};
+                                    
+                                    const otherDayShifts = workplaceSchedule[day] || [];
+                                    for (const otherShift of otherDayShifts) {
+                                        if (otherShift.raw_assigned && otherShift.raw_assigned.includes(workerEmail)) {
+                                            const otherStart = timeToHour(otherShift.start);
+                                            const otherEnd = timeToHour(otherShift.end);
+                                            
+                                            // Check for time overlap
+                                            if (!(shiftEnd <= otherStart || shiftStart >= otherEnd)) {
+                                                conflicts.push({
+                                                    worker: `${worker.first_name} ${worker.last_name}`,
+                                                    email: workerEmail,
+                                                    day: day,
+                                                    currentWorkplace: getWorkplaceName(selectedWorkplace),
+                                                    currentTime: `${formatTime(shift.start)}-${formatTime(shift.end)}`,
+                                                    conflictWorkplace: getWorkplaceName(workplace),
+                                                    conflictTime: `${formatTime(otherShift.start)}-${formatTime(otherShift.end)}`
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (error) {
+                                console.warn(`Could not check ${workplace} for conflicts:`, error);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Display results
+            let html = `
+                <div class="schedule-display">
+                    <h3>🔄 Cross-Workplace Conflict Analysis</h3>
+                    <div class="info">
+                        Workplace: <strong>${getWorkplaceName(selectedWorkplace)}</strong><br>
+                        Checked against: ${workplaces.filter(w => w !== selectedWorkplace).map(w => getWorkplaceName(w)).join(', ')}<br>
+                        Analysis completed: ${new Date().toLocaleString()}
+                    </div>
+            `;
+            
+            if (conflicts.length === 0) {
+                html += `
+                    <div class="success">
+                        <h4>✅ No Cross-Workplace Conflicts Found!</h4>
+                        <p>All workers in the current schedule are available and not scheduled in other workplaces at conflicting times.</p>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="error">
+                        <h4>❌ ${conflicts.length} Cross-Workplace Conflict(s) Found!</h4>
+                        <p>The following workers are scheduled in multiple workplaces at overlapping times:</p>
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="border: 1px solid #dee2e6; padding: 0.5rem;">Worker</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 0.5rem;">Day</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 0.5rem;">${getWorkplaceName(selectedWorkplace)}</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 0.5rem;">Conflicts With</th>
+                                    <th style="border: 1px solid #dee2e6; padding: 0.5rem;">Contact</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                conflicts.forEach(conflict => {
+                    html += `
+                        <tr>
+                            <td style="border: 1px solid #dee2e6; padding: 0.5rem;"><strong>${conflict.worker}</strong></td>
+                            <td style="border: 1px solid #dee2e6; padding: 0.5rem;">${conflict.day}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 0.5rem;">${conflict.currentTime}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 0.5rem;">${conflict.conflictWorkplace}<br>${conflict.conflictTime}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 0.5rem;">
+                                <button class="btn btn-primary" onclick="contactWorker('${conflict.email}')" style="font-size: 0.8rem; padding: 0.25rem 0.5rem;">📧 Contact</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                        <p style="margin-top: 1rem;"><strong>Recommended Actions:</strong></p>
+                        <ul>
+                            <li>Contact the affected workers to discuss their availability</li>
+                            <li>Coordinate with other workplace administrators to resolve conflicts</li>
+                            <li>Consider reassigning shifts to different time slots or workers</li>
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div style="margin-top: 2rem;">
+                    <button class="btn btn-secondary" onclick="displayCurrentSchedule()">← Back to Schedule</button>
+                    <button class="btn btn-info" onclick="checkCrossWorkplaceConflicts()">🔄 Refresh Check</button>
+                </div>
+                </div>
+            `;
+            
+            document.getElementById('scheduleDisplay').innerHTML = html;
+            
+            if (conflicts.length > 0) {
+                showNotification(`⚠️ Found ${conflicts.length} cross-workplace conflict(s)`, 'warning');
+            } else {
+                showNotification('✅ No cross-workplace conflicts found', 'success');
+            }
+        };
+
         // Enhanced availability checking
         window.findAvailable = function() {
             const day = document.getElementById('availDay').value;
@@ -8273,22 +8587,61 @@
             function formatAvail(w) {
                 return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
             }
-            let html = `<div><strong>Shift:</strong> ${day} <input type='time' id='editShiftStart' value='${startVal}'> - <input type='time' id='editShiftEnd' value='${endVal}'> <span style='font-size:0.9em;color:#888;'>(AM/PM shown below)</span></div>`;
-            html += `<div style='margin: 1rem 0;'><strong>Assigned:</strong> <span id='editShiftAssignedCount'></span> / ${maxWorkers}</div>`;
-            html += `<div><strong>Available Workers</strong></div><div>`;
+            let html = `
+                <div class="edit-shift-section">
+                    <label class="edit-shift-label">Shift Time: ${day}</label>
+                    <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+                        <input type='time' id='editShiftStart' value='${startVal}' style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                        <span style="font-weight: bold;">to</span>
+                        <input type='time' id='editShiftEnd' value='${endVal}' style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                </div>
+                <div class="edit-shift-section">
+                    <div class="edit-shift-assigned">Assigned: <span id='editShiftAssignedCount'></span> / ${maxWorkers}</div>
+                </div>
+                <div class="edit-shift-section">
+                    <label class="edit-shift-label">Available Workers</label>
+                    <div class="edit-shift-workers-list">
+            `;
             availableWorkers.forEach(w => {
                 const checked = assignedEmails.has(w.email) ? 'checked' : '';
-                html += `<label><input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}> ${w.first_name} ${w.last_name} <small>(${formatAvail(w)})</small></label><br>`;
+                html += `
+                    <div class="edit-shift-worker-item">
+                        <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                        <div>
+                            <strong>${w.first_name} ${w.last_name}</strong>
+                            <br><small style="color: #666;">${formatAvail(w)}</small>
+                        </div>
+                    </div>
+                `;
             });
-            html += `</div><div style='margin-top:0.5rem;'><strong>Unavailable Workers</strong></div><div>`;
+            html += `
+                    </div>
+                </div>
+                <div class="edit-shift-section">
+                    <div class="edit-shift-unavailable-header">Unavailable Workers</div>
+                    <div class="edit-shift-workers-list">
+            `;
             unavailableWorkers.forEach(w => {
                 const checked = assignedEmails.has(w.email) ? 'checked' : '';
-                html += `<label><input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}> ${w.first_name} ${w.last_name} <small>(${formatAvail(w)})</small></label><br>`;
+                html += `
+                    <div class="edit-shift-worker-item" style="opacity: 0.6;">
+                        <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                        <div>
+                            <strong>${w.first_name} ${w.last_name}</strong>
+                            <br><small style="color: #666;">${formatAvail(w)}</small>
+                        </div>
+                    </div>
+                `;
             });
-            html += `</div><div style='margin-top:1rem;'>
-                <button class='btn btn-success' id='saveEditShiftBtn'>Save</button>
-                <button class='btn btn-secondary' onclick="closeModal('editShiftModal')">Cancel</button>
-            </div>`;
+            html += `
+                    </div>
+                </div>
+                <div class="edit-shift-actions">
+                    <button class='btn btn-success' id='saveEditShiftBtn'>💾 Save Changes</button>
+                    <button class='btn btn-secondary' onclick="closeModal('editShiftModal')">❌ Cancel</button>
+                </div>
+            `;
             document.getElementById('editShiftModalBody').innerHTML = html;
             document.getElementById('editShiftModal').style.display = 'block';
             // Selection logic
@@ -10774,5 +11127,30 @@
             }
         }, 60 * 60 * 1000); // Run every hour
     </script>
+
+    <!-- Support Footer -->
+    <div style="background: #f8f9fa; border-top: 1px solid #dee2e6; padding: 1rem; text-align: center; margin-top: 3rem; position: relative; bottom: 0; width: 100%;">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">
+                <strong>Need Help?</strong> 
+                <a href="mailto:finn1817@fredonia.edu?subject=Workplace%20Scheduler%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered%3A%0A%0A%0A%0ASteps%20to%20reproduce%3A%0A1.%20%0A2.%20%0A3.%20%0A%0AWorkplace%3A%20${selectedWorkplace || 'Not selected'}%0ABrowser%3A%20${navigator.userAgent}%0ATimestamp%3A%20${new Date().toISOString()}" 
+                   style="color: #007bff; text-decoration: none; margin: 0 0.5rem;">
+                    🐛 Report a Bug
+                </a>
+                |
+                <a href="mailto:finn1817@fredonia.edu?subject=Workplace%20Scheduler%20Support%20Request&body=Hi%2C%0A%0AI%20need%20help%20with%20the%20Workplace%20Scheduler.%0A%0AWorkplace%3A%20${selectedWorkplace || 'Not selected'}%0A%0AQuestion%2FIssue%3A%0A" 
+                   style="color: #007bff; text-decoration: none; margin: 0 0.5rem;">
+                    💬 Contact Support
+                </a>
+                |
+                <span style="color: #999; margin: 0 0.5rem;">Version 2.1</span>
+            </p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.8rem; color: #999;">
+                If you encounter any bugs or issues, please contact 
+                <a href="mailto:finn1817@fredonia.edu" style="color: #007bff;">finn1817@fredonia.edu</a> 
+                to get it fixed promptly.
+            </p>
+        </div>
+    </div>
 </body>
 </html>
