@@ -3129,27 +3129,6 @@
                                     if (isWorkerAvailable(x, day, cur, finalEndShift) && 
                                         assignedHours[xEmail] + finalDuration <= maxHoursPerWorker) {
                                         
-                                        // Add cross-workplace conflict detection (non-blocking)
-                                        checkCrossWorkplaceAvailability(xEmail, day, cur, finalEndShift).then(conflicts => {
-                                            if (conflicts.length > 0) {
-                                                const conflictList = conflicts.map(c => 
-                                                    `${c.workplaceName} (${formatTime(c.shift.start)}-${formatTime(c.shift.end)})`
-                                                ).join(', ');
-                                                console.warn(`⚠️ CROSS-WORKPLACE CONFLICT: ${x.first_name} ${x.last_name} at ${hourToTime(cur)}-${hourToTime(finalEndShift)} on ${day} conflicts with: ${conflictList}`);
-                                                
-                                                // Store conflict for reporting
-                                                if (!window.crossWorkplaceConflicts) window.crossWorkplaceConflicts = [];
-                                                window.crossWorkplaceConflicts.push({
-                                                    worker: `${x.first_name} ${x.last_name}`,
-                                                    email: xEmail,
-                                                    day: day,
-                                                    time: `${hourToTime(cur)}-${hourToTime(finalEndShift)}`,
-                                                    workplace: getWorkplaceName(selectedWorkplace),
-                                                    conflicts: conflicts
-                                                });
-                                            }
-                                        });
-                                        
                                         availableWorkers.push(x);
                                     }
                                 }
@@ -3971,6 +3950,11 @@
         // Enhanced workplace selection
         window.selectWorkplace = async function(id) {
             selectedWorkplace = id;
+            
+            // Clear any leftover cross-workplace conflict data
+            if (window.crossWorkplaceConflicts) {
+                delete window.crossWorkplaceConflicts;
+            }
             
             document.querySelectorAll('.workplace-card').forEach(card => {
                 card.classList.remove('selected');
