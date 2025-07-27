@@ -11140,7 +11140,8 @@
     <script>
         // Support functions for bug reporting and contact
         function reportBug() {
-            const workplace = selectedWorkplace || 'Not selected';
+            // Try to get workplace from global variable, fallback to 'Not selected'
+            const workplace = (typeof selectedWorkplace !== 'undefined' && selectedWorkplace) ? selectedWorkplace : 'Not selected';
             const timestamp = new Date().toISOString();
             const userAgent = navigator.userAgent;
             
@@ -11159,11 +11160,12 @@ Browser: ${userAgent}
 Timestamp: ${timestamp}`;
             
             const mailtoUrl = `mailto:finn1817@fredonia.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            window.location.href = mailtoUrl;
+            window.open(mailtoUrl, '_self');
         }
         
         function contactSupport() {
-            const workplace = selectedWorkplace || 'Not selected';
+            // Try to get workplace from global variable, fallback to 'Not selected'
+            const workplace = (typeof selectedWorkplace !== 'undefined' && selectedWorkplace) ? selectedWorkplace : 'Not selected';
             
             const subject = 'Workplace Scheduler Support Request';
             const body = `Hi,
@@ -11176,7 +11178,7 @@ Question/Issue:
 `;
             
             const mailtoUrl = `mailto:finn1817@fredonia.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            window.location.href = mailtoUrl;
+            window.open(mailtoUrl, '_self');
         }
     </script>
 </body>
