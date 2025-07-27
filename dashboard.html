@@ -2085,7 +2085,7 @@
                     // Part 1: start to midnight (24:00)
                     // Part 2: midnight to end (treat as next day)
                     return (slotStart <= startHour && startHour < 24 && endHour <= 24) ||
-                           (0 <= startHour && endHour <= slotEnd);
+                           (0 <= startHour && startHour < 24 && endHour <= slotEnd);
                 }
                 
                 // Handle overnight shift requests (endHour > 24 means crossing midnight)
