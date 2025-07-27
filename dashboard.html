@@ -11117,12 +11117,12 @@
         <div style="max-width: 800px; margin: 0 auto;">
             <p style="margin: 0; font-size: 0.9rem; color: #666;">
                 <strong>Need Help?</strong> 
-                <a href="mailto:finn1817@fredonia.edu?subject=Workplace%20Scheduler%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered%3A%0A%0A%0A%0ASteps%20to%20reproduce%3A%0A1.%20%0A2.%20%0A3.%20%0A%0AWorkplace%3A%20${selectedWorkplace || 'Not selected'}%0ABrowser%3A%20${navigator.userAgent}%0ATimestamp%3A%20${new Date().toISOString()}" 
+                <a href="#" onclick="reportBug(); return false;" 
                    style="color: #007bff; text-decoration: none; margin: 0 0.5rem;">
                     🐛 Report a Bug
                 </a>
                 |
-                <a href="mailto:finn1817@fredonia.edu?subject=Workplace%20Scheduler%20Support%20Request&body=Hi%2C%0A%0AI%20need%20help%20with%20the%20Workplace%20Scheduler.%0A%0AWorkplace%3A%20${selectedWorkplace || 'Not selected'}%0A%0AQuestion%2FIssue%3A%0A" 
+                <a href="#" onclick="contactSupport(); return false;" 
                    style="color: #007bff; text-decoration: none; margin: 0 0.5rem;">
                     💬 Contact Support
                 </a>
@@ -11136,5 +11136,48 @@
             </p>
         </div>
     </div>
+
+    <script>
+        // Support functions for bug reporting and contact
+        function reportBug() {
+            const workplace = selectedWorkplace || 'Not selected';
+            const timestamp = new Date().toISOString();
+            const userAgent = navigator.userAgent;
+            
+            const subject = 'Workplace Scheduler Bug Report';
+            const body = `Please describe the issue you encountered:
+
+
+
+Steps to reproduce:
+1. 
+2. 
+3. 
+
+Workplace: ${workplace}
+Browser: ${userAgent}
+Timestamp: ${timestamp}`;
+            
+            const mailtoUrl = `mailto:finn1817@fredonia.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.location.href = mailtoUrl;
+        }
+        
+        function contactSupport() {
+            const workplace = selectedWorkplace || 'Not selected';
+            
+            const subject = 'Workplace Scheduler Support Request';
+            const body = `Hi,
+
+I need help with the Workplace Scheduler.
+
+Workplace: ${workplace}
+
+Question/Issue:
+`;
+            
+            const mailtoUrl = `mailto:finn1817@fredonia.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.location.href = mailtoUrl;
+        }
+    </script>
 </body>
 </html>
