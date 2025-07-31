@@ -1238,6 +1238,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
         }
 
         .pin-button:hover {
@@ -5082,6 +5085,8 @@
                 <div style="margin-bottom: 1rem;">
                     <button class="btn btn-success" onclick="showAddWorker()">➕ Add New Worker</button>
                     <span style="margin-left: 1rem; color: #666;">Total: ${workers.length} workers</span>
+                    <button class="btn btn-info" onclick="testDatabase()" style="margin-left: 1rem;">🔍 Test DB</button>
+                    <button class="btn btn-warning" onclick="testPinning()" style="margin-left: 1rem;">🧪 Test Pin</button>
                 </div>
             `;
             
@@ -5114,7 +5119,7 @@
                         <tr class="${rowClass}">
                             <td style="text-align: center;">
                                 <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
-                                        title="${pinTitle}" style="background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                                        title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                     ${pinIcon}
                                 </button>
                             </td>
@@ -7046,10 +7051,13 @@
         // Pin management functions - Database-backed
         async function getPinnedWorkers() {
             try {
+                console.log('Getting pinned workers for workplace:', selectedWorkplace);
                 const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
                 if (workplaceDoc.exists() && workplaceDoc.data().pinnedWorkers) {
+                    console.log('Found pinned workers:', workplaceDoc.data().pinnedWorkers);
                     return workplaceDoc.data().pinnedWorkers;
                 }
+                console.log('No pinned workers found in database');
                 return [];
             } catch (error) {
                 console.error('Error loading pinned workers:', error);
@@ -7059,11 +7067,13 @@
         
         async function setPinnedWorkers(pinnedList) {
             try {
+                console.log('Saving pinned workers to database:', pinnedList);
                 await updateDoc(doc(db, 'workplaces', selectedWorkplace), {
                     pinnedWorkers: pinnedList,
                     updatedAt: new Date().toISOString()
                 });
                 localStorage.setItem(`pinnedWorkers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Backup
+                console.log('Successfully saved pinned workers to database');
             } catch (error) {
                 console.error('Error saving pinned workers:', error);
                 localStorage.setItem(`pinnedWorkers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Fallback
@@ -7276,6 +7286,29 @@
             }
         };
 
+        // Test database connection
+        window.testDatabase = async function() {
+            console.log('Testing database connection...');
+            try {
+                const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
+                console.log('Workplace document exists:', workplaceDoc.exists());
+                if (workplaceDoc.exists()) {
+                    console.log('Workplace data:', workplaceDoc.data());
+                }
+                
+                // Test worker collection
+                const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                console.log('Number of workers in database:', workersSnapshot.size);
+                
+                // Test pinned workers
+                const pinnedWorkers = await getPinnedWorkers();
+                console.log('Pinned workers:', pinnedWorkers);
+                
+            } catch (error) {
+                console.error('Database test failed:', error);
+            }
+        };
+
         // Enhanced worker viewing
         window.viewWorkers = async function() {
             if (workers.length === 0) {
@@ -7357,7 +7390,7 @@
             `;
 
             sortedWorkers.forEach(worker => {
-                const isPinned = pinnedList.includes(worker.id);
+                const isPinned = pinnedList.includes(worker.id) || worker.isPinned;
                 const pinIcon = isPinned ? '📌' : '📍';
                 const pinTitle = isPinned ? 'Unpin worker' : 'Pin worker to top';
                 const rowClass = isPinned ? 'pinned-row' : '';
@@ -7369,12 +7402,12 @@
                     
                 html += `
                     <tr class="${rowClass}">
-                        <td style="text-align: center;">
-                            <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
-                                    title="${pinTitle}" style="background: none; border: none; font-size: 1.2em; cursor: pointer;">
-                                ${pinIcon}
-                            </button>
-                        </td>
+                                                    <td style="text-align: center;">
+                                <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
+                                        title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                    ${pinIcon}
+                                </button>
+                            </td>
                         <td><strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}</td>
                         <td>${worker.email}</td>
                         <td>${worker.work_study ? '<span style="color: #28a745;">✅ Yes</span>' : '❌ No'}</td>
