@@ -1212,6 +1212,60 @@
             bottom: 0;
             background: white;
         }
+
+        /* Pinned row styles */
+        .pinned-row {
+            background-color: #fffbf0 !important;
+            border-left: 3px solid #ffc107 !important;
+            position: relative;
+        }
+
+        .pinned-row::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, #ffc107 0%, #fd7e14 100%);
+        }
+
+        .pin-button {
+            transition: all 0.2s ease;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pin-button:hover {
+            background-color: #f8f9fa;
+            transform: scale(1.1);
+        }
+
+        .pin-button.pinned {
+            color: #ffc107;
+        }
+
+        .pin-button.unpinned {
+            color: #6c757d;
+        }
+
+        /* Enhanced table styles for better visibility */
+        .worker-table th:first-child,
+        table th:first-child {
+            width: 60px;
+            text-align: center;
+        }
+
+        .pinned-indicator {
+            font-size: 0.8em;
+            color: #ffc107;
+            margin-left: 0.5rem;
+            font-weight: normal;
+        }
     </style>
 </head>
 
@@ -4801,6 +4855,10 @@
                 if (combinedData.length === 0) {
                     html += '<div class="warning">No users found. Add your first user to get started!</div>';
                 } else {
+                    // Sort users alphabetically with pinned ones at top
+                    const sortedUsers = sortUsers(combinedData);
+                    const pinnedUsersList = getPinnedUsers();
+                    
                     html += `
                         <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                             <table style="width: 100%; border-collapse: collapse;">
@@ -4809,6 +4867,7 @@
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">
                                             <input type="checkbox" id="selectAllUsers" style="margin-right: 0.5rem;">
                                         </th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">📌 Pin</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Role</th>
@@ -4822,7 +4881,13 @@
                                 <tbody>
                     `;
                     
-                    combinedData.forEach(data => {
+                    sortedUsers.forEach(data => {
+                        const isPinned = pinnedUsersList.includes(data.email);
+                        const pinIcon = isPinned ? '📌' : '📍';
+                        const pinTitle = isPinned ? 'Unpin user' : 'Pin user to top';
+                        const rowClass = isPinned ? 'pinned-row' : '';
+                        const pinButtonClass = isPinned ? 'pin-button pinned' : 'pin-button unpinned';
+                        
                         const name = data.authUser ? `${data.authUser.firstName} ${data.authUser.lastName}` : 
                                    (data.workplaceWorker ? `${data.workplaceWorker.first_name} ${data.workplaceWorker.last_name}` : 'Unknown');
                         const phone = data.authUser?.phone || '-';
@@ -4854,12 +4919,18 @@
                         const suspendButtonDisabled = data.role === 'ADMIN' || data.email === user.email ? 'disabled' : '';
 
                         html += `
-                            <tr style="border-bottom: 1px solid #dee2e6; ${isSuspended ? 'background-color: #fff5f5; opacity: 0.7;' : ''}">
+                            <tr class="${rowClass}" style="border-bottom: 1px solid #dee2e6; ${isSuspended ? 'opacity: 0.7;' : ''}">
                                 <td style="padding: 1rem;">
                                     <input type="checkbox" class="user-checkbox" data-email="${data.email}">
                                 </td>
+                                <td style="padding: 1rem; text-align: center;">
+                                    <button class="${pinButtonClass}" onclick="toggleUserPin('${data.email}')" 
+                                            title="${pinTitle}" style="background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                                        ${pinIcon}
+                                    </button>
+                                </td>
                                 <td style="padding: 1rem; font-weight: 600;">
-                                    ${name}
+                                    ${name}${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}
                                     ${isSuspended ? '<br><small style="color: #dc3545; font-weight: normal;">🚫 SUSPENDED</small>' : ''}
                                 </td>
                                 <td style="padding: 1rem;">${data.email}</td>
@@ -4896,10 +4967,10 @@
                             
                             <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1.5rem;">
                                 <button class="tab-btn" data-tab="workers" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                                    Workers (${workers.length})
+                                    Workers (${workers.length}) - A-Z, Pinned First
                                 </button>
                                 <button class="tab-btn active" data-tab="users" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; color: #667eea; font-weight: bold;">
-                                    Users (${totalUsers})
+                                    Users (${totalUsers}) - A-Z, Pinned First
                                 </button>
                                 <button class="tab-btn" data-tab="import" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
                                     Import/Export
@@ -5001,11 +5072,15 @@
         }
 
         function displayWorkersTab(contentContainer) {
+            // Sort workers alphabetically with pinned ones at top
+            const sortedWorkers = sortWorkers(workers);
+            const pinnedList = getPinnedWorkers();
+            
             // Show the original workers table but maintain tab structure
             let html = `
                 <div style="margin-bottom: 1rem;">
                     <button class="btn btn-success" onclick="showAddWorker()">➕ Add New Worker</button>
-                    <span style="margin-left: 1rem; color: #666;">Total: ${workers.length} workers</span>
+                    <span style="margin-left: 1rem; color: #666;">Total: ${workers.length} workers (Sorted A-Z, Pinned First)</span>
                 </div>
             `;
             
@@ -5016,6 +5091,7 @@
                     <table class="worker-table">
                         <thead>
                             <tr>
+                                <th>📌 Pin</th>
                                 <th>Name</th>
                                 <th>Email</th>
                                 <th>Work Study</th>
@@ -5026,10 +5102,22 @@
                         <tbody>
                 `;
                 
-                workers.forEach(worker => {
+                sortedWorkers.forEach(worker => {
+                    const isPinned = pinnedList.includes(worker.id);
+                    const pinIcon = isPinned ? '📌' : '📍';
+                    const pinTitle = isPinned ? 'Unpin worker' : 'Pin worker to top';
+                    const rowClass = isPinned ? 'pinned-row' : '';
+                    const pinButtonClass = isPinned ? 'pin-button pinned' : 'pin-button unpinned';
+                    
                     html += `
-                        <tr>
-                            <td><strong>${worker.first_name} ${worker.last_name}</strong></td>
+                        <tr class="${rowClass}">
+                            <td style="text-align: center;">
+                                <button class="${pinButtonClass}" onclick="toggleWorkerPinInModal('${worker.id}')" 
+                                        title="${pinTitle}" style="background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                                    ${pinIcon}
+                                </button>
+                            </td>
+                            <td><strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}</td>
                             <td>${worker.email}</td>
                             <td>${worker.work_study ? '✅ Yes' : '❌ No'}</td>
                             <td><small>${worker.availability_text || 'No availability set'}</small></td>
@@ -5052,7 +5140,8 @@
         }
 
         function displayUsersTab(contentContainer) {
-            // Re-display the users tab content
+            // Re-display the users tab content by calling the enhanced workers modal function
+            // but only update the users section
             displayEnhancedWorkersInModal();
         }
 
@@ -6953,6 +7042,120 @@
             });
         };
 
+        // Pin management functions
+        function getPinnedWorkers() {
+            return JSON.parse(localStorage.getItem(`pinnedWorkers_${selectedWorkplace}`) || '[]');
+        }
+        
+        function setPinnedWorkers(pinnedList) {
+            localStorage.setItem(`pinnedWorkers_${selectedWorkplace}`, JSON.stringify(pinnedList));
+        }
+        
+        function toggleWorkerPin(workerId) {
+            const pinned = getPinnedWorkers();
+            const index = pinned.indexOf(workerId);
+            const worker = workers.find(w => w.id === workerId);
+            const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
+            
+            if (index > -1) {
+                pinned.splice(index, 1);
+                showNotification(`📍 ${workerName} unpinned`, 'info');
+            } else {
+                pinned.push(workerId);
+                showNotification(`📌 ${workerName} pinned to top`, 'success');
+            }
+            
+            setPinnedWorkers(pinned);
+            viewWorkers(); // Refresh the view
+        }
+        
+        function toggleWorkerPinInModal(workerId) {
+            const pinned = getPinnedWorkers();
+            const index = pinned.indexOf(workerId);
+            const worker = workers.find(w => w.id === workerId);
+            const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
+            
+            if (index > -1) {
+                pinned.splice(index, 1);
+                showNotification(`📍 ${workerName} unpinned`, 'info');
+            } else {
+                pinned.push(workerId);
+                showNotification(`📌 ${workerName} pinned to top`, 'success');
+            }
+            
+            setPinnedWorkers(pinned);
+            switchTab('workers'); // Refresh the workers tab
+        }
+        
+        // User pin management functions
+        function getPinnedUsers() {
+            return JSON.parse(localStorage.getItem(`pinnedUsers_${selectedWorkplace}`) || '[]');
+        }
+        
+        function setPinnedUsers(pinnedList) {
+            localStorage.setItem(`pinnedUsers_${selectedWorkplace}`, JSON.stringify(pinnedList));
+        }
+        
+        function toggleUserPin(userEmail) {
+            const pinned = getPinnedUsers();
+            const index = pinned.indexOf(userEmail);
+            
+            if (index > -1) {
+                pinned.splice(index, 1);
+                showNotification(`📍 ${userEmail} unpinned`, 'info');
+            } else {
+                pinned.push(userEmail);
+                showNotification(`📌 ${userEmail} pinned to top`, 'success');
+            }
+            
+            setPinnedUsers(pinned);
+            switchTab('users'); // Refresh the users tab
+        }
+        
+        function sortWorkers(workersList) {
+            const pinned = getPinnedWorkers();
+            
+            // Separate pinned and unpinned workers
+            const pinnedWorkers = workersList.filter(w => pinned.includes(w.id));
+            const unpinnedWorkers = workersList.filter(w => !pinned.includes(w.id));
+            
+            // Sort both groups alphabetically by first name, then last name
+            const sortAlphabetically = (a, b) => {
+                const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
+                const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
+                return nameA.localeCompare(nameB);
+            };
+            
+            pinnedWorkers.sort(sortAlphabetically);
+            unpinnedWorkers.sort(sortAlphabetically);
+            
+            // Return pinned workers first, then unpinned
+            return [...pinnedWorkers, ...unpinnedWorkers];
+        }
+        
+        function sortUsers(usersList) {
+            const pinned = getPinnedUsers();
+            
+            // Separate pinned and unpinned users
+            const pinnedUsers = usersList.filter(u => pinned.includes(u.email));
+            const unpinnedUsers = usersList.filter(u => !pinned.includes(u.email));
+            
+            // Sort both groups alphabetically by name
+            const sortAlphabetically = (a, b) => {
+                const nameA = (a.authUser ? `${a.authUser.firstName} ${a.authUser.lastName}` : 
+                             (a.workplaceWorker ? `${a.workplaceWorker.first_name} ${a.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
+                const nameB = (b.authUser ? `${b.authUser.firstName} ${b.authUser.lastName}` : 
+                             (b.workplaceWorker ? `${b.workplaceWorker.first_name} ${b.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
+                return nameA.localeCompare(nameB);
+            };
+            
+            pinnedUsers.sort(sortAlphabetically);
+            unpinnedUsers.sort(sortAlphabetically);
+            
+            // Return pinned users first, then unpinned
+            return [...pinnedUsers, ...unpinnedUsers];
+        }
+
         // Enhanced worker viewing
         window.viewWorkers = function() {
             if (workers.length === 0) {
@@ -6976,13 +7179,17 @@
                 return;
             }
 
+            // Sort workers alphabetically with pinned ones at top
+            const sortedWorkers = sortWorkers(workers);
+            const pinnedList = getPinnedWorkers();
+
             const wsCount = workers.filter(w => w.work_study).length;
             const regularCount = workers.filter(w => !w.work_study).length;
             const workersWithAvailability = workers.filter(w => w.availability_text).length;
 
             let html = `
                 <div class="schedule-display">
-                    <h3>👥 Workers for ${selectedWorkplace}</h3>
+                    <h3>👥 Workers for ${selectedWorkplace} <span style="font-size: 0.8em; color: #666;">(Sorted A-Z, Pinned First)</span></h3>
                     <div class="stats">
                         <div class="stat-card">
                             <div class="stat-number">${workers.length}</div>
@@ -7018,6 +7225,7 @@
                 <table class="worker-table">
                     <thead>
                         <tr>
+                            <th>📌 Pin</th>
                             <th>Name</th>
                             <th>Email</th>
                             <th>Work Study</th>
@@ -7028,14 +7236,26 @@
                     <tbody>
             `;
 
-            workers.forEach(worker => {
+            sortedWorkers.forEach(worker => {
+                const isPinned = pinnedList.includes(worker.id);
+                const pinIcon = isPinned ? '📌' : '📍';
+                const pinTitle = isPinned ? 'Unpin worker' : 'Pin worker to top';
+                const rowClass = isPinned ? 'pinned-row' : '';
+                const pinButtonClass = isPinned ? 'pin-button pinned' : 'pin-button unpinned';
+                
                 const availabilityStatus = worker.availability_text ? 
                     '✅ Set' : 
                     '<span style="color: #dc3545;">❌ Missing</span>';
                     
                 html += `
-                    <tr>
-                        <td><strong>${worker.first_name} ${worker.last_name}</strong></td>
+                    <tr class="${rowClass}">
+                        <td style="text-align: center;">
+                            <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
+                                    title="${pinTitle}" style="background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                                ${pinIcon}
+                            </button>
+                        </td>
+                        <td><strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}</td>
                         <td>${worker.email}</td>
                         <td>${worker.work_study ? '<span style="color: #28a745;">✅ Yes</span>' : '❌ No'}</td>
                         <td>${availabilityStatus}</td>
