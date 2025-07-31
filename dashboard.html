@@ -1328,10 +1328,10 @@
                 <h2 class="section-title">Schedule Management</h2>
                 
                 <div class="action-buttons">
-                    <button class="btn btn-primary" onclick="showGenerateForm()" id="generateBtn">📅 Generate New Schedule</button>
+                    <button class="btn btn-primary" onclick="showGenerateForm()" id="generateBtn" style="display:none;">📅 Generate New Schedule</button>
                     <button class="btn btn-success" onclick="viewCurrentSchedule()">👁️ View Current Schedule</button>
-                    <button class="btn btn-info" onclick="viewHistory()">📚 Schedule History</button>
-                    <button class="btn btn-warning" onclick="checkAvailability()">🔍 Check Availability</button>
+                    <button class="btn btn-info" onclick="viewHistory()" id="historyBtn" style="display:none;">📚 Schedule History</button>
+                    <button class="btn btn-warning" onclick="checkAvailability()" id="checkAvailabilityBtn" style="display:none;">🔍 Check Availability</button>
                     <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
                 </div>
 
@@ -2014,11 +2014,17 @@
             document.getElementById('adminBadge').style.display = 'inline';
             document.getElementById('adminSection').style.display = 'block';
             document.getElementById('userBadge').style.display = 'none';
+            // Show admin-only buttons
+            document.getElementById('generateBtn').style.display = 'inline-block';
+            document.getElementById('historyBtn').style.display = 'inline-block';
+            document.getElementById('checkAvailabilityBtn').style.display = 'inline-block';
         } else {
             document.getElementById('adminBadge').style.display = 'none';
             document.getElementById('userBadge').style.display = 'inline';
             // Hide admin-only buttons for non-admin users
             document.getElementById('generateBtn').style.display = 'none';
+            document.getElementById('historyBtn').style.display = 'none';
+            document.getElementById('checkAvailabilityBtn').style.display = 'none';
         }
 
         // Firebase setup
@@ -8138,42 +8144,46 @@
                 html += '<div class="info">ℹ️ This is a historical schedule. Use "Schedule History" to set a schedule as current for workers.</div>';
             }
             
-            // Enhanced stats
-            html += `
-                <div class="stats">
-                    <div class="stat-card">
-                        <div class="stat-number">${totalShifts}</div>
-                        <div class="stat-label">Total Shifts</div>
+            // Enhanced stats - only show for admin users
+            if (user.isAdmin) {
+                html += `
+                    <div class="stats">
+                        <div class="stat-card">
+                            <div class="stat-number">${totalShifts}</div>
+                            <div class="stat-label">Total Shifts</div>
+                        </div>
+                        <div class="stat-card" style="background: ${coveragePercentage >= 90 ? '#28a745' : coveragePercentage >= 75 ? '#ffc107' : '#dc3545'};">
+                            <div class="stat-number">${coveragePercentage}%</div>
+                            <div class="stat-label">Coverage</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${Object.keys(assignedHours).length}</div>
+                            <div class="stat-label">Workers Assigned</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${coverageGaps.length}</div>
+                            <div class="stat-label">Coverage Gaps</div>
+                        </div>
+                        <div class="stat-card" style="background: #007bff;">
+                            <div class="stat-number">${multipleWorkerShifts}</div>
+                            <div class="stat-label">Team Shifts</div>
+                        </div>
                     </div>
-                    <div class="stat-card" style="background: ${coveragePercentage >= 90 ? '#28a745' : coveragePercentage >= 75 ? '#ffc107' : '#dc3545'};">
-                        <div class="stat-number">${coveragePercentage}%</div>
-                        <div class="stat-label">Coverage</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">${Object.keys(assignedHours).length}</div>
-                        <div class="stat-label">Workers Assigned</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">${coverageGaps.length}</div>
-                        <div class="stat-label">Coverage Gaps</div>
-                    </div>
-                    <div class="stat-card" style="background: #007bff;">
-                        <div class="stat-number">${multipleWorkerShifts}</div>
-                        <div class="stat-label">Team Shifts</div>
-                    </div>
-                </div>
-            `;
-            
-            // Show critical warnings
-            if (coverageGaps.length > 0) {
-                html += `<div class="error"><strong>🚨 ${coverageGaps.length} Critical Coverage Gap(s) Found!</strong><br>Some operating hours have no worker assigned. Check the schedule analysis for details.</div>`;
+                `;
             }
             
-            if (lowHours.length > 0) {
-                html += `<div class="warning"><strong>Workers with less than minimum hours:</strong> ${lowHours.join(', ')}</div>`;
-            }
-            if (unassigned.length > 0) {
-                html += `<div class="error"><strong>Workers with no hours:</strong> ${unassigned.join(', ')}</div>`;
+            // Show critical warnings - only for admin users
+            if (user.isAdmin) {
+                if (coverageGaps.length > 0) {
+                    html += `<div class="error"><strong>🚨 ${coverageGaps.length} Critical Coverage Gap(s) Found!</strong><br>Some operating hours have no worker assigned. Check the schedule analysis for details.</div>`;
+                }
+                
+                if (lowHours.length > 0) {
+                    html += `<div class="warning"><strong>Workers with less than minimum hours:</strong> ${lowHours.join(', ')}</div>`;
+                }
+                if (unassigned.length > 0) {
+                    html += `<div class="error"><strong>Workers with no hours:</strong> ${unassigned.join(', ')}</div>`;
+                }
             }
             
             // Display schedule by day with enhanced shift marking
@@ -8235,52 +8245,54 @@
                 });
             });
             
-            // Enhanced worker hours summary
-            html += '<div style="margin-top: 2rem;"><h4>📊 Worker Hours Summary</h4>';
-            html += '<table class="worker-table"><thead><tr><th>Worker</th><th>Hours Assigned</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>';
-            
-            const sortedWorkers = Object.entries(assignedHours).sort((a, b) => b[1] - a[1]);
-            
-            workers.forEach(w => {
-                if (!(w.email in assignedHours)) {
-                    sortedWorkers.push([w.email, 0]);
-                }
-            });
-            
-            sortedWorkers.forEach(([email, hours]) => {
-                const worker = workers.find(w => w.email === email);
-                if (!worker) return;
+            // Enhanced worker hours summary - only show for admin users
+            if (user.isAdmin) {
+                html += '<div style="margin-top: 2rem;"><h4>📊 Worker Hours Summary</h4>';
+                html += '<table class="worker-table"><thead><tr><th>Worker</th><th>Hours Assigned</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>';
                 
-                const name = `${worker.first_name} ${worker.last_name}`;
-                const isWS = worker.work_study;
-                let status = '✅ Good';
-                let statusColor = 'color: #28a745;';
+                const sortedWorkers = Object.entries(assignedHours).sort((a, b) => b[1] - a[1]);
                 
-                if (isWS && Math.abs(hours - 5) > 0.1) {
-                    status = `❌ WS Issue (${hours.toFixed(1)}h/5h)`;
-                    statusColor = 'color: #dc3545;';
-                } else if (!isWS && hours < 3 && hours > 0) {
-                    status = '⚠️ Low Hours';
-                    statusColor = 'color: #ffc107;';
-                } else if (hours === 0) {
-                    status = '❌ Unassigned';
-                    statusColor = 'color: #dc3545;';
-                } else if (isWS && hours === 5) {
-                    status = '✅ Perfect (WS)';
-                    statusColor = 'color: #28a745;';
-                }
+                workers.forEach(w => {
+                    if (!(w.email in assignedHours)) {
+                        sortedWorkers.push([w.email, 0]);
+                    }
+                });
                 
-                html += `
-                    <tr>
-                        <td><strong>${name}</strong> ${isWS ? '<small style="color: #ffc107;">(WS)</small>' : ''}</td>
-                        <td>${hours.toFixed(1)} hours</td>
-                        <td style="${statusColor}">${status}</td>
-                        <td class="no-print"><button class="btn btn-primary" onclick="contactWorker('${email}')">📧 Contact</button></td>
-                    </tr>
-                `;
-            });
-            
-            html += '</tbody></table></div>';
+                sortedWorkers.forEach(([email, hours]) => {
+                    const worker = workers.find(w => w.email === email);
+                    if (!worker) return;
+                    
+                    const name = `${worker.first_name} ${worker.last_name}`;
+                    const isWS = worker.work_study;
+                    let status = '✅ Good';
+                    let statusColor = 'color: #28a745;';
+                    
+                    if (isWS && Math.abs(hours - 5) > 0.1) {
+                        status = `❌ WS Issue (${hours.toFixed(1)}h/5h)`;
+                        statusColor = 'color: #dc3545;';
+                    } else if (!isWS && hours < 3 && hours > 0) {
+                        status = '⚠️ Low Hours';
+                        statusColor = 'color: #ffc107;';
+                    } else if (hours === 0) {
+                        status = '❌ Unassigned';
+                        statusColor = 'color: #dc3545;';
+                    } else if (isWS && hours === 5) {
+                        status = '✅ Perfect (WS)';
+                        statusColor = 'color: #28a745;';
+                    }
+                    
+                    html += `
+                        <tr>
+                            <td><strong>${name}</strong> ${isWS ? '<small style="color: #ffc107;">(WS)</small>' : ''}</td>
+                            <td>${hours.toFixed(1)} hours</td>
+                            <td style="${statusColor}">${status}</td>
+                            <td class="no-print"><button class="btn btn-primary" onclick="contactWorker('${email}')">📧 Contact</button></td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table></div>';
+            }
             
             // Action buttons (admin vs user)
             if (user.isAdmin) {
