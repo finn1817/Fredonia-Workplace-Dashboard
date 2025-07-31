@@ -5134,22 +5134,51 @@
             }
         }
 
-            // Handle different tab content
-            switch(tabName) {
-                case 'workers':
-                    await displayWorkersTab(contentContainer);
-                    break;
-                case 'users':
-                    await displayUsersTab(contentContainer);
-                    break;
-                case 'import':
-                    displayImportExportTab(contentContainer);
-                    break;
-                case 'analytics':
-                    displayAnalyticsTab(contentContainer);
-                    break;
-            }
+        // Sorting functions - needed by display functions
+        window.sortWorkers = async function(workersList) {
+            const pinned = await getPinnedWorkers();
+            
+            // Separate pinned and unpinned workers
+            // Use both global pinned list and individual worker isPinned status
+            const pinnedWorkers = workersList.filter(w => pinned.includes(w.id) || w.isPinned);
+            const unpinnedWorkers = workersList.filter(w => !pinned.includes(w.id) && !w.isPinned);
+            
+            // Sort both groups alphabetically by first name, then last name
+            const sortAlphabetically = (a, b) => {
+                const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
+                const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
+                return nameA.localeCompare(nameB);
+            };
+            
+            pinnedWorkers.sort(sortAlphabetically);
+            unpinnedWorkers.sort(sortAlphabetically);
+            
+            // Return pinned workers first, then unpinned
+            return [...pinnedWorkers, ...unpinnedWorkers];
+        }
         
+        window.sortUsers = async function(usersList) {
+            const pinned = await getPinnedUsers();
+            
+            // Separate pinned and unpinned users
+            const pinnedUsers = usersList.filter(u => pinned.includes(u.email));
+            const unpinnedUsers = usersList.filter(u => !pinned.includes(u.email));
+            
+            // Sort both groups alphabetically by name
+            const sortAlphabetically = (a, b) => {
+                const nameA = (a.authUser ? `${a.authUser.firstName} ${a.authUser.lastName}` : 
+                             (a.workplaceWorker ? `${a.workplaceWorker.first_name} ${a.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
+                const nameB = (b.authUser ? `${b.authUser.firstName} ${b.authUser.lastName}` : 
+                             (b.workplaceWorker ? `${b.workplaceWorker.first_name} ${b.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
+                return nameA.localeCompare(nameB);
+            };
+            
+            pinnedUsers.sort(sortAlphabetically);
+            unpinnedUsers.sort(sortAlphabetically);
+            
+            // Return pinned users first, then unpinned
+            return [...pinnedUsers, ...unpinnedUsers];
+        }
 
         async function displayWorkersTab(contentContainer) {
             try {
@@ -7651,51 +7680,6 @@
             }
         }
         
-        window.sortWorkers = async function(workersList) {
-            const pinned = await getPinnedWorkers();
-            
-            // Separate pinned and unpinned workers
-            // Use both global pinned list and individual worker isPinned status
-            const pinnedWorkers = workersList.filter(w => pinned.includes(w.id) || w.isPinned);
-            const unpinnedWorkers = workersList.filter(w => !pinned.includes(w.id) && !w.isPinned);
-            
-            // Sort both groups alphabetically by first name, then last name
-            const sortAlphabetically = (a, b) => {
-                const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
-                const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
-                return nameA.localeCompare(nameB);
-            };
-            
-            pinnedWorkers.sort(sortAlphabetically);
-            unpinnedWorkers.sort(sortAlphabetically);
-            
-            // Return pinned workers first, then unpinned
-            return [...pinnedWorkers, ...unpinnedWorkers];
-        }
-        
-        window.sortUsers = async function(usersList) {
-            const pinned = await getPinnedUsers();
-            
-            // Separate pinned and unpinned users
-            const pinnedUsers = usersList.filter(u => pinned.includes(u.email));
-            const unpinnedUsers = usersList.filter(u => !pinned.includes(u.email));
-            
-            // Sort both groups alphabetically by name
-            const sortAlphabetically = (a, b) => {
-                const nameA = (a.authUser ? `${a.authUser.firstName} ${a.authUser.lastName}` : 
-                             (a.workplaceWorker ? `${a.workplaceWorker.first_name} ${a.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
-                const nameB = (b.authUser ? `${b.authUser.firstName} ${b.authUser.lastName}` : 
-                             (b.workplaceWorker ? `${b.workplaceWorker.first_name} ${b.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
-                return nameA.localeCompare(nameB);
-            };
-            
-            pinnedUsers.sort(sortAlphabetically);
-            unpinnedUsers.sort(sortAlphabetically);
-            
-            // Return pinned users first, then unpinned
-            return [...pinnedUsers, ...unpinnedUsers];
-        }
-
         // Test function to verify pinning functionality
         window.testPinning = async function() {
             console.log('Testing pinning functionality...');
