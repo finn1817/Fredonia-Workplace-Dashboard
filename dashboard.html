@@ -1544,6 +1544,21 @@
                             </select>
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="workerType">Worker Type</label>
+                            <select id="workerType" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="Regular">Regular Worker</option>
+                                <option value="Cover">Cover Worker</option>
+                            </select>
+                            <small style="color: #666; font-size: 0.8rem; margin-top: 0.25rem; display: block;">
+                                Cover workers are not included in automatic schedule generation but can be manually assigned to shifts.
+                            </small>
+                        </div>
+                        <div class="form-group">
+                            <!-- Empty div for spacing -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Availability Section -->
@@ -1651,6 +1666,19 @@
                     <button type="button" class="btn btn-secondary" onclick="closeModal('timeSlotModal')">Cancel</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Cover Shift Modal -->
+    <div id="coverShiftModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 id="coverShiftModalTitle">🔄 Cover Shift</h3>
+                <span class="close" onclick="closeModal('coverShiftModal')">&times;</span>
+            </div>
+            <div id="coverShiftModalContent">
+                <!-- Content will be populated by JavaScript -->
+            </div>
         </div>
     </div>
 
@@ -2821,9 +2849,14 @@
             });
             
             // Enhanced Fair Distribution: Calculate target hours for non-Work Study workers
-            const nonWorkStudyWorkers = workersData.filter(w => !wsStatus[w.email]);
-            const workStudyWorkers = workersData.filter(w => wsStatus[w.email]);
+            // Exclude Cover workers from automatic schedule generation
+            const nonWorkStudyWorkers = workersData.filter(w => !wsStatus[w.email] && w.worker_type !== 'Cover');
+            const workStudyWorkers = workersData.filter(w => wsStatus[w.email] && w.worker_type !== 'Cover');
+            const coverWorkers = workersData.filter(w => w.worker_type === 'Cover');
             const totalWorkStudyHours = workStudyWorkers.length * 5; // Work Study gets exactly 5 hours each
+            
+            console.log(`📊 Worker Distribution: ${workersData.length} total workers, ${workStudyWorkers.length} Work Study, ${nonWorkStudyWorkers.length} Regular, ${coverWorkers.length} Cover workers`);
+            console.log('Cover workers excluded from automatic scheduling:', coverWorkers.map(w => `${w.first_name} ${w.last_name}`));
             
             // Calculate total operating hours to determine fair distribution
             let totalOperatingHours = 0;
@@ -2847,7 +2880,7 @@
             // CRITICAL FIX: Track shift assignments to prevent duplicates
             const shiftAssignments = new Map(); // key: `${day}_${start}_${end}`, value: Set of worker emails
 
-            const wsWorkers = workersData.filter(w => wsStatus[w.email]);
+            const wsWorkers = workersData.filter(w => wsStatus[w.email] && w.worker_type !== 'Cover');
             wsWorkers.sort((a, b) => availabilityHours[a.email] - availabilityHours[b.email]);
 
             const wsAvailabilityIssues = checkWorkStudyAvailability(wsWorkers, hoursOfOperation);
@@ -3649,14 +3682,14 @@
             console.log('Work Study Assignment Summary:', wsSummary);
             
             // Critical warning if any work study students don't have exactly 5 hours
-            const wsWithIssues = workersData.filter(w => wsStatus[w.email] && Math.abs(assignedHours[w.email] - 5) > 0.1);
+            const wsWithIssues = workersData.filter(w => wsStatus[w.email] && Math.abs(assignedHours[w.email] - 5) > 0.1 && w.worker_type !== 'Cover');
             if (wsWithIssues.length > 0) {
                 console.error('🚨 CRITICAL: Work study students without exactly 5 hours:', 
                     wsWithIssues.map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`));
             }
 
             const minHoursIssues = workersData
-                .filter(w => !wsStatus[w.email] && assignedHours[w.email] < minHoursPerWorker && assignedHours[w.email] > 0)
+                .filter(w => !wsStatus[w.email] && w.worker_type !== 'Cover' && assignedHours[w.email] < minHoursPerWorker && assignedHours[w.email] > 0)
                 .map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`);
 
             // Alternative solutions
@@ -3664,6 +3697,8 @@
             for (const us of unfilledShifts) {
                 const key = `${us.day} ${us.start}-${us.end}`;
                 const sols = workersData.filter(w => {
+                    // Exclude Cover workers from automatic schedule generation
+                    if (w.worker_type === 'Cover') return false;
                     return isWorkerAvailable(w, us.day, us.start_hour, us.end_hour) &&
                            assignedHours[w.email] + (us.end_hour - us.start_hour) <= maxHoursPerWorker * 1.2;
                 });
@@ -3678,6 +3713,9 @@
             for (const us of unfilledShifts) {
                 // Find eligible workers: have availability for this shift, not double-booked, not over max hours
                 const eligible = workersData.filter(w => {
+                    // Exclude Cover workers from automatic schedule generation
+                    if (w.worker_type === 'Cover') return false;
+                    
                     // Must have availability for this shift
                     if (!isWorkerAvailable(w, us.day, us.start_hour, us.end_hour)) return false;
                     
@@ -3799,7 +3837,7 @@
                 .filter(Boolean);
             
             // EMERGENCY FIX: Force assign any work study students who still have 0 hours
-            const unassignedWorkStudy = workersData.filter(w => wsStatus[w.email] && assignedHours[w.email] === 0);
+            const unassignedWorkStudy = workersData.filter(w => wsStatus[w.email] && assignedHours[w.email] === 0 && w.worker_type !== 'Cover');
             if (unassignedWorkStudy.length > 0) {
                 console.error(`🚨 EMERGENCY: ${unassignedWorkStudy.length} work study students still have 0 hours! Force assigning...`);
                 
@@ -4345,6 +4383,7 @@
                             last_name: data['Last Name'] || 'Worker',
                             email: data['Email'] || 'no-email',
                             work_study: data['Work Study'] === 'Yes',
+                            worker_type: data['Worker Type'] || 'Regular', // Default to Regular for existing workers
                             availability,
                             availability_text: data['Days & Times Available'] || '',
                             isPinned: data.isPinned || false
@@ -5409,6 +5448,7 @@
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Work Study</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Worker Type</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Availability</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 150px;">Actions</th>
                                     </tr>
@@ -5441,6 +5481,11 @@
                                 </td>
                                 <td style="padding: 1rem;">${worker.email}</td>
                                 <td style="padding: 1rem;">${worker.work_study ? '✅ Yes' : '❌ No'}</td>
+                                <td style="padding: 1rem;">
+                                    <span style="background: ${worker.worker_type === 'Cover' ? '#fff3cd' : '#d1edff'}; color: ${worker.worker_type === 'Cover' ? '#856404' : '#004085'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
+                                        ${worker.worker_type === 'Cover' ? '🔄 Cover' : '⚙️ Regular'}
+                                    </span>
+                                </td>
                                 <td style="padding: 1rem;"><small>${worker.availability_text || 'No availability set'}</small></td>
                                 <td style="padding: 1rem;">
                                     <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
@@ -7079,6 +7124,9 @@
             document.getElementById('workerFormTitle').textContent = '➕ Add Worker';
             document.getElementById('workerForm').reset();
             
+            // Set default worker type to Regular
+            document.getElementById('workerType').value = 'Regular';
+            
             // Clear all availability slots
             clearAllAvailabilitySlots();
             
@@ -7108,6 +7156,9 @@
             document.getElementById('workerLastName').value = worker.last_name;
             document.getElementById('workerEmail').value = worker.email;
             document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
+            
+            // Set worker type, defaulting to 'Regular' if not set
+            document.getElementById('workerType').value = worker.worker_type || 'Regular';
             
             // Clear existing slots and load worker's availability
             clearAllAvailabilitySlots();
@@ -7430,9 +7481,10 @@
             const lastName = document.getElementById('workerLastName').value.trim();
             const email = document.getElementById('workerEmail').value.trim();
             const workStudy = document.getElementById('workerWorkStudy').value;
+            const workerType = document.getElementById('workerType').value;
             let availability = document.getElementById('workerAvailability').value.trim();
             
-            console.log('Form data:', { firstName, lastName, email, workStudy, availability });
+            console.log('Form data:', { firstName, lastName, email, workStudy, workerType, availability });
             
             // Enhanced validation
             if (!firstName || !lastName) {
@@ -7509,6 +7561,7 @@
                 'Last Name': lastName,
                 'Email': email,
                 'Work Study': workStudy,
+                'Worker Type': workerType,
                 'Days & Times Available': availability,
                 'updated_at': new Date().toISOString(),
                 'updated_by': user.email
@@ -8410,6 +8463,7 @@
                             <div class="shift-actions no-print">
                                 <button class="btn btn-warning" onclick="editShift('${day}', ${index})">✏️ Edit</button>
                                 <button class="btn btn-danger" onclick="removeShift('${day}', ${index})">🗑️ Remove</button>
+                                <button class="btn btn-info" onclick="coverShift('${day}', ${index})" style="background: #17a2b8; color: white;">🔄 Cover Shift</button>
                                 ${(unfilled || isGap) ? '<button class="btn btn-info" onclick="suggestAlternatives(\'' + day + '\', ' + index + ')">💡 Fix</button>' : ''}
                             </div>
                             ` : ''}
@@ -9693,6 +9747,214 @@
             }
             showNotification('💡 Alternative suggestions feature - Enhanced implementation coming soon!', 'info');
         };
+
+        // Cover Shift System - Request temporary worker replacement
+        window.coverShift = function(day, shiftIndex) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+
+            // Find the shift
+            const shift = (schedule[day] || [])[shiftIndex];
+            if (!shift) {
+                showNotification('❌ Shift not found', 'error');
+                return;
+            }
+
+            // Prepare modal content
+            const modalContent = document.getElementById('coverShiftModalContent');
+            const shiftStart = formatTime(shift.start);
+            const shiftEnd = formatTime(shift.end);
+            const currentWorkers = shift.assigned ? shift.assigned.join(', ') : 'None';
+            
+            // Get available cover workers (those with Worker Type = 'Cover')
+            const availableCoverWorkers = workers.filter(w => {
+                return w.worker_type === 'Cover' && 
+                       isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end));
+            });
+            
+            // Also get regular workers who are available (for manual selection)
+            const availableRegularWorkers = workers.filter(w => {
+                return w.worker_type !== 'Cover' && 
+                       isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end)) &&
+                       !shift.raw_assigned?.includes(w.email); // Not already assigned to this shift
+            });
+
+            let html = `
+                <div style="padding: 1.5rem;">
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: #333;">📅 Shift Details</h4>
+                        <p style="margin: 0.25rem 0;"><strong>Day:</strong> ${day}</p>
+                        <p style="margin: 0.25rem 0;"><strong>Time:</strong> ${shiftStart} - ${shiftEnd}</p>
+                        <p style="margin: 0.25rem 0;"><strong>Current Workers:</strong> ${currentWorkers}</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: #333; margin-bottom: 1rem;">🔄 Available Cover Workers</h4>
+                        ${availableCoverWorkers.length > 0 ? `
+                            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.5rem;">
+                                ${availableCoverWorkers.map(worker => `
+                                    <div style="display: flex; align-items: center; padding: 0.5rem; border-bottom: 1px solid #f0f0f0; margin-bottom: 0.5rem;">
+                                        <input type="radio" name="coverWorker" value="${worker.email}" id="cover_${worker.email}" style="margin-right: 0.5rem;">
+                                        <label for="cover_${worker.email}" style="cursor: pointer; flex: 1;">
+                                            <strong>${worker.first_name} ${worker.last_name}</strong>
+                                            <small style="color: #666; display: block;">${worker.email}</small>
+                                        </label>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : `
+                            <p style="color: #666; font-style: italic; padding: 1rem; background: #f8f9fa; border-radius: 6px;">
+                                No cover workers are available for this time slot.
+                            </p>
+                        `}
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: #333; margin-bottom: 1rem;">⚙️ Other Available Workers</h4>
+                        ${availableRegularWorkers.length > 0 ? `
+                            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.5rem;">
+                                ${availableRegularWorkers.map(worker => `
+                                    <div style="display: flex; align-items: center; padding: 0.5rem; border-bottom: 1px solid #f0f0f0; margin-bottom: 0.5rem;">
+                                        <input type="radio" name="coverWorker" value="${worker.email}" id="regular_${worker.email}" style="margin-right: 0.5rem;">
+                                        <label for="regular_${worker.email}" style="cursor: pointer; flex: 1;">
+                                            <strong>${worker.first_name} ${worker.last_name}</strong>
+                                            <small style="color: #666; display: block;">${worker.email} (${worker.work_study ? 'Work Study' : 'Regular'})</small>
+                                        </label>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : `
+                            <p style="color: #666; font-style: italic; padding: 1rem; background: #f8f9fa; border-radius: 6px;">
+                                No other workers are available for this time slot.
+                            </p>
+                        `}
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: #333; margin-bottom: 1rem;">⚙️ Coverage Options</h4>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                                <input type="radio" name="coverageType" value="replace" checked style="margin-right: 0.5rem;">
+                                <strong>Replace current worker(s)</strong> - temporarily assign selected worker to this shift
+                            </label>
+                            <label style="display: flex; align-items: center;">
+                                <input type="radio" name="coverageType" value="add" style="margin-right: 0.5rem;">
+                                <strong>Add additional worker</strong> - add selected worker alongside current workers
+                            </label>
+                        </div>
+                        <div style="background: #e7f3ff; padding: 0.75rem; border-radius: 6px; font-size: 0.9rem;">
+                            <strong>📅 Auto-Restore:</strong> This coverage will automatically restore to the original schedule at midnight after the shift date.
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('coverShiftModal')">Cancel</button>
+                        <button type="button" class="btn btn-success" onclick="submitCoverRequest('${day}', ${shiftIndex})" style="background: #28a745;">
+                            🔄 Apply Coverage
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            modalContent.innerHTML = html;
+            document.getElementById('coverShiftModal').style.display = 'block';
+        };
+
+        // Submit cover request
+        window.submitCoverRequest = async function(day, shiftIndex) {
+            try {
+                const selectedWorkerEmail = document.querySelector('input[name="coverWorker"]:checked')?.value;
+                const coverageType = document.querySelector('input[name="coverageType"]:checked')?.value;
+
+                if (!selectedWorkerEmail) {
+                    showNotification('❌ Please select a worker for coverage', 'error');
+                    return;
+                }
+
+                const selectedWorker = workers.find(w => w.email === selectedWorkerEmail);
+                if (!selectedWorker) {
+                    showNotification('❌ Selected worker not found', 'error');
+                    return;
+                }
+
+                const shift = schedule[day][shiftIndex];
+                if (!shift) {
+                    showNotification('❌ Shift not found', 'error');
+                    return;
+                }
+
+                // Store original shift data for auto-restore
+                const originalData = {
+                    assigned: [...(shift.assigned || [])],
+                    raw_assigned: [...(shift.raw_assigned || [])]
+                };
+
+                // Apply coverage based on type
+                const workerFullName = `${selectedWorker.first_name} ${selectedWorker.last_name}`;
+                
+                if (coverageType === 'replace') {
+                    // Replace current workers
+                    shift.assigned = [workerFullName];
+                    shift.raw_assigned = [selectedWorkerEmail];
+                } else {
+                    // Add to current workers
+                    shift.assigned = [...(shift.assigned || []), workerFullName];
+                    shift.raw_assigned = [...(shift.raw_assigned || []), selectedWorkerEmail];
+                }
+
+                // Create coverage record for auto-restore
+                const coverageRecord = {
+                    workplace: selectedWorkplace,
+                    day: day,
+                    shiftIndex: shiftIndex,
+                    coverageType: coverageType,
+                    coverWorkerEmail: selectedWorkerEmail,
+                    coverWorkerName: workerFullName,
+                    originalData: originalData,
+                    appliedBy: user.email,
+                    appliedAt: new Date().toISOString(),
+                    shiftDate: shift.date || new Date().toISOString().split('T')[0], // Use shift date or today
+                    autoRestoreAt: getNextMidnight(shift.date || new Date().toISOString().split('T')[0])
+                };
+
+                // Save coverage record to Firestore
+                await addDoc(collection(db, 'shift_coverage'), coverageRecord);
+
+                // Update the schedule in Firestore
+                if (currentScheduleId) {
+                    const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
+                    await updateDoc(scheduleRef, {
+                        days: schedule,
+                        updated_at: new Date().toISOString(),
+                        updated_by: user.email
+                    });
+                }
+
+                showNotification(`✅ Coverage applied! ${workerFullName} will ${coverageType === 'replace' ? 'replace' : 'assist'} for this shift. Auto-restore at midnight.`, 'success');
+                
+                closeModal('coverShiftModal');
+                
+                // Refresh the schedule display
+                displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                
+                // TODO: Send notification to the cover worker
+                console.log('Coverage applied:', coverageRecord);
+
+            } catch (error) {
+                console.error('Error applying coverage:', error);
+                showNotification('❌ Failed to apply coverage', 'error');
+            }
+        };
+
+        // Helper function to get next midnight timestamp
+        function getNextMidnight(dateString) {
+            const date = new Date(dateString);
+            date.setDate(date.getDate() + 1); // Next day
+            date.setHours(0, 0, 0, 0); // Midnight
+            return date.toISOString();
+        }
 
         // Test Firebase connection
         async function testConnection() {
