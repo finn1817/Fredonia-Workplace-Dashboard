@@ -1333,6 +1333,7 @@
                     <button class="btn btn-info" onclick="viewHistory()" id="historyBtn" style="display:none;">📚 Schedule History</button>
                     <button class="btn btn-warning" onclick="checkAvailability()" id="checkAvailabilityBtn" style="display:none;">🔍 Check Availability</button>
                     <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
+                    <button class="btn btn-secondary" onclick="showCoverDashboard()" id="coverDashboardBtn">🔄 Cover Dashboard</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
@@ -1405,6 +1406,14 @@
                 <!-- Schedule Display -->
                 <div id="scheduleDisplay">
                     <div class="loading">Select an option above to get started.</div>
+                </div>
+
+                <!-- Cover Dashboard -->
+                <div id="coverDashboard" class="form-section" style="display:none;">
+                    <h3>🔄 Cover Dashboard</h3>
+                    <div id="coverDashboardContent">
+                        <!-- Content will be populated by JavaScript -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -9769,9 +9778,9 @@
             const currentWorkers = shift.assigned ? shift.assigned.join(', ') : 'None';
             
             // Get available cover workers (those with Worker Type = 'Cover')
+            // Cover workers are ALWAYS available regardless of their availability settings
             const availableCoverWorkers = workers.filter(w => {
-                return w.worker_type === 'Cover' && 
-                       isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end));
+                return w.worker_type === 'Cover';
             });
             
             // Also get regular workers who are available (for manual selection)
@@ -9799,14 +9808,14 @@
                                         <input type="radio" name="coverWorker" value="${worker.email}" id="cover_${worker.email}" style="margin-right: 0.5rem;">
                                         <label for="cover_${worker.email}" style="cursor: pointer; flex: 1;">
                                             <strong>${worker.first_name} ${worker.last_name}</strong>
-                                            <small style="color: #666; display: block;">${worker.email}</small>
+                                            <small style="color: #666; display: block;">${worker.email} (Always available - Cover worker)</small>
                                         </label>
                                     </div>
                                 `).join('')}
                             </div>
                         ` : `
                             <p style="color: #666; font-style: italic; padding: 1rem; background: #f8f9fa; border-radius: 6px;">
-                                No cover workers are available for this time slot.
+                                No cover workers have been added to this workplace yet.
                             </p>
                         `}
                     </div>
@@ -9939,7 +9948,15 @@
                 // Refresh the schedule display
                 displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
                 
-                // TODO: Send notification to the cover worker
+                // Send notification to the cover worker
+                await sendCoverageNotification(selectedWorkerEmail, {
+                    day: day,
+                    start: shift.start,
+                    end: shift.end,
+                    shiftIndex: shiftIndex,
+                    message: `You have been assigned to ${coverageType === 'replace' ? 'replace workers for' : 'assist with'} a shift. This assignment will auto-restore at midnight.`
+                });
+
                 console.log('Coverage applied:', coverageRecord);
 
             } catch (error) {
@@ -9955,6 +9972,351 @@
             date.setHours(0, 0, 0, 0); // Midnight
             return date.toISOString();
         }
+
+        // Cover Dashboard System
+        window.showCoverDashboard = async function() {
+            hideAllForms();
+            document.getElementById('coverDashboard').style.display = 'block';
+            
+            if (!selectedWorkplace) {
+                document.getElementById('coverDashboardContent').innerHTML = '<div class="warning">Please select a workplace first.</div>';
+                return;
+            }
+
+            await loadCoverDashboardData();
+        };
+
+        async function loadCoverDashboardData() {
+            try {
+                document.getElementById('coverDashboardContent').innerHTML = '<div class="loading">🔄 Loading cover dashboard...</div>';
+
+                // Load cover requests and current coverage
+                const [coverRequests, activeCoverage, coverWorkers] = await Promise.all([
+                    loadCoverRequests(),
+                    loadActiveCoverage(),
+                    getCoverWorkers()
+                ]);
+
+                displayCoverDashboard(coverRequests, activeCoverage, coverWorkers);
+
+            } catch (error) {
+                console.error('Error loading cover dashboard:', error);
+                document.getElementById('coverDashboardContent').innerHTML = '<div class="error">❌ Failed to load cover dashboard</div>';
+            }
+        }
+
+        async function loadCoverRequests() {
+            try {
+                const requestsSnapshot = await getDocs(
+                    query(
+                        collection(db, 'cover_requests'),
+                        where('workplace', '==', selectedWorkplace),
+                        orderBy('createdAt', 'desc')
+                    )
+                );
+                
+                const requests = [];
+                requestsSnapshot.forEach(doc => {
+                    requests.push({ id: doc.id, ...doc.data() });
+                });
+                
+                return requests;
+            } catch (error) {
+                console.error('Error loading cover requests:', error);
+                return [];
+            }
+        }
+
+        async function loadActiveCoverage() {
+            try {
+                const coverageSnapshot = await getDocs(
+                    query(
+                        collection(db, 'shift_coverage'),
+                        where('workplace', '==', selectedWorkplace),
+                        where('autoRestoreAt', '>', new Date().toISOString())
+                    )
+                );
+                
+                const coverage = [];
+                coverageSnapshot.forEach(doc => {
+                    coverage.push({ id: doc.id, ...doc.data() });
+                });
+                
+                return coverage;
+            } catch (error) {
+                console.error('Error loading active coverage:', error);
+                return [];
+            }
+        }
+
+        function getCoverWorkers() {
+            return workers.filter(w => w.worker_type === 'Cover');
+        }
+
+        function displayCoverDashboard(coverRequests, activeCoverage, coverWorkers) {
+            const content = document.getElementById('coverDashboardContent');
+            
+            let html = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                    <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2rem; font-weight: bold; color: #17a2b8;">${coverWorkers.length}</div>
+                        <div style="color: #666; font-size: 0.9rem;">Cover Workers</div>
+                    </div>
+                    <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2rem; font-weight: bold; color: #ffc107;">${coverRequests.filter(r => r.status === 'pending').length}</div>
+                        <div style="color: #666; font-size: 0.9rem;">Pending Requests</div>
+                    </div>
+                    <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${activeCoverage.length}</div>
+                        <div style="color: #666; font-size: 0.9rem;">Active Coverage</div>
+                    </div>
+                    <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2rem; font-weight: bold; color: #dc3545;">${coverRequests.filter(r => r.status === 'declined').length}</div>
+                        <div style="color: #666; font-size: 0.9rem;">Declined Today</div>
+                    </div>
+                </div>
+
+                <!-- Request Coverage Section (Admin Only) -->
+                ${user.isAdmin ? `
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">📧 Request Coverage</h4>
+                    <p style="color: #666; margin-bottom: 1rem;">Send coverage requests to available cover workers</p>
+                    <button class="btn btn-primary" onclick="showRequestCoverageModal()" style="background: #007bff;">
+                        📨 Send Coverage Request
+                    </button>
+                </div>
+                ` : ''}
+
+                <!-- My Coverage Requests (Non-Admin) -->
+                ${!user.isAdmin ? `
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">📧 My Coverage Requests</h4>
+                    <div id="myCoverageRequests">
+                        ${getCoverageRequestsForUser(coverRequests, user.email)}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Active Coverage -->
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">🔄 Active Coverage</h4>
+                    ${activeCoverage.length > 0 ? `
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f8f9fa;">
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Day</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Time</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Cover Worker</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Type</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Auto-Restore</th>
+                                        ${user.isAdmin ? '<th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Actions</th>' : ''}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${activeCoverage.map(coverage => `
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 0.75rem;">${coverage.day}</td>
+                                            <td style="padding: 0.75rem;">${formatTime(coverage.originalData?.start || 'N/A')} - ${formatTime(coverage.originalData?.end || 'N/A')}</td>
+                                            <td style="padding: 0.75rem;">${coverage.coverWorkerName}</td>
+                                            <td style="padding: 0.75rem;">
+                                                <span style="background: ${coverage.coverageType === 'replace' ? '#fff3cd' : '#d1ecf1'}; color: ${coverage.coverageType === 'replace' ? '#856404' : '#0c5460'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                                                    ${coverage.coverageType === 'replace' ? '🔄 Replace' : '➕ Add'}
+                                                </span>
+                                            </td>
+                                            <td style="padding: 0.75rem;">${new Date(coverage.autoRestoreAt).toLocaleString()}</td>
+                                            ${user.isAdmin ? `<td style="padding: 0.75rem;">
+                                                <button class="btn btn-sm btn-danger" onclick="cancelCoverage('${coverage.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+                                                    Cancel
+                                                </button>
+                                            </td>` : ''}
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <p style="color: #666; font-style: italic;">No active coverage at this time.</p>
+                    `}
+                </div>
+
+                <!-- Cover Workers List -->
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">👷 Cover Workers</h4>
+                    ${coverWorkers.length > 0 ? `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+                            ${coverWorkers.map(worker => `
+                                <div style="border: 1px solid #dee2e6; border-radius: 6px; padding: 1rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                        <span style="background: #fff3cd; color: #856404; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">🔄 COVER</span>
+                                    </div>
+                                    <h5 style="margin: 0 0 0.5rem 0;">${worker.first_name} ${worker.last_name}</h5>
+                                    <p style="margin: 0; color: #666; font-size: 0.9rem;">${worker.email}</p>
+                                    ${user.isAdmin ? `
+                                        <button class="btn btn-sm btn-info" onclick="sendDirectCoverRequest('${worker.email}')" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-top: 0.5rem;">
+                                            📧 Send Request
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <p style="color: #666; font-style: italic;">No cover workers have been added yet. Add workers with "Cover" type to see them here.</p>
+                    `}
+                </div>
+            `;
+
+            content.innerHTML = html;
+        }
+
+        function getCoverageRequestsForUser(requests, userEmail) {
+            const userRequests = requests.filter(r => r.requestedWorkerEmail === userEmail);
+            
+            if (userRequests.length === 0) {
+                return '<p style="color: #666; font-style: italic;">No coverage requests for you at this time.</p>';
+            }
+
+            return `
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f8f9fa;">
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Day</th>
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Time</th>
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Status</th>
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${userRequests.map(request => `
+                                <tr style="border-bottom: 1px solid #dee2e6;">
+                                    <td style="padding: 0.75rem;">${request.day}</td>
+                                    <td style="padding: 0.75rem;">${formatTime(request.shiftStart)} - ${formatTime(request.shiftEnd)}</td>
+                                    <td style="padding: 0.75rem;">
+                                        <span style="background: ${getStatusColor(request.status)}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                                            ${request.status.toUpperCase()}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 0.75rem;">
+                                        ${request.status === 'pending' ? `
+                                            <button class="btn btn-sm btn-success" onclick="respondToCoverRequest('${request.id}', 'accepted')" style="background: #28a745; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem;">
+                                                ✅ Accept
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" onclick="respondToCoverRequest('${request.id}', 'declined')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+                                                ❌ Decline
+                                            </button>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function getStatusColor(status) {
+            switch(status) {
+                case 'pending': return '#ffc107';
+                case 'accepted': return '#28a745';
+                case 'declined': return '#dc3545';
+                default: return '#6c757d';
+            }
+        }
+
+        // Email notification system
+        async function sendCoverageNotification(workerEmail, shiftDetails) {
+            try {
+                // Create a coverage request record
+                const coverageRequest = {
+                    workplace: selectedWorkplace,
+                    requestedWorkerEmail: workerEmail,
+                    requestedBy: user.email,
+                    day: shiftDetails.day,
+                    shiftStart: shiftDetails.start,
+                    shiftEnd: shiftDetails.end,
+                    shiftIndex: shiftDetails.shiftIndex,
+                    message: shiftDetails.message || '',
+                    status: 'pending',
+                    createdAt: new Date().toISOString(),
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+                };
+
+                await addDoc(collection(db, 'cover_requests'), coverageRequest);
+
+                // TODO: In a real implementation, you would integrate with an email service like SendGrid, AWS SES, etc.
+                // For now, we'll just create an in-app notification
+                await createInAppNotification(workerEmail, {
+                    title: '🔄 Coverage Request',
+                    message: `You have been requested to cover a shift on ${shiftDetails.day} from ${formatTime(shiftDetails.start)} to ${formatTime(shiftDetails.end)}`,
+                    type: 'cover_request',
+                    actionUrl: `/dashboard?action=cover_request&id=${coverageRequest.id}`,
+                    workplace: selectedWorkplace
+                });
+
+                showNotification('✅ Coverage request sent successfully!', 'success');
+                return true;
+
+            } catch (error) {
+                console.error('Error sending coverage notification:', error);
+                showNotification('❌ Failed to send coverage request', 'error');
+                return false;
+            }
+        }
+
+        async function createInAppNotification(userEmail, notification) {
+            try {
+                await addDoc(collection(db, 'notifications'), {
+                    userEmail: userEmail,
+                    ...notification,
+                    read: false,
+                    createdAt: new Date().toISOString()
+                });
+            } catch (error) {
+                console.error('Error creating in-app notification:', error);
+            }
+        }
+
+        // Response functions
+        window.respondToCoverRequest = async function(requestId, response) {
+            try {
+                await updateDoc(doc(db, 'cover_requests', requestId), {
+                    status: response,
+                    respondedAt: new Date().toISOString(),
+                    respondedBy: user.email
+                });
+
+                if (response === 'accepted') {
+                    showNotification('✅ Coverage request accepted!', 'success');
+                } else {
+                    showNotification('❌ Coverage request declined', 'info');
+                }
+
+                // Reload the dashboard
+                await loadCoverDashboardData();
+
+            } catch (error) {
+                console.error('Error responding to cover request:', error);
+                showNotification('❌ Failed to respond to request', 'error');
+            }
+        };
+
+        window.cancelCoverage = async function(coverageId) {
+            if (!confirm('Are you sure you want to cancel this coverage? The shift will revert to its original state.')) {
+                return;
+            }
+
+            try {
+                // TODO: Implement coverage cancellation logic
+                await deleteDoc(doc(db, 'shift_coverage', coverageId));
+                showNotification('✅ Coverage cancelled successfully', 'success');
+                await loadCoverDashboardData();
+
+            } catch (error) {
+                console.error('Error cancelling coverage:', error);
+                showNotification('❌ Failed to cancel coverage', 'error');
+            }
+        };
 
         // Test Firebase connection
         async function testConnection() {
