@@ -4719,8 +4719,69 @@
             document.getElementById('workersModal').style.display = 'block';
             
             await loadWorkplaceData();
-            await displayEnhancedWorkersInModal();
+            await displayEnhancedWorkersModal();
         };
+
+        async function displayEnhancedWorkersModal() {
+            try {
+                // Set up the modal structure with Workers tab active by default
+                const modalContent = document.getElementById('workersModalContent');
+                modalContent.innerHTML = `
+                    <div class="enhanced-worker-management">
+                        <div class="tab-navigation">
+                            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                                <span style="font-size: 1.5rem;">👥</span>
+                                <h3 style="margin: 0; font-size: 1.3rem;">Enhanced Worker & User Management</h3>
+                            </div>
+                            
+                            <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1.5rem;">
+                                <button class="tab-btn active" data-tab="workers" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; color: #667eea; font-weight: bold;">
+                                    Workers (${workers.length})
+                                </button>
+                                <button class="tab-btn" data-tab="users" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                                    Users
+                                </button>
+                                <button class="tab-btn" data-tab="import" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                                    Import/Export
+                                </button>
+                                <button class="tab-btn" data-tab="analytics" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                                    Analytics
+                                </button>
+                            </div>
+                        </div>
+                        <div class="tab-content">
+                            <div class="loading">Loading workers...</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Add tab switching functionality
+                setupTabSwitching();
+                
+                // Display workers tab by default
+                await switchTab('workers');
+                
+            } catch (error) {
+                console.error('Error setting up enhanced worker modal:', error);
+                document.getElementById('workersModalContent').innerHTML = `
+                    <div class="error">Error loading worker management: ${error.message}</div>
+                `;
+            }
+        }
+
+        function setupTabSwitching() {
+            setTimeout(() => {
+                const tabButtons = document.querySelectorAll('.tab-btn');
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        const tabName = button.getAttribute('data-tab');
+                        console.log('Tab clicked:', tabName);
+                        await switchTab(tabName);
+                    });
+                });
+            }, 100);
+        }
 
         async function displayEnhancedWorkersInModal() {
             try {
@@ -5045,6 +5106,12 @@
                 activeButton.style.color = '#667eea';
                 activeButton.style.fontWeight = 'bold';
             }
+            
+            // Update tab counts
+            const workersTabBtn = document.querySelector('[data-tab="workers"]');
+            if (workersTabBtn && tabName === 'workers') {
+                workersTabBtn.innerHTML = `Workers (${workers.length})`;
+            }
 
             // Get the content container within the enhanced worker management structure
             const contentContainer = document.querySelector('#workersModalContent .tab-content') || 
@@ -5067,82 +5134,394 @@
             }
         }
 
+            // Handle different tab content
+            switch(tabName) {
+                case 'workers':
+                    await displayWorkersTab(contentContainer);
+                    break;
+                case 'users':
+                    await displayUsersTab(contentContainer);
+                    break;
+                case 'import':
+                    displayImportExportTab(contentContainer);
+                    break;
+                case 'analytics':
+                    displayAnalyticsTab(contentContainer);
+                    break;
+            }
+        }
+
         async function displayWorkersTab(contentContainer) {
-            // Sort workers alphabetically with pinned ones at top
-            const sortedWorkers = await sortWorkers(workers);
-            const pinnedList = await getPinnedWorkers();
-            
-            // Show the original workers table but maintain tab structure
-            let html = `
-                <div style="margin-bottom: 1rem;">
-                    <button class="btn btn-success" onclick="showAddWorker()">➕ Add New Worker</button>
-                    <span style="margin-left: 1rem; color: #666;">Total: ${workers.length} workers</span>
-                    <button class="btn btn-info" onclick="testDatabase()" style="margin-left: 1rem;">🔍 Test DB</button>
-                    <button class="btn btn-warning" onclick="testPinning()" style="margin-left: 1rem;">🧪 Test Pin</button>
-                </div>
-            `;
-            
-            if (workers.length === 0) {
-                html += '<div class="warning">No workers found. Add your first worker to get started!</div>';
-            } else {
-                html += `
-                    <table class="worker-table" style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background: #f8f9fa;">
-                                <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
-                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
-                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
-                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Work Study</th>
-                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Availability</th>
-                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 150px;">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+            try {
+                // Sort workers alphabetically with pinned ones at top
+                const sortedWorkers = await sortWorkers(workers);
+                const pinnedList = await getPinnedWorkers();
+                
+                console.log('Displaying workers tab with sorted workers:', sortedWorkers.length);
+                console.log('Pinned workers:', pinnedList);
+                
+                // Show the workers table with proper header
+                let html = `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+                            <span style="font-size: 1.5rem;">👷</span>
+                            <h3 style="margin: 0; font-size: 1.3rem;">Worker Management</h3>
+                        </div>
+                        <p style="margin: 0; opacity: 0.9;">Manage your workplace workers and their schedules</p>
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                            <button class="btn btn-success" onclick="showAddWorker()" style="background: #28a745; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">➕</span>Add Worker
+                            </button>
+                            <button class="btn btn-info" onclick="testDatabase()" style="background: #17a2b8; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">🔍</span>Test DB
+                            </button>
+                            <button class="btn btn-warning" onclick="testPinning()" style="background: #ffc107; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">🧪</span>Test Pin
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #667eea;">${workers.length}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Total Workers</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${pinnedList.length}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Pinned Workers</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #ffc107;">${workers.filter(w => w.work_study).length}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Work Study</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #17a2b8;">${workers.filter(w => w.availability_text).length}</div>
+                            <div style="color: #666; font-size: 0.9rem;">With Availability</div>
+                        </div>
+                    </div>
                 `;
                 
-                sortedWorkers.forEach(worker => {
-                    const isPinned = pinnedList.includes(worker.id) || worker.isPinned;
-                    const pinIcon = isPinned ? '📌' : '📍';
-                    const pinTitle = isPinned ? 'Unpin worker' : 'Pin worker to top';
-                    const rowClass = isPinned ? 'pinned-row' : '';
-                    const pinButtonClass = isPinned ? 'pin-button pinned' : 'pin-button unpinned';
-                    
+                if (workers.length === 0) {
+                    html += '<div class="warning">No workers found. Add your first worker to get started!</div>';
+                } else {
                     html += `
-                        <tr class="${rowClass}" style="border-bottom: 1px solid #dee2e6;">
-                            <td style="padding: 1rem; text-align: center;">
-                                <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
-                                        title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-                                    ${pinIcon}
-                                </button>
-                            </td>
-                            <td style="padding: 1rem; font-weight: 600;">
-                                <strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}
-                            </td>
-                            <td style="padding: 1rem;">${worker.email}</td>
-                            <td style="padding: 1rem;">${worker.work_study ? '✅ Yes' : '❌ No'}</td>
-                            <td style="padding: 1rem;"><small>${worker.availability_text || 'No availability set'}</small></td>
-                            <td style="padding: 1rem;">
-                                <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
-                                    <button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
-                                    <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Delete</button>
-                                </div>
-                            </td>
-                        </tr>
+                        <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f8f9fa;">
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Work Study</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Availability</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 150px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                     `;
-                });
+                    
+                    sortedWorkers.forEach(worker => {
+                        const isPinned = pinnedList.includes(worker.id) || worker.isPinned;
+                        const pinIcon = isPinned ? '📌' : '📍';
+                        const pinTitle = isPinned ? 'Unpin worker' : 'Pin worker to top';
+                        const rowStyle = isPinned ? 'background: #f8f9fa; border-left: 4px solid #667eea;' : '';
+                        const pinButtonStyle = isPinned ? 
+                            'background: #667eea; color: white; border: 1px solid #667eea;' : 
+                            'background: #f8f9fa; color: #666; border: 1px solid #dee2e6;';
+                        
+                        html += `
+                            <tr style="border-bottom: 1px solid #dee2e6; ${rowStyle}">
+                                <td style="padding: 1rem; text-align: center;">
+                                    <button onclick="toggleWorkerPinInModal('${worker.id}')" 
+                                            title="${pinTitle}" style="${pinButtonStyle} border-radius: 50%; width: 32px; height: 32px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+                                        ${pinIcon}
+                                    </button>
+                                </td>
+                                <td style="padding: 1rem; font-weight: 600;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <strong>${worker.first_name} ${worker.last_name}</strong>
+                                        ${isPinned ? '<span style="color: #667eea; font-size: 0.8rem;">📌 Pinned</span>' : ''}
+                                    </div>
+                                </td>
+                                <td style="padding: 1rem;">${worker.email}</td>
+                                <td style="padding: 1rem;">${worker.work_study ? '✅ Yes' : '❌ No'}</td>
+                                <td style="padding: 1rem;"><small>${worker.availability_text || 'No availability set'}</small></td>
+                                <td style="padding: 1rem;">
+                                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                                        <button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
+                                        <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Delete</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table></div>';
+                }
                 
-                html += '</tbody></table>';
-            }
-            
-            if (contentContainer) {
-                contentContainer.innerHTML = html;
+                if (contentContainer) {
+                    contentContainer.innerHTML = html;
+                } else {
+                    console.error('No content container provided to displayWorkersTab');
+                }
+                
+            } catch (error) {
+                console.error('Error displaying workers tab:', error);
+                if (contentContainer) {
+                    contentContainer.innerHTML = `<div class="error">Error loading workers: ${error.message}</div>`;
+                }
             }
         }
 
         async function displayUsersTab(contentContainer) {
-            // Re-display the users tab content by calling the enhanced workers modal function
-            // but only update the users section
-            await displayEnhancedWorkersInModal();
+            try {
+                // Load users from authentication database
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+
+                // Check if auth app already exists
+                let authApp;
+                try {
+                    authApp = getApp('authApp');
+                } catch (error) {
+                    authApp = initializeApp(authConfig, 'authApp');
+                }
+                const authDb = getFirestore(authApp);
+                
+                const usersRef = collection(authDb, 'users');
+                const usersSnapshot = await getDocs(usersRef);
+                const authUsers = [];
+                usersSnapshot.forEach((doc) => {
+                    authUsers.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Create a map of workplace workers by email for quick lookup
+                const workplaceWorkersMap = new Map();
+                workers.forEach(worker => {
+                    workplaceWorkersMap.set(worker.email.toLowerCase(), worker);
+                });
+
+                // Create a map of auth users by email for quick lookup
+                const authUsersMap = new Map();
+                authUsers.forEach(user => {
+                    authUsersMap.set(user.email.toLowerCase(), user);
+                });
+
+                // Combine and analyze data
+                const allEmails = new Set([
+                    ...workers.map(w => w.email.toLowerCase()),
+                    ...authUsers.map(u => u.email.toLowerCase())
+                ]);
+
+                const combinedData = Array.from(allEmails).map(email => {
+                    const workplaceWorker = workplaceWorkersMap.get(email);
+                    const authUser = authUsersMap.get(email);
+                    
+                    return {
+                        email: email,
+                        workplaceWorker: workplaceWorker,
+                        authUser: authUser,
+                        authStatus: authUser ? 'HAS_ACCOUNT' : 'NO_ACCOUNT',
+                        workplaceStatus: workplaceWorker ? 'IN_SCHEDULER' : 'NOT_IN_SCHEDULER',
+                        role: authUser?.isAdmin ? 'ADMIN' : 'USER'
+                    };
+                });
+
+                // Statistics
+                const totalUsers = combinedData.length;
+                const admins = combinedData.filter(d => d.role === 'ADMIN').length;
+                const regularUsers = combinedData.filter(d => d.role === 'USER').length;
+                const usersWithAccounts = combinedData.filter(d => d.authStatus === 'HAS_ACCOUNT').length;
+                const usersInScheduler = combinedData.filter(d => d.workplaceStatus === 'IN_SCHEDULER').length;
+
+                let html = `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+                            <span style="font-size: 1.5rem;">👤</span>
+                            <h3 style="margin: 0; font-size: 1.3rem;">User Account Management</h3>
+                        </div>
+                        <p style="margin: 0; opacity: 0.9;">Manage user accounts and permissions</p>
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                            <button class="btn btn-success" onclick="showAddUser()" style="background: #28a745; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">➕</span>Add User
+                            </button>
+                            <button class="btn btn-info" onclick="exportUserData()" style="background: #17a2b8; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">📤</span>Export
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #667eea;">${totalUsers}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Total Users</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${admins}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Admins</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #ffc107;">${regularUsers}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Regular Users</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #17a2b8;">${usersWithAccounts}</div>
+                            <div style="color: #666; font-size: 0.9rem;">With Login Accounts</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${usersInScheduler}</div>
+                            <div style="color: #666; font-size: 0.9rem;">In Scheduler</div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center;">
+                        <div style="flex: 1; position: relative;">
+                            <input type="text" id="userSearchInput" placeholder="Search users by name or email..." 
+                                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #999;">🔍</span>
+                        </div>
+                        <select id="userFilterRole" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <option value="all">All Users</option>
+                            <option value="admin">Admins</option>
+                            <option value="user">Regular Users</option>
+                        </select>
+                        <select id="userFilterStatus" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <option value="all">All Status</option>
+                            <option value="connected">Fully Connected (Both)</option>
+                            <option value="auth_only">Has Account Only</option>
+                            <option value="scheduler_only">In Scheduler Only</option>
+                            <option value="neither">No Account & Not In Scheduler</option>
+                            <option value="suspended">Suspended Accounts</option>
+                            <option value="active">Active Accounts</option>
+                            <option value="never_logged_in">Never Logged In</option>
+                            <option value="recent_login">Logged In Recently (7 days)</option>
+                        </select>
+                    </div>
+                `;
+
+                if (combinedData.length === 0) {
+                    html += '<div class="warning">No users found. Add your first user to get started!</div>';
+                } else {
+                    // Sort users alphabetically with pinned ones at top
+                    const sortedUsers = await sortUsers(combinedData);
+                    const pinnedUsersList = await getPinnedUsers();
+                    
+                    html += `
+                        <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f8f9fa;">
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Role</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Login Account</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">In Scheduler</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Phone</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Last Login</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 200px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    
+                    sortedUsers.forEach(data => {
+                        const isPinned = pinnedUsersList.includes(data.email);
+                        const pinIcon = isPinned ? '📌' : '📍';
+                        const pinTitle = isPinned ? 'Unpin user' : 'Pin user to top';
+                        const rowStyle = isPinned ? 'background: #f8f9fa; border-left: 4px solid #667eea;' : '';
+                        const pinButtonStyle = isPinned ? 
+                            'background: #667eea; color: white; border: 1px solid #667eea;' : 
+                            'background: #f8f9fa; color: #666; border: 1px solid #dee2e6;';
+                        
+                        const name = data.authUser ? `${data.authUser.firstName} ${data.authUser.lastName}` : 
+                                   (data.workplaceWorker ? `${data.workplaceWorker.first_name} ${data.workplaceWorker.last_name}` : 'Unknown');
+                        const phone = data.authUser?.phone || '-';
+                        const lastLogin = data.authUser?.loginTime ? 
+                            new Date(data.authUser.loginTime).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            }) : 'Never';
+                        
+                        const roleBadge = data.role === 'ADMIN' ? 
+                            '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">ADMIN</span>' :
+                            '<span style="background: #ffc107; color: #212529; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">USER</span>';
+                        
+                        const authStatusBadge = data.authStatus === 'HAS_ACCOUNT' ?
+                            '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">✅ HAS ACCOUNT</span>' :
+                            '<span style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">❌ NO ACCOUNT</span>';
+                        
+                        const schedulerStatusBadge = data.workplaceStatus === 'IN_SCHEDULER' ?
+                            '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">✅ IN SCHEDULER</span>' :
+                            '<span style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">❌ NOT IN SCHEDULER</span>';
+                        
+                        // Get suspension status from auth user data
+                        const isSuspended = data.authUser?.suspended || false;
+                        const suspendButtonText = isSuspended ? '🔄 Unsuspend' : '⏸️ Suspend';
+                        const suspendButtonClass = isSuspended ? 'btn-success' : 'btn-secondary';
+                        const suspendButtonDisabled = data.role === 'ADMIN' || data.email === user.email ? 'disabled' : '';
+
+                        html += `
+                            <tr style="border-bottom: 1px solid #dee2e6; ${rowStyle} ${isSuspended ? 'opacity: 0.7;' : ''}">
+                                <td style="padding: 1rem; text-align: center;">
+                                    <button onclick="toggleUserPin('${data.email}')" 
+                                            title="${pinTitle}" style="${pinButtonStyle} border-radius: 50%; width: 32px; height: 32px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+                                        ${pinIcon}
+                                    </button>
+                                </td>
+                                <td style="padding: 1rem; font-weight: 600;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        ${name}
+                                        ${isPinned ? '<span style="color: #667eea; font-size: 0.8rem;">📌 Pinned</span>' : ''}
+                                    </div>
+                                    ${isSuspended ? '<br><small style="color: #dc3545; font-weight: normal;">🚫 SUSPENDED</small>' : ''}
+                                </td>
+                                <td style="padding: 1rem;">${data.email}</td>
+                                <td style="padding: 1rem;">${roleBadge}</td>
+                                <td style="padding: 1rem;">${authStatusBadge}</td>
+                                <td style="padding: 1rem;">${schedulerStatusBadge}</td>
+                                <td style="padding: 1rem;">${phone}</td>
+                                <td style="padding: 1rem;">${lastLogin}</td>
+                                <td style="padding: 1rem;">
+                                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                                        <button class="btn btn-info" onclick="viewUser('${data.email}')" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">👁️ View</button>
+                                        <button class="btn btn-warning" onclick="editUser('${data.email}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
+                                        <button class="btn ${suspendButtonClass}" onclick="suspendUser('${data.email}')" style="background: ${isSuspended ? '#28a745' : '#6c757d'}; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;" ${suspendButtonDisabled}>${suspendButtonText}</button>
+                                        <button class="btn btn-danger" onclick="deleteUser('${data.email}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Delete</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table></div>';
+                }
+                
+                if (contentContainer) {
+                    contentContainer.innerHTML = html;
+                    
+                    // Add event listeners for search and filter
+                    setupUserSearchAndFilter();
+                } else {
+                    console.error('No content container provided to displayUsersTab');
+                }
+                
+            } catch (error) {
+                console.error('Error loading users tab:', error);
+                if (contentContainer) {
+                    contentContainer.innerHTML = `<div class="error">Error loading users: ${error.message}</div>`;
+                }
+            }
         }
 
         function displayImportExportTab(contentContainer) {
@@ -7112,29 +7491,62 @@
         
         window.toggleWorkerPinInModal = async function(workerId) {
             try {
-                console.log(`Toggling pin for worker in modal: ${workerId}`);
-                const pinned = await getPinnedWorkers();
-                const index = pinned.indexOf(workerId);
-                const worker = workers.find(w => w.id === workerId);
-                const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
+                console.log('Toggling worker pin in modal:', workerId);
                 
-                if (index > -1) {
-                    pinned.splice(index, 1);
-                    await updateWorkerPinStatus(workerId, false);
-                    showNotification(`📍 ${workerName} unpinned`, 'info');
-                    console.log(`Unpinned worker in modal: ${workerName}`);
-                } else {
-                    pinned.push(workerId);
-                    await updateWorkerPinStatus(workerId, true);
-                    showNotification(`📌 ${workerName} pinned to top`, 'success');
-                    console.log(`Pinned worker in modal: ${workerName}`);
+                // Show loading state for the specific pin button
+                const pinButton = document.querySelector(`button[onclick*="toggleWorkerPinInModal('${workerId}')"]`);
+                if (pinButton) {
+                    pinButton.innerHTML = '⏳';
+                    pinButton.disabled = true;
                 }
                 
-                await setPinnedWorkers(pinned);
-                switchTab('workers'); // Refresh the workers tab
+                // Get current pinned workers
+                const currentPinned = await getPinnedWorkers();
+                console.log('Current pinned workers:', currentPinned);
+                
+                // Check if worker is currently pinned
+                const isPinned = currentPinned.includes(workerId);
+                console.log(`Worker ${workerId} is currently pinned:`, isPinned);
+                
+                // Update pin status
+                let updatedPinned;
+                if (isPinned) {
+                    // Remove from pinned list
+                    updatedPinned = currentPinned.filter(id => id !== workerId);
+                    console.log('Unpinning worker, new list:', updatedPinned);
+                } else {
+                    // Add to pinned list
+                    updatedPinned = [...currentPinned, workerId];
+                    console.log('Pinning worker, new list:', updatedPinned);
+                }
+                
+                // Save the updated pinned list
+                await setPinnedWorkers(updatedPinned);
+                
+                // Update individual worker pin status
+                await updateWorkerPinStatus(workerId, !isPinned);
+                
+                // Show success notification
+                const workerName = workers.find(w => w.id === workerId)?.first_name || 'Worker';
+                showNotification(`📌 ${workerName} ${!isPinned ? 'pinned' : 'unpinned'} successfully!`, 'success');
+                
+                // Refresh the workers tab immediately to show the updated order
+                console.log('Refreshing workers tab...');
+                await switchTab('workers');
+                
             } catch (error) {
                 console.error('Error toggling worker pin in modal:', error);
                 showNotification('❌ Error updating pin status', 'error');
+                
+                // Restore button state on error
+                const pinButton = document.querySelector(`button[onclick*="toggleWorkerPinInModal('${workerId}')"]`);
+                if (pinButton) {
+                    pinButton.disabled = false;
+                    // Restore original icon based on current state
+                    const currentPinned = await getPinnedWorkers();
+                    const isPinned = currentPinned.includes(workerId);
+                    pinButton.innerHTML = isPinned ? '📌' : '📍';
+                }
             }
         }
         
