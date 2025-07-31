@@ -4478,6 +4478,8 @@
                 document.getElementById('announcementSubject').value = '';
                 document.getElementById('announcementMessage').value = '';
                 document.getElementById('announcementPriority').value = 'medium';
+                // Clear any edit ID to ensure this is treated as a new announcement
+                document.getElementById('announcementModal').removeAttribute('data-edit-id');
                 document.getElementById('announcementModal').style.display = 'block';
             };
         }
@@ -4502,22 +4504,41 @@
             }
             
             try {
-                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'announcements'), {
-                    subject,
-                    message,
-                    priority,
-                    createdBy: user.email,
-                    createdAt: new Date().toISOString(),
-                    isActive: true
-                });
+                // Check if this is an edit operation
+                const modal = document.getElementById('announcementModal');
+                const editId = modal.getAttribute('data-edit-id');
                 
-                showNotification('✅ Announcement created successfully!', 'success');
+                if (editId) {
+                    // Update existing announcement
+                    await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'announcements', editId), {
+                        subject,
+                        message,
+                        priority,
+                        updatedBy: user.email,
+                        updatedAt: new Date().toISOString()
+                    });
+                    
+                    showNotification('✅ Announcement updated successfully!', 'success');
+                } else {
+                    // Create new announcement
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'announcements'), {
+                        subject,
+                        message,
+                        priority,
+                        createdBy: user.email,
+                        createdAt: new Date().toISOString(),
+                        isActive: true
+                    });
+                    
+                    showNotification('✅ Announcement created successfully!', 'success');
+                }
+                
                 closeModal('announcementModal');
                 loadAnnouncements(); // Reload the announcements
                 
             } catch (error) {
-                console.error('Error creating announcement:', error);
-                showNotification('❌ Failed to create announcement', 'error');
+                console.error('Error saving announcement:', error);
+                showNotification('❌ Failed to save announcement', 'error');
             }
         };
 
@@ -7039,6 +7060,11 @@
             const modal = document.getElementById(modalId);
             if (modal) {
                 modal.style.display = 'none';
+                
+                // Special handling for announcement modal to clear edit state
+                if (modalId === 'announcementModal') {
+                    modal.removeAttribute('data-edit-id');
+                }
             }
         };
 
