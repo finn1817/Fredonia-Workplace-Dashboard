@@ -2190,36 +2190,183 @@
         };
 
         // Enhanced error handling
-        const showNotification = (message, type = 'info') => {
+        // Enhanced notification system with queue management
+        let notificationQueue = [];
+        let notificationContainer = null;
+        
+        const initNotificationContainer = () => {
+            if (!notificationContainer) {
+                notificationContainer = document.createElement('div');
+                notificationContainer.id = 'notificationContainer';
+                notificationContainer.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    z-index: 10000;
+                    pointer-events: none;
+                    max-width: 400px;
+                `;
+                document.body.appendChild(notificationContainer);
+            }
+        };
+        
+        const showNotification = (message, type = 'info', options = {}) => {
+            const {
+                duration = 5000,
+                replaceAll = false, // If true, removes all existing notifications
+                maxNotifications = 3 // Maximum notifications to show at once
+            } = options;
+            
+            initNotificationContainer();
+            
+            // If replaceAll is true, clear all existing notifications
+            if (replaceAll) {
+                notificationQueue.forEach(notif => {
+                    if (notif.element && notif.element.parentNode) {
+                        notif.element.remove();
+                    }
+                    if (notif.timeout) {
+                        clearTimeout(notif.timeout);
+                    }
+                });
+                notificationQueue = [];
+            }
+            
+            // Remove oldest notifications if we're at the limit
+            while (notificationQueue.length >= maxNotifications) {
+                const oldest = notificationQueue.shift();
+                if (oldest.element && oldest.element.parentNode) {
+                    oldest.element.remove();
+                }
+                if (oldest.timeout) {
+                    clearTimeout(oldest.timeout);
+                }
+            }
+            
             const notification = document.createElement('div');
             notification.className = `${type} notification`;
             notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 10000;
-                max-width: 400px;
+                position: relative;
+                margin-bottom: 10px;
                 padding: 1rem;
                 border-radius: 8px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                animation: slideIn 0.3s ease;
+                animation: slideInRight 0.3s ease;
+                pointer-events: auto;
+                transition: all 0.3s ease;
+                opacity: 1;
+                transform: translateX(0);
             `;
+            
+            // Set background color based on type
+            const colors = {
+                success: '#28a745',
+                error: '#dc3545',
+                warning: '#ffc107',
+                info: '#17a2b8'
+            };
+            notification.style.backgroundColor = colors[type] || colors.info;
+            notification.style.color = 'white';
+            
             notification.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>${message}</span>
-                    <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 1rem;">&times;</button>
+                    <span style="flex: 1; margin-right: 1rem;">${message}</span>
+                    <button onclick="removeNotification(this)" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: white; opacity: 0.8; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">&times;</button>
                 </div>
             `;
             
-            document.body.appendChild(notification);
+            notificationContainer.appendChild(notification);
             
-            // Auto remove after 5 seconds
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 5000);
+            // Create notification object to track
+            const notificationObj = {
+                element: notification,
+                timeout: null
+            };
+            
+            // Auto remove after specified duration
+            if (duration > 0) {
+                notificationObj.timeout = setTimeout(() => {
+                    removeNotificationFromQueue(notificationObj);
+                }, duration);
+            }
+            
+            notificationQueue.push(notificationObj);
+            
+            return notificationObj;
         };
+        
+        // Function to remove a specific notification
+        window.removeNotification = function(buttonElement) {
+            const notification = buttonElement.closest('.notification');
+            if (notification) {
+                const notificationObj = notificationQueue.find(n => n.element === notification);
+                if (notificationObj) {
+                    removeNotificationFromQueue(notificationObj);
+                }
+            }
+        };
+        
+        const removeNotificationFromQueue = (notificationObj) => {
+            if (notificationObj.element && notificationObj.element.parentNode) {
+                // Add slide out animation
+                notificationObj.element.style.transform = 'translateX(100%)';
+                notificationObj.element.style.opacity = '0';
+                
+                setTimeout(() => {
+                    if (notificationObj.element && notificationObj.element.parentNode) {
+                        notificationObj.element.remove();
+                    }
+                }, 300);
+            }
+            
+            if (notificationObj.timeout) {
+                clearTimeout(notificationObj.timeout);
+            }
+            
+            // Remove from queue
+            const index = notificationQueue.indexOf(notificationObj);
+            if (index > -1) {
+                notificationQueue.splice(index, 1);
+            }
+        };
+        
+        // Add CSS animation keyframes
+        if (!document.getElementById('notificationStyles')) {
+            const style = document.createElement('style');
+            style.id = 'notificationStyles';
+            style.textContent = `
+                @keyframes slideInRight {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                
+                .notification:hover {
+                    transform: scale(1.02);
+                }
+                
+                #notificationContainer .notification:not(:last-child) {
+                    margin-bottom: 10px;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Convenience functions for common notification types
+        const showSuccess = (message, options = {}) => showNotification(message, 'success', options);
+        const showError = (message, options = {}) => showNotification(message, 'error', options);
+        const showWarning = (message, options = {}) => showNotification(message, 'warning', options);
+        const showInfo = (message, options = {}) => showNotification(message, 'info', options);
+        
+        // Special notification types
+        const showCriticalError = (message) => showNotification(message, 'error', { duration: 10000, replaceAll: true });
+        const showQuickInfo = (message) => showNotification(message, 'info', { duration: 2000 });
+        const showPersistentWarning = (message) => showNotification(message, 'warning', { duration: 0 }); // 0 = doesn't auto-dismiss
 
         // Enhanced schedule validation
         const validateScheduleCoverage = (schedule, hoursOfOperation) => {
@@ -4218,13 +4365,13 @@
                 }
 
                 console.log(`Loaded ${workers.length} workers and operating hours for ${selectedWorkplace}`);
-                showNotification(`✅ Loaded ${workers.length} workers for ${selectedWorkplace}`, 'success');
+                showNotification(`✅ Loaded ${workers.length} workers for ${selectedWorkplace}`, 'success', { replaceAll: true });
                 
             } catch (error) {
                 console.error('Error loading workplace data:', error);
                 workers = [];
                 hours = {};
-                showNotification('❌ Error loading workplace data', 'error');
+                showNotification('❌ Error loading workplace data', 'error', { replaceAll: true });
                 throw error;
             }
         }
@@ -7979,7 +8126,7 @@
                 }
                 displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, false, coverageGaps);
                 hideAllForms();
-                showNotification('✅ Schedule generated successfully! Use "Schedule History" to set it as current for workers.', 'success');
+                showNotification('✅ Schedule generated successfully! Use "Schedule History" to set it as current for workers.', 'success', { duration: 8000, replaceAll: true });
             } catch (error) {
                 console.error('Error generating schedule:', error);
                 document.getElementById('scheduleDisplay').innerHTML = `<div class="error">❌ Error generating schedule: ${error.message}</div>`;
