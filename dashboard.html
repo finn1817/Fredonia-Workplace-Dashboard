@@ -4856,8 +4856,8 @@
                     html += '<div class="warning">No users found. Add your first user to get started!</div>';
                 } else {
                     // Sort users alphabetically with pinned ones at top
-                    const sortedUsers = sortUsers(combinedData);
-                    const pinnedUsersList = getPinnedUsers();
+                    const sortedUsers = await sortUsers(combinedData);
+                    const pinnedUsersList = await getPinnedUsers();
                     
                     html += `
                         <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
@@ -4967,10 +4967,10 @@
                             
                             <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1.5rem;">
                                 <button class="tab-btn" data-tab="workers" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                                    Workers (${workers.length}) - A-Z, Pinned First
+                                    Workers (${workers.length})
                                 </button>
                                 <button class="tab-btn active" data-tab="users" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; color: #667eea; font-weight: bold;">
-                                    Users (${totalUsers}) - A-Z, Pinned First
+                                    Users (${totalUsers})
                                 </button>
                                 <button class="tab-btn" data-tab="import" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
                                     Import/Export
@@ -5020,17 +5020,17 @@
             setTimeout(() => {
                 const tabButtons = document.querySelectorAll('.tab-btn');
                 tabButtons.forEach(button => {
-                    button.addEventListener('click', (e) => {
+                    button.addEventListener('click', async (e) => {
                         e.preventDefault();
                         const tabName = button.getAttribute('data-tab');
                         console.log('Tab clicked:', tabName);
-                        switchTab(tabName);
+                        await switchTab(tabName);
                     });
                 });
             }, 100);
         }
 
-        function switchTab(tabName) {
+        async function switchTab(tabName) {
             console.log('Switching to tab:', tabName);
             
             // Update tab button styles
@@ -5057,10 +5057,10 @@
             // Handle different tab content
             switch(tabName) {
                 case 'workers':
-                    displayWorkersTab(contentContainer);
+                    await displayWorkersTab(contentContainer);
                     break;
                 case 'users':
-                    displayUsersTab(contentContainer);
+                    await displayUsersTab(contentContainer);
                     break;
                 case 'import':
                     displayImportExportTab(contentContainer);
@@ -5071,16 +5071,16 @@
             }
         }
 
-        function displayWorkersTab(contentContainer) {
+        async function displayWorkersTab(contentContainer) {
             // Sort workers alphabetically with pinned ones at top
-            const sortedWorkers = sortWorkers(workers);
-            const pinnedList = getPinnedWorkers();
+            const sortedWorkers = await sortWorkers(workers);
+            const pinnedList = await getPinnedWorkers();
             
             // Show the original workers table but maintain tab structure
             let html = `
                 <div style="margin-bottom: 1rem;">
                     <button class="btn btn-success" onclick="showAddWorker()">➕ Add New Worker</button>
-                    <span style="margin-left: 1rem; color: #666;">Total: ${workers.length} workers (Sorted A-Z, Pinned First)</span>
+                    <span style="margin-left: 1rem; color: #666;">Total: ${workers.length} workers</span>
                 </div>
             `;
             
@@ -5139,10 +5139,10 @@
             }
         }
 
-        function displayUsersTab(contentContainer) {
+        async function displayUsersTab(contentContainer) {
             // Re-display the users tab content by calling the enhanced workers modal function
             // but only update the users section
-            displayEnhancedWorkersInModal();
+            await displayEnhancedWorkersInModal();
         }
 
         function displayImportExportTab(contentContainer) {
@@ -7042,17 +7042,35 @@
             });
         };
 
-        // Pin management functions
-        function getPinnedWorkers() {
-            return JSON.parse(localStorage.getItem(`pinnedWorkers_${selectedWorkplace}`) || '[]');
+        // Pin management functions - Database-backed
+        async function getPinnedWorkers() {
+            try {
+                const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
+                if (workplaceDoc.exists() && workplaceDoc.data().pinnedWorkers) {
+                    return workplaceDoc.data().pinnedWorkers;
+                }
+                return [];
+            } catch (error) {
+                console.error('Error loading pinned workers:', error);
+                return JSON.parse(localStorage.getItem(`pinnedWorkers_${selectedWorkplace}`) || '[]'); // Fallback
+            }
         }
         
-        function setPinnedWorkers(pinnedList) {
-            localStorage.setItem(`pinnedWorkers_${selectedWorkplace}`, JSON.stringify(pinnedList));
+        async function setPinnedWorkers(pinnedList) {
+            try {
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace), {
+                    pinnedWorkers: pinnedList,
+                    updatedAt: new Date().toISOString()
+                });
+                localStorage.setItem(`pinnedWorkers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Backup
+            } catch (error) {
+                console.error('Error saving pinned workers:', error);
+                localStorage.setItem(`pinnedWorkers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Fallback
+            }
         }
         
-        function toggleWorkerPin(workerId) {
-            const pinned = getPinnedWorkers();
+        async function toggleWorkerPin(workerId) {
+            const pinned = await getPinnedWorkers();
             const index = pinned.indexOf(workerId);
             const worker = workers.find(w => w.id === workerId);
             const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
@@ -7065,12 +7083,12 @@
                 showNotification(`📌 ${workerName} pinned to top`, 'success');
             }
             
-            setPinnedWorkers(pinned);
+            await setPinnedWorkers(pinned);
             viewWorkers(); // Refresh the view
         }
         
-        function toggleWorkerPinInModal(workerId) {
-            const pinned = getPinnedWorkers();
+        async function toggleWorkerPinInModal(workerId) {
+            const pinned = await getPinnedWorkers();
             const index = pinned.indexOf(workerId);
             const worker = workers.find(w => w.id === workerId);
             const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
@@ -7083,21 +7101,39 @@
                 showNotification(`📌 ${workerName} pinned to top`, 'success');
             }
             
-            setPinnedWorkers(pinned);
+            await setPinnedWorkers(pinned);
             switchTab('workers'); // Refresh the workers tab
         }
         
-        // User pin management functions
-        function getPinnedUsers() {
-            return JSON.parse(localStorage.getItem(`pinnedUsers_${selectedWorkplace}`) || '[]');
+        // User pin management functions - Database-backed
+        async function getPinnedUsers() {
+            try {
+                const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
+                if (workplaceDoc.exists() && workplaceDoc.data().pinnedUsers) {
+                    return workplaceDoc.data().pinnedUsers;
+                }
+                return [];
+            } catch (error) {
+                console.error('Error loading pinned users:', error);
+                return JSON.parse(localStorage.getItem(`pinnedUsers_${selectedWorkplace}`) || '[]'); // Fallback
+            }
         }
         
-        function setPinnedUsers(pinnedList) {
-            localStorage.setItem(`pinnedUsers_${selectedWorkplace}`, JSON.stringify(pinnedList));
+        async function setPinnedUsers(pinnedList) {
+            try {
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace), {
+                    pinnedUsers: pinnedList,
+                    updatedAt: new Date().toISOString()
+                });
+                localStorage.setItem(`pinnedUsers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Backup
+            } catch (error) {
+                console.error('Error saving pinned users:', error);
+                localStorage.setItem(`pinnedUsers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Fallback
+            }
         }
         
-        function toggleUserPin(userEmail) {
-            const pinned = getPinnedUsers();
+        async function toggleUserPin(userEmail) {
+            const pinned = await getPinnedUsers();
             const index = pinned.indexOf(userEmail);
             
             if (index > -1) {
@@ -7108,12 +7144,12 @@
                 showNotification(`📌 ${userEmail} pinned to top`, 'success');
             }
             
-            setPinnedUsers(pinned);
+            await setPinnedUsers(pinned);
             switchTab('users'); // Refresh the users tab
         }
         
-        function sortWorkers(workersList) {
-            const pinned = getPinnedWorkers();
+        async function sortWorkers(workersList) {
+            const pinned = await getPinnedWorkers();
             
             // Separate pinned and unpinned workers
             const pinnedWorkers = workersList.filter(w => pinned.includes(w.id));
@@ -7133,8 +7169,8 @@
             return [...pinnedWorkers, ...unpinnedWorkers];
         }
         
-        function sortUsers(usersList) {
-            const pinned = getPinnedUsers();
+        async function sortUsers(usersList) {
+            const pinned = await getPinnedUsers();
             
             // Separate pinned and unpinned users
             const pinnedUsers = usersList.filter(u => pinned.includes(u.email));
@@ -7157,7 +7193,7 @@
         }
 
         // Enhanced worker viewing
-        window.viewWorkers = function() {
+        window.viewWorkers = async function() {
             if (workers.length === 0) {
                 let html = `
                     <div class="schedule-display">
@@ -7180,8 +7216,8 @@
             }
 
             // Sort workers alphabetically with pinned ones at top
-            const sortedWorkers = sortWorkers(workers);
-            const pinnedList = getPinnedWorkers();
+            const sortedWorkers = await sortWorkers(workers);
+            const pinnedList = await getPinnedWorkers();
 
             const wsCount = workers.filter(w => w.work_study).length;
             const regularCount = workers.filter(w => !w.work_study).length;
@@ -7189,7 +7225,7 @@
 
             let html = `
                 <div class="schedule-display">
-                    <h3>👥 Workers for ${selectedWorkplace} <span style="font-size: 0.8em; color: #666;">(Sorted A-Z, Pinned First)</span></h3>
+                    <h3>👥 Workers for ${selectedWorkplace}</h3>
                     <div class="stats">
                         <div class="stat-card">
                             <div class="stat-number">${workers.length}</div>
