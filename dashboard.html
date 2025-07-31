@@ -4191,7 +4191,8 @@
                             email: data['Email'] || 'no-email',
                             work_study: data['Work Study'] === 'Yes',
                             availability,
-                            availability_text: data['Days & Times Available'] || ''
+                            availability_text: data['Days & Times Available'] || '',
+                            isPinned: data.isPinned || false
                         });
                     } catch (error) {
                         console.error('Error parsing worker data:', error);
@@ -5103,7 +5104,7 @@
                 `;
                 
                 sortedWorkers.forEach(worker => {
-                    const isPinned = pinnedList.includes(worker.id);
+                    const isPinned = pinnedList.includes(worker.id) || worker.isPinned;
                     const pinIcon = isPinned ? '📌' : '📍';
                     const pinTitle = isPinned ? 'Unpin worker' : 'Pin worker to top';
                     const rowClass = isPinned ? 'pinned-row' : '';
@@ -5112,7 +5113,7 @@
                     html += `
                         <tr class="${rowClass}">
                             <td style="text-align: center;">
-                                <button class="${pinButtonClass}" onclick="toggleWorkerPinInModal('${worker.id}')" 
+                                <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
                                         title="${pinTitle}" style="background: none; border: none; font-size: 1.2em; cursor: pointer;">
                                     ${pinIcon}
                                 </button>
@@ -7069,22 +7070,47 @@
             }
         }
         
-        async function toggleWorkerPin(workerId) {
-            const pinned = await getPinnedWorkers();
-            const index = pinned.indexOf(workerId);
-            const worker = workers.find(w => w.id === workerId);
-            const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
-            
-            if (index > -1) {
-                pinned.splice(index, 1);
-                showNotification(`📍 ${workerName} unpinned`, 'info');
-            } else {
-                pinned.push(workerId);
-                showNotification(`📌 ${workerName} pinned to top`, 'success');
+        async function updateWorkerPinStatus(workerId, isPinned) {
+            try {
+                console.log(`Updating worker ${workerId} pin status to: ${isPinned}`);
+                // Update the individual worker document with isPinned status
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId), {
+                    isPinned: isPinned,
+                    updatedAt: new Date().toISOString()
+                });
+                console.log(`Successfully updated worker ${workerId} pin status`);
+            } catch (error) {
+                console.error('Error updating worker pin status:', error);
+                throw error;
             }
-            
-            await setPinnedWorkers(pinned);
-            viewWorkers(); // Refresh the view
+        }
+        
+        async function toggleWorkerPin(workerId) {
+            try {
+                console.log(`Toggling pin for worker: ${workerId}`);
+                const pinned = await getPinnedWorkers();
+                const index = pinned.indexOf(workerId);
+                const worker = workers.find(w => w.id === workerId);
+                const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
+                
+                if (index > -1) {
+                    pinned.splice(index, 1);
+                    await updateWorkerPinStatus(workerId, false);
+                    showNotification(`📍 ${workerName} unpinned`, 'info');
+                    console.log(`Unpinned worker: ${workerName}`);
+                } else {
+                    pinned.push(workerId);
+                    await updateWorkerPinStatus(workerId, true);
+                    showNotification(`📌 ${workerName} pinned to top`, 'success');
+                    console.log(`Pinned worker: ${workerName}`);
+                }
+                
+                await setPinnedWorkers(pinned);
+                viewWorkers(); // Refresh the view
+            } catch (error) {
+                console.error('Error toggling worker pin:', error);
+                showNotification('❌ Error updating pin status', 'error');
+            }
         }
         
         async function toggleWorkerPinInModal(workerId) {
@@ -7095,9 +7121,11 @@
             
             if (index > -1) {
                 pinned.splice(index, 1);
+                await updateWorkerPinStatus(workerId, false);
                 showNotification(`📍 ${workerName} unpinned`, 'info');
             } else {
                 pinned.push(workerId);
+                await updateWorkerPinStatus(workerId, true);
                 showNotification(`📌 ${workerName} pinned to top`, 'success');
             }
             
@@ -7132,15 +7160,55 @@
             }
         }
         
+        async function updateUserPinStatus(userEmail, isPinned) {
+            try {
+                // Update user pin status in auth database
+                const authConfig = {
+                    apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                    authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                    projectId: "my-admin-dashboard-b9c89",
+                    storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                    messagingSenderId: "1001105953619",
+                    appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                    measurementId: "G-DGTX5YCKYF"
+                };
+
+                let authApp;
+                try {
+                    authApp = getApp('authApp');
+                } catch (error) {
+                    authApp = initializeApp(authConfig, 'authApp');
+                }
+                const authDb = getFirestore(authApp);
+                
+                // Find the user document by email
+                const usersRef = collection(authDb, 'users');
+                const q = query(usersRef, where('email', '==', userEmail));
+                const querySnapshot = await getDocs(q);
+                
+                if (!querySnapshot.empty) {
+                    const userDoc = querySnapshot.docs[0];
+                    await updateDoc(doc(authDb, 'users', userDoc.id), {
+                        isPinned: isPinned,
+                        updatedAt: new Date().toISOString()
+                    });
+                }
+            } catch (error) {
+                console.error('Error updating user pin status:', error);
+            }
+        }
+        
         async function toggleUserPin(userEmail) {
             const pinned = await getPinnedUsers();
             const index = pinned.indexOf(userEmail);
             
             if (index > -1) {
                 pinned.splice(index, 1);
+                await updateUserPinStatus(userEmail, false);
                 showNotification(`📍 ${userEmail} unpinned`, 'info');
             } else {
                 pinned.push(userEmail);
+                await updateUserPinStatus(userEmail, true);
                 showNotification(`📌 ${userEmail} pinned to top`, 'success');
             }
             
@@ -7152,8 +7220,9 @@
             const pinned = await getPinnedWorkers();
             
             // Separate pinned and unpinned workers
-            const pinnedWorkers = workersList.filter(w => pinned.includes(w.id));
-            const unpinnedWorkers = workersList.filter(w => !pinned.includes(w.id));
+            // Use both global pinned list and individual worker isPinned status
+            const pinnedWorkers = workersList.filter(w => pinned.includes(w.id) || w.isPinned);
+            const unpinnedWorkers = workersList.filter(w => !pinned.includes(w.id) && !w.isPinned);
             
             // Sort both groups alphabetically by first name, then last name
             const sortAlphabetically = (a, b) => {
@@ -7191,6 +7260,21 @@
             // Return pinned users first, then unpinned
             return [...pinnedUsers, ...unpinnedUsers];
         }
+
+        // Test function to verify pinning functionality
+        window.testPinning = async function() {
+            console.log('Testing pinning functionality...');
+            console.log('Current workers:', workers);
+            console.log('Selected workplace:', selectedWorkplace);
+            
+            if (workers.length > 0) {
+                const firstWorker = workers[0];
+                console.log('Testing pin toggle for worker:', firstWorker);
+                await toggleWorkerPin(firstWorker.id);
+            } else {
+                console.log('No workers available for testing');
+            }
+        };
 
         // Enhanced worker viewing
         window.viewWorkers = async function() {
