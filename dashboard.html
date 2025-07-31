@@ -8777,6 +8777,13 @@
           document.getElementById('importWorkersModalBody').innerHTML = `
             <div style='margin-bottom:1rem;'>
               <strong>Select an Excel file (.xlsx) with columns: First Name, Last Name, Email, Work Study, Days & Time Available.</strong>
+              <br><br>
+              <strong>Work Study Column Format:</strong>
+              <ul style='margin: 0.5rem 0; padding-left: 1.5rem;'>
+                <li>Use "Y", "YES", "TRUE", "1", or "Work Study" to mark work study students</li>
+                <li>Any other value (including blank) will mark as non-work study</li>
+                <li>Column can be named: "Work Study", "WorkStudy", "Work_Study", etc.</li>
+              </ul>
             </div>
             <input type='file' id='importWorkersFile' accept='.xlsx,.xls,.csv'>
             <div id='importWorkersProgress' style='margin-top:1rem;'></div>
@@ -8811,6 +8818,14 @@
                 return;
               }
               document.getElementById('importWorkersProgress').innerHTML = '🔄 Checking for duplicates...';
+              
+              // Log column detection for debugging
+              if (workStudyColumnName) {
+                console.log(`✅ Found Work Study column: "${workStudyColumnName}"`);
+              } else {
+                console.warn(`⚠️ No Work Study column found. Available columns: ${Object.keys(rows[0] || {}).join(', ')}`);
+              }
+              
               // Get existing worker emails
               const existingSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
               const existingEmails = new Set();
@@ -8825,23 +8840,81 @@
               // Prepare new workers
               const newWorkers = [];
               const skipped = [];
+              
+              // Enhanced column name detection for Work Study
+              const workStudyColumnNames = ['Work Study', 'WorkStudy', 'Work_Study', 'Work-Study', 'Work Study Status', 'Work Study Student'];
+              let workStudyColumnName = null;
+              
+              // Find the Work Study column by checking all possible variations
+              for (const columnName of workStudyColumnNames) {
+                if (rows[0] && rows[0][columnName] !== undefined) {
+                  workStudyColumnName = columnName;
+                  break;
+                }
+              }
+              
+              // If no exact match found, try partial matching
+              if (!workStudyColumnName && rows[0]) {
+                const columnKeys = Object.keys(rows[0]);
+                for (const key of columnKeys) {
+                  if (key.toLowerCase().includes('work') && key.toLowerCase().includes('study')) {
+                    workStudyColumnName = key;
+                    break;
+                  }
+                }
+              }
+              
               for (const row of rows) {
-                const email = (row['Email'] || '').toLowerCase();
-                if (!email || existingEmails.has(email)) {
-                  skipped.push(email);
+                const emailLower = (row['Email'] || '').toLowerCase();
+                if (!emailLower || existingEmails.has(emailLower)) {
+                  skipped.push(emailLower);
                   continue;
                 }
+                
+                // Enhanced Work Study detection - handle various Excel formats
+                const workStudyValue = workStudyColumnName ? (row[workStudyColumnName] || '').toString().trim() : '';
+                let isWorkStudy = false;
+                
+                // Check for various positive values
+                const positiveValues = ['Y', 'YES', 'TRUE', '1', 'WORK STUDY', 'WORKSTUDY'];
+                const normalizedValue = workStudyValue.toUpperCase();
+                isWorkStudy = positiveValues.some(val => normalizedValue === val);
+                
+                // Also check if the value contains "work study" (case insensitive)
+                if (!isWorkStudy && workStudyValue.toLowerCase().includes('work study')) {
+                  isWorkStudy = true;
+                }
+                
+                // Validate required fields
+                const firstName = (row['First Name'] || '').trim();
+                const lastName = (row['Last Name'] || '').trim();
+                const email = (row['Email'] || '').trim();
+                
+                if (!firstName || !lastName || !email) {
+                  console.warn(`⚠️ Skipping row with missing required fields: First Name="${firstName}", Last Name="${lastName}", Email="${email}"`);
+                  continue;
+                }
+                
                 newWorkers.push({
-                  'First Name': row['First Name'] || '',
-                  'Last Name': row['Last Name'] || '',
-                  'Email': row['Email'] || '',
-                  'Work Study': (row['Work Study'] || '').toUpperCase() === 'Y' ? 'Yes' : 'No',
+                  'First Name': firstName,
+                  'Last Name': lastName,
+                  'Email': email,
+                  'Work Study': isWorkStudy ? 'Yes' : 'No',
                   'Days & Times Available': row['Days & Time Available'] || '',
                   created_at: new Date().toISOString(),
                   created_by: user.email
                 });
               }
-              document.getElementById('importWorkersProgress').innerHTML = `Found ${newWorkers.length} new workers, ${skipped.length} duplicates.`;
+              let progressMessage = `Found ${newWorkers.length} new workers, ${skipped.length} duplicates.`;
+              
+              // Add Work Study column detection info
+              if (workStudyColumnName) {
+                progressMessage += `<br>✅ Work Study column detected: "${workStudyColumnName}"`;
+              } else {
+                progressMessage += `<br>⚠️ No Work Study column found - all workers will be marked as non-Work Study`;
+              }
+              
+              document.getElementById('importWorkersProgress').innerHTML = progressMessage;
               if (newWorkers.length === 0) {
                 document.getElementById('importWorkersProgress').innerHTML += '<br>Nothing to import.';
                 return;
@@ -9242,7 +9315,7 @@
             listDiv.innerHTML = '<div class="loading">Loading your email change requests...</div>';
             
             try {
-                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
                 const { getFirestore, collection, query, where, orderBy, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
                 
                 const authConfig = {
@@ -9255,24 +9328,58 @@
                     measurementId: "G-DGTX5YCKYF"
                 };
                 
-                const authApp = initializeApp(authConfig, 'authApp');
+                // Use existing app if available, otherwise create new one
+                let authApp;
+                try {
+                    authApp = getApp('authApp');
+                } catch {
+                    authApp = initializeApp(authConfig, 'authApp');
+                }
                 const authDb = getFirestore(authApp);
                 
-                const requestsQuery = query(
-                    collection(authDb, 'emailChangeRequests'),
-                    where('userId', '==', user.uid),
-                    orderBy('createdAt', 'desc')
-                );
-                const snapshot = await getDocs(requestsQuery);
+                console.log('Loading email change requests for user:', user.uid);
+                
+                // First try with orderBy, if that fails, try without orderBy
+                let snapshot;
+                try {
+                    const requestsQuery = query(
+                        collection(authDb, 'emailChangeRequests'),
+                        where('userId', '==', user.uid),
+                        orderBy('createdAt', 'desc')
+                    );
+                    snapshot = await getDocs(requestsQuery);
+                } catch (indexError) {
+                    console.warn('Index not available for orderBy, trying without orderBy:', indexError);
+                    // Fallback: query without orderBy if index doesn't exist
+                    const requestsQuery = query(
+                        collection(authDb, 'emailChangeRequests'),
+                        where('userId', '==', user.uid)
+                    );
+                    snapshot = await getDocs(requestsQuery);
+                }
+                
+                console.log('Found email change requests:', snapshot.size);
                 
                 if (snapshot.empty) {
                     listDiv.innerHTML = '<div class="info">No email change requests found.</div>';
                     return;
                 }
                 
-                let html = '';
+                // Convert to array and sort manually if needed
+                const requests = [];
                 snapshot.forEach(doc => {
-                    const data = doc.data();
+                    requests.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Sort manually by createdAt if we couldn't use orderBy
+                requests.sort((a, b) => {
+                    const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+                    const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+                    return dateB - dateA; // desc order
+                });
+                
+                let html = '';
+                requests.forEach(data => {
                     const statusClass = data.status;
                     const statusBadgeClass = data.status;
                     
@@ -9285,7 +9392,7 @@
                                 </span>
                             </div>
                             <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">
-                                Requested: ${new Date(data.createdAt).toLocaleDateString()}
+                                Requested: ${data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Unknown date'}
                             </div>
                             ${data.reason ? `<div style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>Reason:</strong> ${data.reason}</div>` : ''}
                             ${data.status !== 'pending' ? `
@@ -9302,7 +9409,7 @@
                 
             } catch (error) {
                 console.error('Error loading email change requests:', error);
-                listDiv.innerHTML = '<div class="error">Failed to load email change requests.</div>';
+                listDiv.innerHTML = `<div class="error">Failed to load email change requests: ${error.message}</div>`;
             }
         }
 
