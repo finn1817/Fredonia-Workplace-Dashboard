@@ -4929,7 +4929,7 @@
                                 </td>
                                 <td style="padding: 1rem; text-align: center;">
                                     <button class="${pinButtonClass}" onclick="toggleUserPin('${data.email}')" 
-                                            title="${pinTitle}" style="background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                                            title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                         ${pinIcon}
                                     </button>
                                 </td>
@@ -7049,7 +7049,7 @@
         };
 
         // Pin management functions - Database-backed
-        async function getPinnedWorkers() {
+        window.getPinnedWorkers = async function() {
             try {
                 console.log('Getting pinned workers for workplace:', selectedWorkplace);
                 const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
@@ -7065,7 +7065,7 @@
             }
         }
         
-        async function setPinnedWorkers(pinnedList) {
+        window.setPinnedWorkers = async function(pinnedList) {
             try {
                 console.log('Saving pinned workers to database:', pinnedList);
                 await updateDoc(doc(db, 'workplaces', selectedWorkplace), {
@@ -7080,7 +7080,7 @@
             }
         }
         
-        async function updateWorkerPinStatus(workerId, isPinned) {
+        window.updateWorkerPinStatus = async function(workerId, isPinned) {
             try {
                 console.log(`Updating worker ${workerId} pin status to: ${isPinned}`);
                 // Update the individual worker document with isPinned status
@@ -7095,7 +7095,7 @@
             }
         }
         
-        async function toggleWorkerPin(workerId) {
+        window.toggleWorkerPin = async function(workerId) {
             try {
                 console.log(`Toggling pin for worker: ${workerId}`);
                 const pinned = await getPinnedWorkers();
@@ -7123,33 +7123,44 @@
             }
         }
         
-        async function toggleWorkerPinInModal(workerId) {
-            const pinned = await getPinnedWorkers();
-            const index = pinned.indexOf(workerId);
-            const worker = workers.find(w => w.id === workerId);
-            const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
-            
-            if (index > -1) {
-                pinned.splice(index, 1);
-                await updateWorkerPinStatus(workerId, false);
-                showNotification(`📍 ${workerName} unpinned`, 'info');
-            } else {
-                pinned.push(workerId);
-                await updateWorkerPinStatus(workerId, true);
-                showNotification(`📌 ${workerName} pinned to top`, 'success');
+        window.toggleWorkerPinInModal = async function(workerId) {
+            try {
+                console.log(`Toggling pin for worker in modal: ${workerId}`);
+                const pinned = await getPinnedWorkers();
+                const index = pinned.indexOf(workerId);
+                const worker = workers.find(w => w.id === workerId);
+                const workerName = worker ? `${worker.first_name} ${worker.last_name}` : 'Worker';
+                
+                if (index > -1) {
+                    pinned.splice(index, 1);
+                    await updateWorkerPinStatus(workerId, false);
+                    showNotification(`📍 ${workerName} unpinned`, 'info');
+                    console.log(`Unpinned worker in modal: ${workerName}`);
+                } else {
+                    pinned.push(workerId);
+                    await updateWorkerPinStatus(workerId, true);
+                    showNotification(`📌 ${workerName} pinned to top`, 'success');
+                    console.log(`Pinned worker in modal: ${workerName}`);
+                }
+                
+                await setPinnedWorkers(pinned);
+                switchTab('workers'); // Refresh the workers tab
+            } catch (error) {
+                console.error('Error toggling worker pin in modal:', error);
+                showNotification('❌ Error updating pin status', 'error');
             }
-            
-            await setPinnedWorkers(pinned);
-            switchTab('workers'); // Refresh the workers tab
         }
         
         // User pin management functions - Database-backed
-        async function getPinnedUsers() {
+        window.getPinnedUsers = async function() {
             try {
+                console.log('Getting pinned users for workplace:', selectedWorkplace);
                 const workplaceDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace));
                 if (workplaceDoc.exists() && workplaceDoc.data().pinnedUsers) {
+                    console.log('Found pinned users:', workplaceDoc.data().pinnedUsers);
                     return workplaceDoc.data().pinnedUsers;
                 }
+                console.log('No pinned users found in database');
                 return [];
             } catch (error) {
                 console.error('Error loading pinned users:', error);
@@ -7157,21 +7168,24 @@
             }
         }
         
-        async function setPinnedUsers(pinnedList) {
+        window.setPinnedUsers = async function(pinnedList) {
             try {
+                console.log('Saving pinned users to database:', pinnedList);
                 await updateDoc(doc(db, 'workplaces', selectedWorkplace), {
                     pinnedUsers: pinnedList,
                     updatedAt: new Date().toISOString()
                 });
                 localStorage.setItem(`pinnedUsers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Backup
+                console.log('Successfully saved pinned users to database');
             } catch (error) {
                 console.error('Error saving pinned users:', error);
                 localStorage.setItem(`pinnedUsers_${selectedWorkplace}`, JSON.stringify(pinnedList)); // Fallback
             }
         }
         
-        async function updateUserPinStatus(userEmail, isPinned) {
+        window.updateUserPinStatus = async function(userEmail, isPinned) {
             try {
+                console.log(`Updating user ${userEmail} pin status to: ${isPinned}`);
                 // Update user pin status in auth database
                 const authConfig = {
                     apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
@@ -7202,31 +7216,43 @@
                         isPinned: isPinned,
                         updatedAt: new Date().toISOString()
                     });
+                    console.log(`Successfully updated user ${userEmail} pin status`);
+                } else {
+                    console.log(`User ${userEmail} not found in auth database`);
                 }
             } catch (error) {
                 console.error('Error updating user pin status:', error);
+                throw error;
             }
         }
         
-        async function toggleUserPin(userEmail) {
-            const pinned = await getPinnedUsers();
-            const index = pinned.indexOf(userEmail);
-            
-            if (index > -1) {
-                pinned.splice(index, 1);
-                await updateUserPinStatus(userEmail, false);
-                showNotification(`📍 ${userEmail} unpinned`, 'info');
-            } else {
-                pinned.push(userEmail);
-                await updateUserPinStatus(userEmail, true);
-                showNotification(`📌 ${userEmail} pinned to top`, 'success');
+        window.toggleUserPin = async function(userEmail) {
+            try {
+                console.log(`Toggling pin for user: ${userEmail}`);
+                const pinned = await getPinnedUsers();
+                const index = pinned.indexOf(userEmail);
+                
+                if (index > -1) {
+                    pinned.splice(index, 1);
+                    await updateUserPinStatus(userEmail, false);
+                    showNotification(`📍 ${userEmail} unpinned`, 'info');
+                    console.log(`Unpinned user: ${userEmail}`);
+                } else {
+                    pinned.push(userEmail);
+                    await updateUserPinStatus(userEmail, true);
+                    showNotification(`📌 ${userEmail} pinned to top`, 'success');
+                    console.log(`Pinned user: ${userEmail}`);
+                }
+                
+                await setPinnedUsers(pinned);
+                switchTab('users'); // Refresh the users tab
+            } catch (error) {
+                console.error('Error toggling user pin:', error);
+                showNotification('❌ Error updating user pin status', 'error');
             }
-            
-            await setPinnedUsers(pinned);
-            switchTab('users'); // Refresh the users tab
         }
         
-        async function sortWorkers(workersList) {
+        window.sortWorkers = async function(workersList) {
             const pinned = await getPinnedWorkers();
             
             // Separate pinned and unpinned workers
@@ -7248,7 +7274,7 @@
             return [...pinnedWorkers, ...unpinnedWorkers];
         }
         
-        async function sortUsers(usersList) {
+        window.sortUsers = async function(usersList) {
             const pinned = await getPinnedUsers();
             
             // Separate pinned and unpinned users
