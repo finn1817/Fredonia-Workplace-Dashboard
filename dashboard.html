@@ -1328,12 +1328,12 @@
                 <h2 class="section-title">Schedule Management</h2>
                 
                 <div class="action-buttons">
-                    <button class="btn btn-primary" onclick="showGenerateForm()" id="generateBtn" style="display:none;">📅 Generate New Schedule</button>
-                    <button class="btn btn-success" onclick="viewCurrentSchedule()">👁️ View Current Schedule</button>
-                    <button class="btn btn-info" onclick="viewHistory()" id="historyBtn" style="display:none;">📚 Schedule History</button>
-                    <button class="btn btn-warning" onclick="checkAvailability()" id="checkAvailabilityBtn" style="display:none;">🔍 Check Availability</button>
-                    <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
-                    <button class="btn btn-secondary" onclick="showCoverDashboard()" id="coverDashboardBtn">🔄 Cover Dashboard</button>
+                    <button class="btn btn-primary" onclick="handleTabClick(() => showGenerateForm(), 'generate')" id="generateBtn" style="display:none;">📅 Generate New Schedule</button>
+                    <button class="btn btn-success" onclick="handleTabClick(() => viewCurrentSchedule(), 'current')">👁️ View Current Schedule</button>
+                    <button class="btn btn-info" onclick="handleTabClick(() => viewHistory(), 'history')" id="historyBtn" style="display:none;">📚 Schedule History</button>
+                    <button class="btn btn-warning" onclick="handleTabClick(() => checkAvailability(), 'availability')" id="checkAvailabilityBtn" style="display:none;">🔍 Check Availability</button>
+                    <button class="btn btn-info" onclick="handleTabClick(() => showWhosWorkingNow(), 'whoworking')" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
+                    <button class="btn btn-secondary" onclick="handleTabClick(() => showCoverDashboard(), 'cover')" id="coverDashboardBtn">🔄 Cover Dashboard</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
@@ -2062,6 +2062,36 @@
             document.getElementById('generateBtn').style.display = 'none';
             document.getElementById('historyBtn').style.display = 'none';
             document.getElementById('checkAvailabilityBtn').style.display = 'none';
+        }
+
+        // Tab management system for double-click closing
+        let lastClickedTab = null;
+        let lastClickTime = 0;
+        let currentActiveTab = null;
+        const DOUBLE_CLICK_THRESHOLD = 500; // 500ms window for double click
+
+        function handleTabClick(tabFunction, tabName) {
+            const now = Date.now();
+            const timeDiff = now - lastClickTime;
+            
+            // Check if this is a double click on the same tab
+            if (lastClickedTab === tabName && timeDiff < DOUBLE_CLICK_THRESHOLD && currentActiveTab === tabName) {
+                // Show confirmation dialog for closing
+                if (confirm('Are you sure you want to close this tab?\n\nMake sure everything you want saved has been saved!')) {
+                    hideAllForms();
+                    currentActiveTab = null;
+                    showNotification('📋 Tab closed', 'info');
+                }
+                lastClickedTab = null;
+                lastClickTime = 0;
+                return;
+            }
+            
+            // Normal single click - open/switch to tab
+            lastClickedTab = tabName;
+            lastClickTime = now;
+            currentActiveTab = tabName;
+            tabFunction();
         }
 
         // Firebase setup
@@ -7663,15 +7693,18 @@
                 return;
             }
             hideAllForms();
+            currentActiveTab = 'generate';
             document.getElementById('generateForm').style.display = 'block';
         };
 
         window.checkAvailability = function() {
             hideAllForms();
+            currentActiveTab = 'availability';
             document.getElementById('availabilityForm').style.display = 'block';
         };
 
         window.hideAllForms = function() {
+            currentActiveTab = null;
             document.querySelectorAll('#scheduleContent .form-section').forEach(form => {
                 form.style.display = 'none';
             });
@@ -8774,6 +8807,8 @@
         // Enhanced current schedule viewing
         window.viewCurrentSchedule = async function() {
             try {
+                hideAllForms();
+                currentActiveTab = 'current';
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading current schedule...</div>';
                 
                 // First try to find a schedule marked as current
@@ -8914,6 +8949,8 @@
         // Enhanced history viewing
         window.viewHistory = async function() {
             try {
+                hideAllForms();
+                currentActiveTab = 'history';
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading schedule history...</div>';
                 
                 const snapshot = await getDocs(query(
@@ -9976,6 +10013,7 @@
         // Cover Dashboard System
         window.showCoverDashboard = async function() {
             hideAllForms();
+            currentActiveTab = 'cover';
             document.getElementById('coverDashboard').style.display = 'block';
             
             if (!selectedWorkplace) {
@@ -10033,13 +10071,23 @@
                     query(
                         collection(db, 'shift_coverage'),
                         where('workplace', '==', selectedWorkplace),
-                        where('autoRestoreAt', '>', new Date().toISOString())
+                        where('status', '==', 'active')
                     )
                 );
                 
                 const coverage = [];
+                const now = new Date();
+                
                 coverageSnapshot.forEach(doc => {
-                    coverage.push({ id: doc.id, ...doc.data() });
+                    const data = doc.data();
+                    // Include all active coverage, mark if it's future coverage
+                    const shiftDateTime = new Date(data.day + 'T' + data.start);
+                    coverage.push({ 
+                        id: doc.id, 
+                        ...data,
+                        isFuture: shiftDateTime > now,
+                        isActive: shiftDateTime <= now && new Date(data.autoRestoreAt) > now
+                    });
                 });
                 
                 return coverage;
@@ -10099,7 +10147,7 @@
 
                 <!-- Active Coverage -->
                 <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <h4 style="margin: 0 0 1rem 0; color: #333;">🔄 Active Coverage</h4>
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">🔄 Active & Scheduled Coverage</h4>
                     ${activeCoverage.length > 0 ? `
                         <div style="overflow-x: auto;">
                             <table style="width: 100%; border-collapse: collapse;">
@@ -10109,6 +10157,7 @@
                                         <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Time</th>
                                         <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Cover Worker</th>
                                         <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Type</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Status</th>
                                         <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Auto-Restore</th>
                                         ${user.isAdmin ? '<th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Actions</th>' : ''}
                                     </tr>
@@ -10124,6 +10173,11 @@
                                                     ${coverage.coverageType === 'replace' ? '🔄 Replace' : '➕ Add'}
                                                 </span>
                                             </td>
+                                            <td style="padding: 0.75rem;">
+                                                <span style="background: ${coverage.isFuture ? '#e2f0ff' : '#d4edda'}; color: ${coverage.isFuture ? '#004085' : '#155724'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                                                    ${coverage.isFuture ? '⏳ Scheduled' : '✅ Active'}
+                                                </span>
+                                            </td>
                                             <td style="padding: 0.75rem;">${new Date(coverage.autoRestoreAt).toLocaleString()}</td>
                                             ${user.isAdmin ? `<td style="padding: 0.75rem;">
                                                 <button class="btn btn-sm btn-danger" onclick="cancelCoverage('${coverage.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
@@ -10136,7 +10190,7 @@
                             </table>
                         </div>
                     ` : `
-                        <p style="color: #666; font-style: italic;">No active coverage at this time.</p>
+                        <p style="color: #666; font-style: italic;">No coverage scheduled at this time.</p>
                     `}
                 </div>
 
@@ -10597,6 +10651,8 @@
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
+            hideAllForms();
+            currentActiveTab = 'whoworking';
             if (!schedule || Object.keys(schedule).length === 0) {
                 showNotification('❌ No current schedule found for this workplace.', 'error');
                 return;
