@@ -4868,10 +4868,7 @@
                             <table style="width: 100%; border-collapse: collapse;">
                                 <thead>
                                     <tr style="background: #f8f9fa;">
-                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">
-                                            <input type="checkbox" id="selectAllUsers" style="margin-right: 0.5rem;">
-                                        </th>
-                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">📌 Pin</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Role</th>
@@ -4879,7 +4876,7 @@
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">In Scheduler</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Phone</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Last Login</th>
-                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Actions</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 200px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -4924,9 +4921,6 @@
 
                         html += `
                             <tr class="${rowClass}" style="border-bottom: 1px solid #dee2e6; ${isSuspended ? 'opacity: 0.7;' : ''}">
-                                <td style="padding: 1rem;">
-                                    <input type="checkbox" class="user-checkbox" data-email="${data.email}">
-                                </td>
                                 <td style="padding: 1rem; text-align: center;">
                                     <button class="${pinButtonClass}" onclick="toggleUserPin('${data.email}')" 
                                             title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
@@ -4944,11 +4938,11 @@
                                 <td style="padding: 1rem;">${phone}</td>
                                 <td style="padding: 1rem;">${lastLogin}</td>
                                 <td style="padding: 1rem;">
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <button class="btn btn-info" onclick="viewUser('${data.email}')" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">👁️ View</button>
-                                        <button class="btn btn-warning" onclick="editUser('${data.email}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">✏️ Edit</button>
-                                        <button class="btn ${suspendButtonClass}" onclick="suspendUser('${data.email}')" style="background: ${isSuspended ? '#28a745' : '#6c757d'}; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;" ${suspendButtonDisabled}>${suspendButtonText}</button>
-                                        <button class="btn btn-danger" onclick="deleteUser('${data.email}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">🗑️ Delete</button>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                                        <button class="btn btn-info" onclick="viewUser('${data.email}')" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">👁️ View</button>
+                                        <button class="btn btn-warning" onclick="editUser('${data.email}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
+                                        <button class="btn ${suspendButtonClass}" onclick="suspendUser('${data.email}')" style="background: ${isSuspended ? '#28a745' : '#6c757d'}; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;" ${suspendButtonDisabled}>${suspendButtonText}</button>
+                                        <button class="btn btn-danger" onclick="deleteUser('${data.email}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Delete</button>
                                     </div>
                                 </td>
                             </tr>
@@ -5016,9 +5010,7 @@
             if (statusFilter) {
                 statusFilter.addEventListener('change', filterUsers);
             }
-            if (selectAllCheckbox) {
-                selectAllCheckbox.addEventListener('change', toggleSelectAllUsers);
-            }
+            // Removed checkbox functionality since checkboxes are no longer used
 
             // Add tab switching functionality with proper event delegation
             setTimeout(() => {
@@ -5094,15 +5086,15 @@
                 html += '<div class="warning">No workers found. Add your first worker to get started!</div>';
             } else {
                 html += `
-                    <table class="worker-table">
+                    <table class="worker-table" style="width: 100%; border-collapse: collapse;">
                         <thead>
-                            <tr>
-                                <th>📌 Pin</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Work Study</th>
-                                <th>Availability</th>
-                                <th>Actions</th>
+                            <tr style="background: #f8f9fa;">
+                                <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Work Study</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Availability</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 150px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -5116,21 +5108,23 @@
                     const pinButtonClass = isPinned ? 'pin-button pinned' : 'pin-button unpinned';
                     
                     html += `
-                        <tr class="${rowClass}">
-                            <td style="text-align: center;">
+                        <tr class="${rowClass}" style="border-bottom: 1px solid #dee2e6;">
+                            <td style="padding: 1rem; text-align: center;">
                                 <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
                                         title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                     ${pinIcon}
                                 </button>
                             </td>
-                            <td><strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}</td>
-                            <td>${worker.email}</td>
-                            <td>${worker.work_study ? '✅ Yes' : '❌ No'}</td>
-                            <td><small>${worker.availability_text || 'No availability set'}</small></td>
-                            <td>
-                                <div class="worker-actions">
-                                    <button class="btn btn-warning" onclick="editWorker('${worker.id}')">✏️ Edit</button>
-                                    <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')">🗑️ Delete</button>
+                            <td style="padding: 1rem; font-weight: 600;">
+                                <strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}
+                            </td>
+                            <td style="padding: 1rem;">${worker.email}</td>
+                            <td style="padding: 1rem;">${worker.work_study ? '✅ Yes' : '❌ No'}</td>
+                            <td style="padding: 1rem;"><small>${worker.availability_text || 'No availability set'}</small></td>
+                            <td style="padding: 1rem;">
+                                <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                                    <button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
+                                    <button class="btn btn-danger" onclick="deleteWorker('${worker.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Delete</button>
                                 </div>
                             </td>
                         </tr>
@@ -5386,14 +5380,7 @@
             });
         }
 
-        function toggleSelectAllUsers() {
-            const selectAllCheckbox = document.getElementById('selectAllUsers');
-            const userCheckboxes = document.querySelectorAll('.user-checkbox');
-            
-            userCheckboxes.forEach(checkbox => {
-                checkbox.checked = selectAllCheckbox.checked;
-            });
-        }
+        // Removed toggleSelectAllUsers function since checkboxes are no longer used
 
         // Enhanced user management functions
         window.viewUser = async function(email) {
@@ -7401,15 +7388,15 @@
             }
 
             html += `
-                <table class="worker-table">
+                <table class="worker-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr>
-                            <th>📌 Pin</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Work Study</th>
-                            <th>Availability Status</th>
-                            <th>Actions</th>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Work Study</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Availability Status</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 150px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -7427,21 +7414,25 @@
                     '<span style="color: #dc3545;">❌ Missing</span>';
                     
                 html += `
-                    <tr class="${rowClass}">
-                                                    <td style="text-align: center;">
-                                <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
-                                        title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-                                    ${pinIcon}
-                                </button>
-                            </td>
-                        <td><strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}</td>
-                        <td>${worker.email}</td>
-                        <td>${worker.work_study ? '<span style="color: #28a745;">✅ Yes</span>' : '❌ No'}</td>
-                        <td>${availabilityStatus}</td>
-                        <td>
-                            <button class="btn btn-primary" onclick="contactWorker('${worker.email}')">📧 Contact</button>
-                            ${user.isAdmin ? `<button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="margin-left: 0.5rem;">✏️ Edit</button>
-                            <button class="btn btn-danger" onclick="removeWorker('${worker.id}')" style="margin-left: 0.5rem;">🗑️ Remove</button>` : ''}
+                    <tr class="${rowClass}" style="border-bottom: 1px solid #dee2e6;">
+                        <td style="padding: 1rem; text-align: center;">
+                            <button class="${pinButtonClass}" onclick="toggleWorkerPin('${worker.id}')" 
+                                    title="${pinTitle}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 50%; width: 30px; height: 30px; font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                ${pinIcon}
+                            </button>
+                        </td>
+                        <td style="padding: 1rem; font-weight: 600;">
+                            <strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}
+                        </td>
+                        <td style="padding: 1rem;">${worker.email}</td>
+                        <td style="padding: 1rem;">${worker.work_study ? '<span style="color: #28a745;">✅ Yes</span>' : '❌ No'}</td>
+                        <td style="padding: 1rem;">${availabilityStatus}</td>
+                        <td style="padding: 1rem;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                                <button class="btn btn-primary" onclick="contactWorker('${worker.email}')" style="background: #007bff; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">📧 Contact</button>
+                                ${user.isAdmin ? `<button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
+                                <button class="btn btn-danger" onclick="removeWorker('${worker.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Remove</button>` : ''}
+                            </div>
                         </td>
                     </tr>
                 `;
