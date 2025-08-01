@@ -5438,13 +5438,21 @@
             const pinnedUsers = usersList.filter(u => pinned.includes(u.email));
             const unpinnedUsers = usersList.filter(u => !pinned.includes(u.email));
             
-            // Sort both groups alphabetically by name
+            // Sort both groups alphabetically by last name
             const sortAlphabetically = (a, b) => {
-                const nameA = (a.authUser ? `${a.authUser.firstName} ${a.authUser.lastName}` : 
-                             (a.workplaceWorker ? `${a.workplaceWorker.first_name} ${a.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
-                const nameB = (b.authUser ? `${b.authUser.firstName} ${b.authUser.lastName}` : 
-                             (b.workplaceWorker ? `${b.workplaceWorker.first_name} ${b.workplaceWorker.last_name}` : 'Unknown')).toLowerCase();
-                return nameA.localeCompare(nameB);
+                const getLastName = (user) => {
+                    if (user.authUser) {
+                        return user.authUser.lastName ? user.authUser.lastName.toLowerCase() : 'unknown';
+                    } else if (user.workplaceWorker) {
+                        return user.workplaceWorker.last_name ? user.workplaceWorker.last_name.toLowerCase() : 'unknown';
+                    } else {
+                        return 'unknown';
+                    }
+                };
+                
+                const lastNameA = getLastName(a);
+                const lastNameB = getLastName(b);
+                return lastNameA.localeCompare(lastNameB);
             };
             
             pinnedUsers.sort(sortAlphabetically);
@@ -5722,7 +5730,8 @@
                                 <thead>
                                     <tr style="background: #f8f9fa;">
                                         <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
-                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">First Name</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Last Name</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Role</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Login Account</th>
@@ -5744,8 +5753,10 @@
                             'background: #667eea; color: white; border: 1px solid #667eea;' : 
                             'background: #f8f9fa; color: #666; border: 1px solid #dee2e6;';
                         
-                        const name = data.authUser ? `${data.authUser.firstName} ${data.authUser.lastName}` : 
-                                   (data.workplaceWorker ? `${data.workplaceWorker.first_name} ${data.workplaceWorker.last_name}` : 'Unknown');
+                        const firstName = data.authUser ? (data.authUser.firstName || 'Unknown') : 
+                                       (data.workplaceWorker ? (data.workplaceWorker.first_name || 'Unknown') : 'Unknown');
+                        const lastName = data.authUser ? (data.authUser.lastName || 'Unknown') : 
+                                      (data.workplaceWorker ? (data.workplaceWorker.last_name || 'Unknown') : 'Unknown');
                         const phone = data.authUser?.phone || '-';
                         const lastLogin = data.authUser?.loginTime ? 
                             new Date(data.authUser.loginTime).toLocaleString('en-US', {
@@ -5784,10 +5795,13 @@
                                 </td>
                                 <td style="padding: 1rem; font-weight: 600;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        ${name}
-                                        ${isPinned ? '<span style="color: #667eea; font-size: 0.8rem;">📌 Pinned</span>' : ''}
+                                        ${firstName}
+                                        ${isPinned ? '<span style="color: #667eea; font-size: 0.8rem;">📌</span>' : ''}
                                     </div>
                                     ${isSuspended ? '<br><small style="color: #dc3545; font-weight: normal;">🚫 SUSPENDED</small>' : ''}
+                                </td>
+                                <td style="padding: 1rem; font-weight: 600;">
+                                    ${lastName}
                                 </td>
                                 <td style="padding: 1rem;">${data.email}</td>
                                 <td style="padding: 1rem;">${roleBadge}</td>
