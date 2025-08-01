@@ -11501,10 +11501,18 @@ Management Team`);
                         return bTime - aTime;
                     });
 
-                    // Filter open postings
-                    const openPostings = allPostings.filter(p => p.status === 'open');
-                    coverageRequests = openPostings.filter(p => p.type === 'coverage_request');
-                    regularPostings = openPostings.filter(p => p.type !== 'coverage_request');
+                    // For admins: show ALL coverage requests regardless of status
+                    // For non-admins: only show open postings
+                    if (user && user.isAdmin) {
+                        // Admin view: show all coverage requests with their statuses
+                        coverageRequests = allPostings.filter(p => p.type === 'coverage_request');
+                        regularPostings = allPostings.filter(p => p.type !== 'coverage_request' && p.status === 'open');
+                    } else {
+                        // Worker view: only show open postings
+                        const openPostings = allPostings.filter(p => p.status === 'open');
+                        coverageRequests = openPostings.filter(p => p.type === 'coverage_request');
+                        regularPostings = openPostings.filter(p => p.type !== 'coverage_request');
+                    }
                     
                     console.log('Filtered postings - Coverage requests:', coverageRequests.length, 'Regular postings:', regularPostings.length);
                 } catch (postingsError) {
@@ -11811,20 +11819,36 @@ Management Team`);
                 <!-- Stats Overview -->
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
                     <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 1.5rem; border-radius: 12px; text-align: center;">
-                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">${coverageRequests.length}</div>
-                        <div style="opacity: 0.9;">Coverage Requests</div>
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">${user && user.isAdmin ? coverageRequests.length : coverageRequests.filter(r => r.status === 'open').length}</div>
+                        <div style="opacity: 0.9;">${user && user.isAdmin ? 'Total Coverage Requests' : 'Urgent Coverage Requests'}</div>
+                        ${user && user.isAdmin && coverageRequests.length > 0 ? `
+                            <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.5rem;">
+                                ${coverageRequests.filter(r => r.status === 'open').length} open, ${coverageRequests.filter(r => r.status === 'assigned').length} covered
+                            </div>
+                        ` : ''}
                     </div>
                     <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 1.5rem; border-radius: 12px; text-align: center;">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">${regularPostings.length}</div>
-                        <div style="opacity: 0.9;">Open Shifts</div>
+                        <div style="opacity: 0.9;">Open Shifts Available</div>
+                        ${regularPostings.length > 0 ? `
+                            <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.5rem;">
+                                Extra work opportunities
+                            </div>
+                        ` : ''}
                     </div>
                     <div style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; padding: 1.5rem; border-radius: 12px; text-align: center;">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">${coverWorkers.length}</div>
                         <div style="opacity: 0.9;">Cover Workers</div>
+                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.5rem;">
+                            Designated backup staff
+                        </div>
                     </div>
                     <div style="background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%); color: white; padding: 1.5rem; border-radius: 12px; text-align: center;">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">${activeCoverage.length}</div>
                         <div style="opacity: 0.9;">Active Coverage</div>
+                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.5rem;">
+                            Currently covered shifts
+                        </div>
                     </div>
                 </div>
 
@@ -11849,16 +11873,44 @@ Management Team`);
                 ` : ''}
             `;
 
-            // Coverage Requests Section (URGENT)
+            // Coverage Requests Section
             if (coverageRequests.length > 0) {
+                const openRequests = coverageRequests.filter(r => r.status === 'open');
+                const respondedRequests = coverageRequests.filter(r => r.status !== 'open');
+                
                 html += `
                     <div style="margin-bottom: 2rem;">
                         <h4 style="color: #333; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                            <span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem;">URGENT</span>
-                            Coverage Requests - Help Your Fellow Workers!
+                            <span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem;">
+                                ${user && user.isAdmin ? 'ALL' : 'URGENT'}
+                            </span>
+                            Coverage Requests ${user && user.isAdmin ? '- Management View' : '- Help Your Fellow Workers!'}
                         </h4>
-                        <div style="display: grid; gap: 1rem;">
                 `;
+
+                // For admins, show a summary of request statuses
+                if (user && user.isAdmin) {
+                    html += `
+                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid #007bff;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; text-align: center;">
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #dc3545;">${openRequests.length}</div>
+                                    <div style="font-size: 0.9rem; color: #666;">Open</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">${respondedRequests.filter(r => r.status === 'assigned').length}</div>
+                                    <div style="font-size: 0.9rem; color: #666;">Covered</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #6c757d;">${respondedRequests.filter(r => r.status === 'closed').length}</div>
+                                    <div style="font-size: 0.9rem; color: #666;">Closed</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += `<div style="display: grid; gap: 1rem;">`;
 
                 coverageRequests.forEach(posting => {
                     const postingDate = new Date(posting.shift_date);
@@ -11868,12 +11920,34 @@ Management Team`);
                         day: 'numeric' 
                     });
 
+                    // Determine status styling
+                    let statusBadge = '';
+                    let borderColor = '#dc3545';
+                    
+                    switch (posting.status) {
+                        case 'open':
+                            statusBadge = '<span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">COVERAGE NEEDED</span>';
+                            borderColor = '#dc3545';
+                            break;
+                        case 'assigned':
+                            statusBadge = '<span style="background: #28a745; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">✅ COVERED</span>';
+                            borderColor = '#28a745';
+                            break;
+                        case 'closed':
+                            statusBadge = '<span style="background: #6c757d; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">CLOSED</span>';
+                            borderColor = '#6c757d';
+                            break;
+                        default:
+                            statusBadge = '<span style="background: #ffc107; color: black; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">PENDING</span>';
+                            borderColor = '#ffc107';
+                    }
+
                     html += `
-                        <div style="background: white; border: 2px solid #dc3545; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(220,53,69,0.1);">
+                        <div style="background: white; border: 2px solid ${borderColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); ${posting.status !== 'open' ? 'opacity: 0.8;' : ''}">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                                 <div style="flex: 1;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                                        <span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">COVERAGE NEEDED</span>
+                                        ${statusBadge}
                                         <span style="color: #666; font-size: 0.9rem;">${formattedDate}</span>
                                     </div>
                                     <div style="font-size: 1.2rem; font-weight: 600; color: #333; margin-bottom: 0.5rem;">
@@ -11882,28 +11956,66 @@ Management Team`);
                                     <div style="color: #666; margin-bottom: 1rem;">
                                         <strong>Original Workers:</strong> ${posting.workers && posting.workers.length > 0 ? posting.workers.join(', ') : 'Various workers'}
                                     </div>
+                                    
+                                    ${posting.assigned_worker_name ? `
+                                        <div style="background: #d4edda; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #28a745; margin-bottom: 1rem;">
+                                            <strong>✅ Covered by:</strong> ${posting.assigned_worker_name}
+                                            ${posting.assignment_date ? `<br><small>Assigned: ${new Date(posting.assignment_date).toLocaleString()}</small>` : ''}
+                                        </div>
+                                    ` : ''}
+                                    
                                     ${posting.description ? `
-                                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; border-left: 4px solid #dc3545;">
+                                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; border-left: 4px solid ${borderColor};">
                                             <strong>Note:</strong> ${posting.description}
                                         </div>
                                     ` : ''}
                                 </div>
                                 <div style="text-align: center; min-width: 150px;">
-                                    ${!user.isAdmin ? `
+                                    ${posting.status === 'open' && !user.isAdmin ? `
                                         <button onclick="applyForShift('${posting.id}', 'coverage')" 
                                                 class="btn" 
                                                 style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(220,53,69,0.3); transition: all 0.3s ease; margin-bottom: 0.5rem;">
                                             🆘 I Can Cover This!
                                         </button>
-                                    ` : `
-                                        <button onclick="unassignWorkerFromShift('${posting.id}')" 
-                                                class="btn btn-warning" 
-                                                style="background: #fd7e14; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer; margin-bottom: 0.5rem;">
-                                            🔄 Manage Coverage
-                                        </button>
-                                    `}
-                                    <div style="font-size: 0.8rem; color: #999;">
-                                        Posted: ${new Date(posting.created_at.seconds * 1000).toLocaleDateString()}
+                                    ` : user && user.isAdmin ? `
+                                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                            ${posting.status === 'open' ? `
+                                                <button onclick="editShiftPosting('${posting.id}')" 
+                                                        class="btn btn-primary" 
+                                                        style="background: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">
+                                                    ✏️ Edit
+                                                </button>
+                                            ` : ''}
+                                            ${posting.status === 'assigned' ? `
+                                                <button onclick="unassignWorkerFromShift('${posting.id}')" 
+                                                        class="btn btn-warning" 
+                                                        style="background: #fd7e14; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">
+                                                    🔄 Unassign
+                                                </button>
+                                            ` : ''}
+                                            <button onclick="deleteShiftPosting('${posting.id}')" 
+                                                    class="btn btn-danger" 
+                                                    style="background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">
+                                                �️ Delete
+                                            </button>
+                                        </div>
+                                    ` : posting.status !== 'open' ? `
+                                        <div style="color: #666; font-size: 0.9rem;">
+                                            Request Handled
+                                        </div>
+                                    ` : ''}
+                                    <div style="font-size: 0.8rem; color: #999; margin-top: 0.5rem;">
+                                        Posted: ${(() => {
+                                            if (posting.created_at?.toDate) {
+                                                return posting.created_at.toDate().toLocaleDateString();
+                                            } else if (posting.created_at?.seconds) {
+                                                return new Date(posting.created_at.seconds * 1000).toLocaleDateString();
+                                            } else if (posting.created_at) {
+                                                return new Date(posting.created_at).toLocaleDateString();
+                                            } else {
+                                                return 'Unknown';
+                                            }
+                                        })()}
                                     </div>
                                 </div>
                             </div>
