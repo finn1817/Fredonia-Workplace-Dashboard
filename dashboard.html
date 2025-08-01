@@ -2081,11 +2081,14 @@
                     hideAllForms();
                     currentActiveTab = null;
                     showNotification('📋 Tab closed', 'info');
+                    lastClickedTab = null;
+                    lastClickTime = 0;
                     return true; // Tab was closed
                 }
+                // User cancelled, reset tracking but don't prevent execution
                 lastClickedTab = null;
                 lastClickTime = 0;
-                return true; // Prevent normal execution
+                return true; // Still prevent normal execution since this was a double-click attempt
             }
             
             // Normal single click - track for potential double click
