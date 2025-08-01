@@ -11430,8 +11430,32 @@ Management Team`);
             document.getElementById('coverDashboard').style.display = 'block';
             
             if (!selectedWorkplace) {
-                document.getElementById('coverDashboardContent').innerHTML = '<div class="warning">Please select a workplace first.</div>';
+                document.getElementById('coverDashboardContent').innerHTML = `
+                    <div class="warning" style="text-align: center; padding: 2rem; color: #856404; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px;">
+                        ⚠️ Please select a workplace first
+                    </div>
+                `;
                 return;
+            }
+
+            if (!user || !user.email) {
+                document.getElementById('coverDashboardContent').innerHTML = `
+                    <div class="error" style="text-align: center; padding: 2rem; color: #dc3545; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px;">
+                        ❌ Authentication required. Please log in first.
+                    </div>
+                `;
+                return;
+            }
+
+            // Ensure workers are loaded first
+            if (!workers || workers.length === 0) {
+                console.log('Workers not loaded, loading workers first...');
+                document.getElementById('coverDashboardContent').innerHTML = '<div class="loading">🔄 Loading workers data first...</div>';
+                try {
+                    await loadWorkplaceData();
+                } catch (error) {
+                    console.error('Error loading workers:', error);
+                }
             }
 
             // Load both cover dashboard data AND shift postings
@@ -11440,38 +11464,90 @@ Management Team`);
 
         async function loadIntegratedCoverDashboard() {
             try {
-                document.getElementById('coverDashboardContent').innerHTML = '<div class="loading">🔄 Loading coverage dashboard and available shifts...</div>';
+                const contentElement = document.getElementById('coverDashboardContent');
+                if (!contentElement) {
+                    console.error('Cover dashboard content element not found');
+                    return;
+                }
+                
+                contentElement.innerHTML = '<div class="loading">🔄 Loading coverage dashboard and available shifts...</div>';
 
-                // Load shift postings (including coverage requests) with simplified query
-                const shiftPostingsSnapshot = await getDocs(
-                    query(
-                        collection(db, 'shift_postings'),
-                        where('workplace', '==', selectedWorkplace),
-                        orderBy('created_at', 'desc')
-                    )
-                );
+                console.log('Loading integrated cover dashboard for workplace:', selectedWorkplace);
 
-                const allPostings = [];
-                shiftPostingsSnapshot.forEach(doc => {
-                    allPostings.push({ id: doc.id, ...doc.data() });
-                });
+                // Load shift postings with simple query (no orderBy to avoid index issues)
+                let allPostings = [];
+                let coverageRequests = [];
+                let regularPostings = [];
 
-                // Filter open postings
-                const openPostings = allPostings.filter(p => p.status === 'open');
-                const coverageRequests = openPostings.filter(p => p.type === 'coverage_request');
-                const regularPostings = openPostings.filter(p => p.type !== 'coverage_request');
+                try {
+                    console.log('Attempting to load shift postings...');
+                    const shiftPostingsSnapshot = await getDocs(
+                        query(
+                            collection(db, 'shift_postings'),
+                            where('workplace', '==', selectedWorkplace)
+                        )
+                    );
+
+                    shiftPostingsSnapshot.forEach(doc => {
+                        allPostings.push({ id: doc.id, ...doc.data() });
+                    });
+
+                    console.log('Loaded shift postings:', allPostings.length);
+
+                    // Sort manually by created_at field
+                    allPostings.sort((a, b) => {
+                        const aTime = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at || 0);
+                        const bTime = b.created_at?.toDate ? b.created_at.toDate() : new Date(b.created_at || 0);
+                        return bTime - aTime;
+                    });
+
+                    // Filter open postings
+                    const openPostings = allPostings.filter(p => p.status === 'open');
+                    coverageRequests = openPostings.filter(p => p.type === 'coverage_request');
+                    regularPostings = openPostings.filter(p => p.type !== 'coverage_request');
+                    
+                    console.log('Filtered postings - Coverage requests:', coverageRequests.length, 'Regular postings:', regularPostings.length);
+                } catch (postingsError) {
+                    console.log('Error loading shift postings (this is okay if collection doesn\'t exist):', postingsError.message);
+                    // Continue with empty arrays - this is okay
+                }
 
                 // Load active coverage and cover workers
+                console.log('Loading active coverage and cover workers...');
                 const [activeCoverage, coverWorkers] = await Promise.all([
                     loadActiveCoverage(),
-                    getCoverWorkers()
+                    Promise.resolve(getCoverWorkers()) // Wrap in Promise.resolve since it's sync
                 ]);
+
+                console.log('Loaded - Active coverage:', activeCoverage.length, 'Cover workers:', coverWorkers.length);
 
                 displayIntegratedCoverDashboard(coverageRequests, regularPostings, activeCoverage, coverWorkers);
 
             } catch (error) {
                 console.error('Error loading integrated cover dashboard:', error);
-                document.getElementById('coverDashboardContent').innerHTML = '<div class="error">❌ Failed to load cover dashboard</div>';
+                
+                // Try to display a fallback dashboard
+                try {
+                    const coverWorkers = getCoverWorkers();
+                    console.log('Displaying fallback dashboard with cover workers:', coverWorkers.length);
+                    displayIntegratedCoverDashboard([], [], [], coverWorkers);
+                } catch (fallbackError) {
+                    console.error('Error in fallback dashboard:', fallbackError);
+                    const contentElement = document.getElementById('coverDashboardContent');
+                    if (contentElement) {
+                        contentElement.innerHTML = `
+                            <div class="error" style="text-align: center; padding: 2rem; color: #dc3545; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px;">
+                                ❌ Failed to load cover dashboard
+                                <br><small style="color: #666; margin-top: 0.5rem; display: block;">
+                                    Error: ${error.message || 'Unknown error'}
+                                </small>
+                                <button onclick="loadIntegratedCoverDashboard()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    🔄 Retry
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
             }
         }
 
@@ -11547,7 +11623,11 @@ Management Team`);
                 });
                 
                 // Sort by most recent first
-                coverage.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                coverage.sort((a, b) => {
+                    const aTime = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+                    const bTime = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+                    return bTime - aTime;
+                });
                 
                 return coverage;
             } catch (error) {
@@ -11557,7 +11637,17 @@ Management Team`);
         }
 
         function getCoverWorkers() {
-            return workers.filter(w => w.worker_type === 'Cover');
+            try {
+                // Make sure workers array exists and filter safely
+                if (!workers || !Array.isArray(workers)) {
+                    console.log('Workers not loaded yet or not an array');
+                    return [];
+                }
+                return workers.filter(w => w && w.worker_type === 'Cover');
+            } catch (error) {
+                console.error('Error getting cover workers:', error);
+                return [];
+            }
         }
 
         function displayCoverDashboard(coverRequests, activeCoverage, coverWorkers) {
@@ -11690,6 +11780,15 @@ Management Team`);
         function displayIntegratedCoverDashboard(coverageRequests, regularPostings, activeCoverage, coverWorkers) {
             const content = document.getElementById('coverDashboardContent');
             
+            // Ensure all parameters are arrays
+            coverageRequests = coverageRequests || [];
+            regularPostings = regularPostings || [];
+            activeCoverage = activeCoverage || [];
+            coverWorkers = coverWorkers || [];
+            
+            // Safe workplace name display
+            const workplaceName = selectedWorkplace ? selectedWorkplace.replace('_', ' ').toUpperCase() : 'NO WORKPLACE SELECTED';
+            
             let html = `
                 <!-- Header Section -->
                 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2rem; border-radius: 12px; margin-bottom: 2rem;">
@@ -11697,10 +11796,10 @@ Management Team`);
                         <span style="font-size: 2rem;">🎯</span>
                         <div>
                             <h3 style="margin: 0; font-size: 1.4rem;">Coverage Dashboard & Available Shifts</h3>
-                            <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">${selectedWorkplace.replace('_', ' ').toUpperCase()}</p>
+                            <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">${workplaceName}</p>
                         </div>
                     </div>
-                    ${user.isAdmin ? `
+                    ${user && user.isAdmin ? `
                     <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
                         <button class="btn btn-success" onclick="showRequestCoverageModal()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
                             📨 Request Coverage
@@ -11730,7 +11829,7 @@ Management Team`);
                 </div>
 
                 <!-- Worker Instructions -->
-                ${!user.isAdmin ? `
+                ${!user || !user.isAdmin ? `
                 <div style="background: #e3f2fd; border: 1px solid #2196f3; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
                     <h4 style="margin: 0 0 1rem 0; color: #1976d2; display: flex; align-items: center; gap: 0.5rem;">
                         <span>💡</span> How to Claim Shifts
