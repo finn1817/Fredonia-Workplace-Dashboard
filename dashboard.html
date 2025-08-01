@@ -1328,12 +1328,12 @@
                 <h2 class="section-title">Schedule Management</h2>
                 
                 <div class="action-buttons">
-                    <button class="btn btn-primary" onclick="handleTabClick(() => showGenerateForm(), 'generate')" id="generateBtn" style="display:none;">📅 Generate New Schedule</button>
-                    <button class="btn btn-success" onclick="handleTabClick(() => viewCurrentSchedule(), 'current')">👁️ View Current Schedule</button>
-                    <button class="btn btn-info" onclick="handleTabClick(() => viewHistory(), 'history')" id="historyBtn" style="display:none;">📚 Schedule History</button>
-                    <button class="btn btn-warning" onclick="handleTabClick(() => checkAvailability(), 'availability')" id="checkAvailabilityBtn" style="display:none;">🔍 Check Availability</button>
-                    <button class="btn btn-info" onclick="handleTabClick(() => showWhosWorkingNow(), 'whoworking')" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
-                    <button class="btn btn-secondary" onclick="handleTabClick(() => showCoverDashboard(), 'cover')" id="coverDashboardBtn">🔄 Cover Dashboard</button>
+                    <button class="btn btn-primary" onclick="showGenerateForm()" id="generateBtn" style="display:none;">📅 Generate New Schedule</button>
+                    <button class="btn btn-success" onclick="viewCurrentSchedule()">👁️ View Current Schedule</button>
+                    <button class="btn btn-info" onclick="viewHistory()" id="historyBtn" style="display:none;">📚 Schedule History</button>
+                    <button class="btn btn-warning" onclick="checkAvailability()" id="checkAvailabilityBtn" style="display:none;">🔍 Check Availability</button>
+                    <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
+                    <button class="btn btn-secondary" onclick="showCoverDashboard()" id="coverDashboardBtn">🔄 Cover Dashboard</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
@@ -2070,7 +2070,7 @@
         let currentActiveTab = null;
         const DOUBLE_CLICK_THRESHOLD = 500; // 500ms window for double click
 
-        function handleTabClick(tabFunction, tabName) {
+        function checkForDoubleClick(tabName) {
             const now = Date.now();
             const timeDiff = now - lastClickTime;
             
@@ -2081,17 +2081,17 @@
                     hideAllForms();
                     currentActiveTab = null;
                     showNotification('📋 Tab closed', 'info');
+                    return true; // Tab was closed
                 }
                 lastClickedTab = null;
                 lastClickTime = 0;
-                return;
+                return true; // Prevent normal execution
             }
             
-            // Normal single click - open/switch to tab
+            // Normal single click - track for potential double click
             lastClickedTab = tabName;
             lastClickTime = now;
-            currentActiveTab = tabName;
-            tabFunction();
+            return false; // Allow normal execution
         }
 
         // Firebase setup
@@ -7688,6 +7688,8 @@
 
         // Form display functions
         window.showGenerateForm = function() {
+            if (checkForDoubleClick('generate')) return;
+            
             if (!user.isAdmin) {
                 showNotification('❌ Admin access required', 'error');
                 return;
@@ -7698,6 +7700,8 @@
         };
 
         window.checkAvailability = function() {
+            if (checkForDoubleClick('availability')) return;
+            
             hideAllForms();
             currentActiveTab = 'availability';
             document.getElementById('availabilityForm').style.display = 'block';
@@ -8806,6 +8810,8 @@
 
         // Enhanced current schedule viewing
         window.viewCurrentSchedule = async function() {
+            if (checkForDoubleClick('current')) return;
+            
             try {
                 hideAllForms();
                 currentActiveTab = 'current';
@@ -8948,6 +8954,8 @@
 
         // Enhanced history viewing
         window.viewHistory = async function() {
+            if (checkForDoubleClick('history')) return;
+            
             try {
                 hideAllForms();
                 currentActiveTab = 'history';
@@ -10012,6 +10020,8 @@
 
         // Cover Dashboard System
         window.showCoverDashboard = async function() {
+            if (checkForDoubleClick('cover')) return;
+            
             hideAllForms();
             currentActiveTab = 'cover';
             document.getElementById('coverDashboard').style.display = 'block';
@@ -10647,6 +10657,8 @@
 
         // Add showWhosWorkingNow function
         window.showWhosWorkingNow = function() {
+            if (checkForDoubleClick('whoworking')) return;
+            
             if (!user.isAdmin) {
                 showNotification('❌ Admin access required', 'error');
                 return;
