@@ -11599,8 +11599,18 @@ Management Team`);
                     
                     schedule[day].forEach((shift, index) => {
                         const shiftId = `${day}_${index}`;
-                        const workersText = shift.workers && shift.workers.length > 0 ? 
-                            shift.workers.map(w => w.split('@')[0]).join(', ') : 'No workers assigned';
+                        
+                        // Get worker information from the correct shift properties
+                        let workersText = 'No workers assigned';
+                        let workerEmails = [];
+                        
+                        if (shift.assigned && shift.assigned.length > 0 && !shift.assigned.includes('Unfilled')) {
+                            workersText = shift.assigned.join(', ');
+                        }
+                        
+                        if (shift.raw_assigned && shift.raw_assigned.length > 0) {
+                            workerEmails = shift.raw_assigned;
+                        }
                         
                         html += `
                             <div style="background: white; padding: 1rem; border-radius: 6px; border: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
@@ -11612,7 +11622,7 @@ Management Team`);
                                         Workers: ${workersText}
                                     </div>
                                 </div>
-                                <button onclick="requestCoverageForShift('${day}', ${index}, '${shift.start}', '${shift.end}', ${JSON.stringify(shift.workers || []).replace(/"/g, '&quot;')})" 
+                                <button onclick="requestCoverageForShift('${day}', ${index}, '${shift.start}', '${shift.end}', ${JSON.stringify(workerEmails).replace(/"/g, '&quot;')})" 
                                         class="btn btn-primary" style="background: #007bff; font-size: 0.9rem; padding: 0.5rem 1rem;">
                                     📨 Request Coverage
                                 </button>
