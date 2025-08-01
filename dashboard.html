@@ -11638,22 +11638,91 @@ Management Team`);
 
         async function getCurrentSchedule() {
             try {
+                // First, try to use the globally available current schedule variables
+                if (typeof schedule !== 'undefined' && schedule && Object.keys(schedule).length > 0) {
+                    console.log('Using global schedule variable:', schedule);
+                    return {
+                        id: currentScheduleId || 'current',
+                        schedule: schedule,
+                        workplace: selectedWorkplace
+                    };
+                }
+
+                // Second, try window.currentSchedule
+                if (window.currentSchedule && Object.keys(window.currentSchedule).length > 0) {
+                    console.log('Using window.currentSchedule:', window.currentSchedule);
+                    return {
+                        id: currentScheduleId || 'current',
+                        schedule: window.currentSchedule,
+                        workplace: selectedWorkplace
+                    };
+                }
+
+                console.log('No global schedule found, querying database...');
+
+                // If no global schedule, try to find the current schedule from database
                 const schedulesRef = collection(db, 'schedules');
                 const q = query(schedulesRef, 
                     where('workplace', '==', selectedWorkplace),
                     where('isCurrent', '==', true),
-                    orderBy('created_at', 'desc'),
                     limit(1)
                 );
                 
                 const snapshot = await getDocs(q);
                 if (!snapshot.empty) {
                     const doc = snapshot.docs[0];
-                    return { id: doc.id, ...doc.data() };
+                    const data = doc.data();
+                    console.log('Found current schedule in database:', data);
+                    return { 
+                        id: doc.id, 
+                        schedule: data.schedule || data,
+                        ...data 
+                    };
                 }
+
+                // If still no schedule found, try to get the most recent schedule
+                const recentQuery = query(schedulesRef, 
+                    where('workplace', '==', selectedWorkplace),
+                    orderBy('createdAt', 'desc'),
+                    limit(1)
+                );
+                
+                const recentSnapshot = await getDocs(recentQuery);
+                if (!recentSnapshot.empty) {
+                    const doc = recentSnapshot.docs[0];
+                    const data = doc.data();
+                    console.log('Found recent schedule in database:', data);
+                    return { 
+                        id: doc.id, 
+                        schedule: data.schedule || data,
+                        ...data 
+                    };
+                }
+                
+                console.log('No schedule found anywhere');
                 return null;
             } catch (error) {
                 console.error('Error getting current schedule:', error);
+                
+                // Fallback: if there's an error but we have global schedule data, use it
+                if (typeof schedule !== 'undefined' && schedule && Object.keys(schedule).length > 0) {
+                    console.log('Using global schedule as fallback:', schedule);
+                    return {
+                        id: currentScheduleId || 'current',
+                        schedule: schedule,
+                        workplace: selectedWorkplace
+                    };
+                }
+                
+                if (window.currentSchedule && Object.keys(window.currentSchedule).length > 0) {
+                    console.log('Using window.currentSchedule as fallback:', window.currentSchedule);
+                    return {
+                        id: currentScheduleId || 'current',
+                        schedule: window.currentSchedule,
+                        workplace: selectedWorkplace
+                    };
+                }
+                
                 return null;
             }
         }
