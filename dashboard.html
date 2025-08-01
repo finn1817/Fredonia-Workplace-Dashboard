@@ -7221,7 +7221,7 @@ Management Team`);
                     day: 'numeric' 
                 });
 
-                const warningMessage = posting.status === 'filled' 
+                const warningMessage = (posting.status === 'assigned' || posting.status === 'filled')
                     ? `⚠️ WARNING: This shift is currently assigned to ${posting.assigned_worker_name}!\n\nDeleting will remove their assignment. Are you sure?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}`
                     : `Delete this shift posting?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}`;
 
@@ -7257,6 +7257,7 @@ Management Team`);
 
                 // Also refresh integrated cover dashboard if it's open
                 if (document.getElementById('coverDashboard')?.style.display === 'block') {
+                    console.log('Refreshing cover dashboard after deletion...');
                     await loadIntegratedCoverDashboard();
                 }
 
@@ -7293,37 +7294,6 @@ Management Team`);
             } catch (error) {
                 console.error('Error loading posting for edit:', error);
                 showNotification('❌ Failed to load posting data', 'error');
-            }
-        };
-
-        window.deleteShiftPosting = async function(postingId) {
-            if (!confirm('Are you sure you want to delete this shift posting? This will also delete all applications and cannot be undone.')) {
-                return;
-            }
-            
-            try {
-                // Delete all applications first
-                const applicationsSnapshot = await getDocs(
-                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications')
-                );
-                
-                const deletePromises = applicationsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(deletePromises);
-                
-                // Delete the posting
-                await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
-                
-                showNotification('✅ Shift posting deleted successfully!', 'success');
-                
-                // Refresh the shift postings display
-                const contentContainer = document.querySelector('#workersModalContent .tab-content');
-                if (contentContainer) {
-                    await displayShiftPostingsTab(contentContainer);
-                }
-                
-            } catch (error) {
-                console.error('Error deleting shift posting:', error);
-                showNotification('❌ Failed to delete shift posting', 'error');
             }
         };
 
@@ -11823,7 +11793,7 @@ Management Team`);
                         <div style="opacity: 0.9;">${user && user.isAdmin ? 'Total Coverage Requests' : 'Urgent Coverage Requests'}</div>
                         ${user && user.isAdmin && coverageRequests.length > 0 ? `
                             <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.5rem;">
-                                ${coverageRequests.filter(r => r.status === 'open').length} open, ${coverageRequests.filter(r => r.status === 'assigned').length} covered
+                                ${coverageRequests.filter(r => r.status === 'open').length} open, ${coverageRequests.filter(r => r.status === 'assigned' || r.status === 'filled').length} covered
                             </div>
                         ` : ''}
                     </div>
@@ -11898,7 +11868,7 @@ Management Team`);
                                     <div style="font-size: 0.9rem; color: #666;">Open</div>
                                 </div>
                                 <div>
-                                    <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">${respondedRequests.filter(r => r.status === 'assigned').length}</div>
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">${respondedRequests.filter(r => r.status === 'assigned' || r.status === 'filled').length}</div>
                                     <div style="font-size: 0.9rem; color: #666;">Covered</div>
                                 </div>
                                 <div>
@@ -11930,6 +11900,7 @@ Management Team`);
                             borderColor = '#dc3545';
                             break;
                         case 'assigned':
+                        case 'filled':
                             statusBadge = '<span style="background: #28a745; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">✅ COVERED</span>';
                             borderColor = '#28a745';
                             break;
@@ -11960,7 +11931,8 @@ Management Team`);
                                     ${posting.assigned_worker_name ? `
                                         <div style="background: #d4edda; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #28a745; margin-bottom: 1rem;">
                                             <strong>✅ Covered by:</strong> ${posting.assigned_worker_name}
-                                            ${posting.assignment_date ? `<br><small>Assigned: ${new Date(posting.assignment_date).toLocaleString()}</small>` : ''}
+                                            ${posting.filled_at ? `<br><small>Assigned: ${new Date(posting.filled_at).toLocaleString()}</small>` : 
+                                              posting.assignment_date ? `<br><small>Assigned: ${new Date(posting.assignment_date).toLocaleString()}</small>` : ''}
                                         </div>
                                     ` : ''}
                                     
@@ -11986,7 +11958,7 @@ Management Team`);
                                                     ✏️ Edit
                                                 </button>
                                             ` : ''}
-                                            ${posting.status === 'assigned' ? `
+                                            ${posting.status === 'assigned' || posting.status === 'filled' ? `
                                                 <button onclick="unassignWorkerFromShift('${posting.id}')" 
                                                         class="btn btn-warning" 
                                                         style="background: #fd7e14; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">
