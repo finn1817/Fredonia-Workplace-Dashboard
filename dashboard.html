@@ -686,6 +686,26 @@
             animation: pulse 2s infinite;
         }
 
+        .shift.covered-shift {
+            border-color: #17a2b8;
+            background: linear-gradient(135deg, #e8f8ff 0%, #d4edda 100%);
+            border-left: 4px solid #17a2b8;
+            position: relative;
+        }
+
+        .shift.covered-shift:hover {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        }
+
+        .shift.covered-shift::before {
+            content: "🔄";
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+
         .shift.multiple-workers {
             border-left: 4px solid #007bff;
             background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
@@ -8472,11 +8492,13 @@
                     const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
                     const workStudy = shift.is_work_study || false;
                     const isForced = shift.forced === true;
+                    const isCovered = shift.covered === true;
                     
                     let shiftClass = 'shift';
                     if (isGap) shiftClass += ' coverage-gap';
                     else if (unfilled) shiftClass += ' unfilled';
                     else if (workStudy) shiftClass += ' work-study';
+                    else if (isCovered) shiftClass += ' covered-shift';
                     if (isForced) shiftClass += ' forced-shift';
                     if (shift.assigned.length > 1) shiftClass += ' multiple-workers';
                     
@@ -8493,6 +8515,15 @@
                         }
                     }
                     
+                    // Prepare coverage info
+                    let coverageInfo = '';
+                    if (isCovered) {
+                        const restoreTime = shift.auto_restore_at ? new Date(shift.auto_restore_at).toLocaleString() : 'Unknown';
+                        coverageInfo = `<div style="color: #17a2b8; font-size: 0.85rem; margin-top: 0.25rem;">
+                            🔄 Covered by ${shift.cover_worker_name} (${shift.cover_type}) - Auto-restore: ${restoreTime}
+                        </div>`;
+                    }
+                    
                     html += `
                         <div class="${shiftClass}">
                             <div>
@@ -8500,12 +8531,14 @@
                                 ${workStudy ? '<span style="color: #ffc107; margin-left: 0.5rem;">(Work Study)</span>' : ''}
                                 ${isGap ? '<span style="color: #ff5722; margin-left: 0.5rem;">(CRITICAL GAP)</span>' : ''}
                                 ${isForced ? '<span style="color: #e53935; margin-left: 0.5rem; font-weight: bold;">(FORCED)</span>' : ''}
+                                ${isCovered ? '<span style="color: #17a2b8; margin-left: 0.5rem; font-weight: bold;">(COVERED)</span>' : ''}
                                 <div style="margin-top: 0.25rem; font-size: 0.9rem;">
                                     ${shift.assigned.length > 1 ? 
                                         `<span style="color: #007bff; font-weight: 600;">👥 ${shift.assigned.length} Workers:</span> ${shift.assigned.join(', ')}` :
                                         shift.assigned.join(', ')
                                     }
                                 </div>
+                                ${coverageInfo}
                                 ${conflictWarning}
                             </div>
                             ${user.isAdmin ? `
@@ -9961,7 +9994,21 @@
                     shift.raw_assigned = [...(shift.raw_assigned || []), selectedWorkerEmail];
                 }
 
-                // Create coverage record for auto-restore
+                // NEW: Add tracking fields to the shift itself
+                const shiftDateTime = getShiftDateTime(day, shift.start);
+                const autoRestoreDateTime = getShiftEndDateTime(day, shift.end);
+                
+                shift.covered = true;
+                shift.covered_shift_time = shiftDateTime.toISOString();
+                shift.cover_applied_at = new Date().toISOString();
+                shift.cover_applied_by = user.email;
+                shift.cover_type = coverageType;
+                shift.cover_worker_email = selectedWorkerEmail;
+                shift.cover_worker_name = workerFullName;
+                shift.original_assignment = originalData;
+                shift.auto_restore_at = autoRestoreDateTime.toISOString();
+
+                // Create coverage record for dashboard tracking
                 const coverageRecord = {
                     workplace: selectedWorkplace,
                     day: day,
@@ -9972,14 +10019,16 @@
                     originalData: originalData,
                     appliedBy: user.email,
                     appliedAt: new Date().toISOString(),
-                    shiftDate: shift.date || new Date().toISOString().split('T')[0], // Use shift date or today
-                    autoRestoreAt: getNextMidnight(shift.date || new Date().toISOString().split('T')[0])
+                    shiftDate: shift.date || new Date().toISOString().split('T')[0],
+                    shiftDateTime: shiftDateTime.toISOString(),
+                    autoRestoreAt: autoRestoreDateTime.toISOString(),
+                    status: 'active'
                 };
 
                 // Save coverage record to Firestore
                 await addDoc(collection(db, 'shift_coverage'), coverageRecord);
 
-                // Update the schedule in Firestore
+                // Update the schedule in Firestore with tracking fields
                 if (currentScheduleId) {
                     const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
                     await updateDoc(scheduleRef, {
@@ -9989,7 +10038,8 @@
                     });
                 }
 
-                showNotification(`✅ Coverage applied! ${workerFullName} will ${coverageType === 'replace' ? 'replace' : 'assist'} for this shift. Auto-restore at midnight.`, 'success');
+                const restoreTime = autoRestoreDateTime.toLocaleString();
+                showNotification(`✅ Coverage applied! ${workerFullName} will ${coverageType === 'replace' ? 'replace' : 'assist'} for this shift. Auto-restore after shift ends (${restoreTime}).`, 'success');
                 
                 closeModal('coverShiftModal');
                 
@@ -10002,10 +10052,10 @@
                     start: shift.start,
                     end: shift.end,
                     shiftIndex: shiftIndex,
-                    message: `You have been assigned to ${coverageType === 'replace' ? 'replace workers for' : 'assist with'} a shift. This assignment will auto-restore at midnight.`
+                    message: `You have been assigned to ${coverageType === 'replace' ? 'replace workers for' : 'assist with'} a shift. This assignment will auto-restore after the shift ends.`
                 });
 
-                console.log('Coverage applied:', coverageRecord);
+                console.log('Coverage applied with tracking:', coverageRecord);
 
             } catch (error) {
                 console.error('Error applying coverage:', error);
@@ -10013,7 +10063,43 @@
             }
         };
 
-        // Helper function to get next midnight timestamp
+        // Helper function to get shift start date/time
+        function getShiftDateTime(day, startTime) {
+            const today = new Date();
+            const currentDay = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1]; // Convert JS day to our DAYS array
+            
+            // Find the next occurrence of this day
+            const targetDayIndex = DAYS.indexOf(day);
+            const currentDayIndex = DAYS.indexOf(currentDay);
+            
+            let daysUntilTarget = targetDayIndex - currentDayIndex;
+            if (daysUntilTarget < 0) {
+                daysUntilTarget += 7; // Next week
+            }
+            
+            const targetDate = new Date(today);
+            targetDate.setDate(today.getDate() + daysUntilTarget);
+            
+            // Set the time
+            const [hours, minutes] = startTime.split(':').map(Number);
+            targetDate.setHours(hours, minutes, 0, 0);
+            
+            return targetDate;
+        }
+
+        // Helper function to get shift end date/time for auto-restore
+        function getShiftEndDateTime(day, endTime) {
+            const shiftStart = getShiftDateTime(day, endTime);
+            
+            // If end time is midnight (00:00), it's next day
+            if (endTime === '00:00') {
+                shiftStart.setDate(shiftStart.getDate() + 1);
+            }
+            
+            return shiftStart;
+        }
+
+        // Helper function to get next midnight timestamp (legacy - keeping for compatibility)
         function getNextMidnight(dateString) {
             const date = new Date(dateString);
             date.setDate(date.getDate() + 1); // Next day
