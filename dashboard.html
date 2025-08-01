@@ -1354,6 +1354,7 @@
                     <button class="btn btn-warning" onclick="checkAvailability()" id="checkAvailabilityBtn" style="display:none;">🔍 Check Availability</button>
                     <button class="btn btn-info" onclick="showWhosWorkingNow()" id="whosWorkingNowBtn" style="display:none;">🕒 Who's Working Now?</button>
                     <button class="btn btn-secondary" onclick="showCoverDashboard()" id="coverDashboardBtn">🔄 Cover Dashboard</button>
+                    <button class="btn btn-purple" onclick="showWorkerShiftPostings()" id="shiftPostingsBtn" style="background: #667eea; color: white;">🎯 Available Shifts</button>
                 </div>
 
                 <!-- Generate Schedule Form -->
@@ -6386,6 +6387,12 @@
                                     ${applicationCount > 0 ? `
                                         <button class="btn btn-primary" onclick="contactApplicants('${posting.id}')" style="background: #007bff; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">📧 Contact All</button>
                                     ` : ''}
+                                    ${posting.status === 'filled' ? `
+                                        <button class="btn btn-warning" onclick="unassignWorkerFromShift('${posting.id}')" style="background: #fd7e14; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🔄 Unassign Worker</button>
+                                    ` : ''}
+                                    ${posting.status === 'closed' || posting.status === 'expired' ? `
+                                        <button class="btn btn-success" onclick="reopenShift('${posting.id}')" style="background: #28a745; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🔓 Reopen Shift</button>
+                                    ` : ''}
                                     <button class="btn btn-warning" onclick="editShiftPosting('${posting.id}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
                                     <button class="btn btn-danger" onclick="deleteShiftPosting('${posting.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Delete</button>
                                 `}
@@ -6825,7 +6832,7 @@ Management Team`);
             document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
 
-        window.applyForShift = async function(postingId, isCoverageRequest = false) {
+        window.applyForShift = async function(postingId, shiftType = 'regular') {
             try {
                 // Check if user has already applied
                 const existingApplicationSnapshot = await getDocs(
@@ -6850,8 +6857,34 @@ Management Team`);
                 
                 const posting = postingDoc.data();
                 
-                // Get user notes
-                const notes = prompt(`Apply for ${posting.title}?\n\nShift: ${new Date(posting.shift_date).toLocaleDateString()} ${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}\n\nAny additional notes for your application? (Optional)`) || '';
+                // Check if shift is still open
+                if (posting.status !== 'open') {
+                    showNotification('❌ This shift is no longer available', 'warning');
+                    
+                    // Refresh the display
+                    if (document.getElementById('workerShiftPostingsModal')) {
+                        await loadWorkerShiftPostings();
+                    }
+                    return;
+                }
+                
+                // Confirm application with user
+                const shiftDate = new Date(posting.shift_date).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+                
+                const confirmMessage = shiftType === 'coverage' 
+                    ? `Help cover this shift?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}\n\nThis is a coverage request - you'll be helping a fellow worker who needs assistance.`
+                    : `Apply for this shift?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}\n\nThis shift will be assigned on a first-come, first-served basis.`;
+                
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+                
+                // Show loading state
+                showNotification('🔄 Processing your application...', 'info');
                 
                 // Create application
                 const applicationData = {
@@ -6860,24 +6893,55 @@ Management Team`);
                     applicant_name: user.displayName || user.email.split('@')[0],
                     workplace: selectedWorkplace,
                     applied_at: new Date().toISOString(),
-                    status: 'pending',
-                    notes: notes,
-                    response_type: 'can_cover'
+                    status: 'approved', // Auto-approve for first-come-first-serve
+                    response_type: 'can_cover',
+                    shift_type: shiftType,
+                    auto_assigned: true
                 };
                 
+                // Add application to database
                 await addDoc(collection(db, 'applications'), applicationData);
                 
-                showNotification('✅ Application submitted successfully! You indicated you CAN cover this shift.', 'success');
+                // Update the posting status to filled
+                await updateDoc(doc(db, 'shift_postings', postingId), {
+                    status: 'filled',
+                    assigned_worker: user.email,
+                    assigned_worker_name: user.displayName || user.email.split('@')[0],
+                    filled_at: new Date().toISOString(),
+                    assignment_method: 'first_come_first_serve'
+                });
                 
-                // Refresh the shift postings display
+                // Success message based on shift type
+                const successMessage = shiftType === 'coverage' 
+                    ? '🎉 You\'ve been assigned to cover this shift! Thank you for helping your fellow worker.'
+                    : '🎉 Congratulations! You\'ve been assigned this shift on a first-come, first-served basis.';
+                
+                showNotification(successMessage, 'success');
+                
+                // Refresh displays
+                if (document.getElementById('workerShiftPostingsModal')) {
+                    await loadWorkerShiftPostings();
+                }
+                
                 const contentContainer = document.querySelector('#workersModalContent .tab-content');
-                if (contentContainer) {
+                if (contentContainer && document.getElementById('workersModal')?.style.display === 'block') {
                     await displayShiftPostingsTab(contentContainer);
                 }
                 
             } catch (error) {
                 console.error('Error applying for shift:', error);
-                showNotification('❌ Failed to submit application', 'error');
+                
+                // Check if this is a concurrency error (shift already taken)
+                if (error.message.includes('already filled') || error.code === 'failed-precondition') {
+                    showNotification('😔 Sorry! This shift was just claimed by another worker. Please check for other available shifts.', 'warning');
+                    
+                    // Refresh the display to show updated status
+                    if (document.getElementById('workerShiftPostingsModal')) {
+                        await loadWorkerShiftPostings();
+                    }
+                } else {
+                    showNotification('❌ Failed to apply for shift. Please try again.', 'error');
+                }
             }
         };
 
@@ -6988,7 +7052,202 @@ Management Team`);
             }
         };
 
+        // Admin Functions for Shift Management
+        window.unassignWorkerFromShift = async function(postingId) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+
+            try {
+                // Get shift posting details
+                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                if (!postingDoc.exists()) {
+                    showNotification('❌ Shift posting not found', 'error');
+                    return;
+                }
+
+                const posting = postingDoc.data();
+                
+                if (posting.status !== 'filled') {
+                    showNotification('⚠️ This shift is not currently assigned to anyone', 'warning');
+                    return;
+                }
+
+                const workerName = posting.assigned_worker_name || posting.assigned_worker;
+                const shiftDate = new Date(posting.shift_date).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+
+                if (!confirm(`Unassign ${workerName} from this shift?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}\n\nThis will reopen the shift for other workers to claim.`)) {
+                    return;
+                }
+
+                // Update the posting back to open status
+                await updateDoc(doc(db, 'shift_postings', postingId), {
+                    status: 'open',
+                    assigned_worker: null,
+                    assigned_worker_name: null,
+                    filled_at: null,
+                    assignment_method: null,
+                    unassigned_at: new Date().toISOString(),
+                    unassigned_by: user.email,
+                    unassigned_reason: `Manually unassigned by admin ${user.email}`
+                });
+
+                // Update any existing applications for this shift to reflect the reopening
+                const applicationsSnapshot = await getDocs(
+                    query(
+                        collection(db, 'applications'),
+                        where('shift_posting_id', '==', postingId),
+                        where('applicant_email', '==', posting.assigned_worker)
+                    )
+                );
+
+                applicationsSnapshot.forEach(async (appDoc) => {
+                    await updateDoc(doc(db, 'applications', appDoc.id), {
+                        status: 'unassigned',
+                        unassigned_at: new Date().toISOString(),
+                        unassigned_by: user.email
+                    });
+                });
+
+                showNotification(`✅ ${workerName} has been unassigned. The shift is now available for other workers.`, 'success');
+
+                // Refresh displays
+                const contentContainer = document.querySelector('#workersModalContent .tab-content');
+                if (contentContainer && document.getElementById('workersModal')?.style.display === 'block') {
+                    await displayShiftPostingsTab(contentContainer);
+                }
+
+            } catch (error) {
+                console.error('Error unassigning worker from shift:', error);
+                showNotification('❌ Failed to unassign worker from shift', 'error');
+            }
+        };
+
+        window.reopenShift = async function(postingId) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+
+            try {
+                // Get shift posting details
+                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                if (!postingDoc.exists()) {
+                    showNotification('❌ Shift posting not found', 'error');
+                    return;
+                }
+
+                const posting = postingDoc.data();
+                
+                if (posting.status === 'open') {
+                    showNotification('⚠️ This shift is already open for applications', 'warning');
+                    return;
+                }
+
+                const shiftDate = new Date(posting.shift_date).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+
+                if (!confirm(`Reopen this shift for new applications?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}\n\nThis will allow workers to apply again.`)) {
+                    return;
+                }
+
+                // Update the posting to open status
+                await updateDoc(doc(db, 'shift_postings', postingId), {
+                    status: 'open',
+                    reopened_at: new Date().toISOString(),
+                    reopened_by: user.email,
+                    reopen_reason: `Manually reopened by admin ${user.email}`
+                });
+
+                showNotification('✅ Shift has been reopened for new applications!', 'success');
+
+                // Refresh displays
+                const contentContainer = document.querySelector('#workersModalContent .tab-content');
+                if (contentContainer && document.getElementById('workersModal')?.style.display === 'block') {
+                    await displayShiftPostingsTab(contentContainer);
+                }
+
+            } catch (error) {
+                console.error('Error reopening shift:', error);
+                showNotification('❌ Failed to reopen shift', 'error');
+            }
+        };
+
+        window.deleteShiftPosting = async function(postingId) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+
+            try {
+                // Get shift posting details
+                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                if (!postingDoc.exists()) {
+                    showNotification('❌ Shift posting not found', 'error');
+                    return;
+                }
+
+                const posting = postingDoc.data();
+                const shiftDate = new Date(posting.shift_date).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+
+                const warningMessage = posting.status === 'filled' 
+                    ? `⚠️ WARNING: This shift is currently assigned to ${posting.assigned_worker_name}!\n\nDeleting will remove their assignment. Are you sure?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}`
+                    : `Delete this shift posting?\n\n${shiftDate}\n${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}`;
+
+                if (!confirm(warningMessage)) {
+                    return;
+                }
+
+                // Delete the posting
+                await deleteDoc(doc(db, 'shift_postings', postingId));
+
+                // Delete any associated applications
+                const applicationsSnapshot = await getDocs(
+                    query(
+                        collection(db, 'applications'),
+                        where('shift_posting_id', '==', postingId)
+                    )
+                );
+
+                const deletePromises = [];
+                applicationsSnapshot.forEach((appDoc) => {
+                    deletePromises.push(deleteDoc(doc(db, 'applications', appDoc.id)));
+                });
+
+                await Promise.all(deletePromises);
+
+                showNotification('✅ Shift posting and all associated applications have been deleted', 'success');
+
+                // Refresh displays
+                const contentContainer = document.querySelector('#workersModalContent .tab-content');
+                if (contentContainer && document.getElementById('workersModal')?.style.display === 'block') {
+                    await displayShiftPostingsTab(contentContainer);
+                }
+
+            } catch (error) {
+                console.error('Error deleting shift posting:', error);
+                showNotification('❌ Failed to delete shift posting', 'error');
+            }
+        };
+
         window.editShiftPosting = async function(postingId) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
                 const posting = postingDoc.data();
@@ -11579,6 +11838,283 @@ Management Team`);
                 modal.remove();
             }
         };
+
+        // Worker Shift Postings Modal - Standalone portal for workers to view and claim shifts
+        window.showWorkerShiftPostings = async function() {
+            if (!selectedWorkplace) {
+                showNotification('⚠️ Please select a workplace first', 'warning');
+                return;
+            }
+
+            try {
+                // Create the modal
+                const modal = document.createElement('div');
+                modal.id = 'workerShiftPostingsModal';
+                modal.style.cssText = `
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                    background: rgba(0,0,0,0.5); display: flex; align-items: center; 
+                    justify-content: center; z-index: 1000;
+                `;
+
+                modal.innerHTML = `
+                    <div style="background: white; border-radius: 12px; width: 95%; max-width: 1200px; height: 90vh; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                        <!-- Header -->
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <span style="font-size: 1.8rem;">🎯</span>
+                                <div>
+                                    <h3 style="margin: 0; font-size: 1.4rem;">Available Shifts & Coverage Opportunities</h3>
+                                    <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">${selectedWorkplace.replace('_', ' ').toUpperCase()}</p>
+                                </div>
+                            </div>
+                            <button onclick="closeWorkerShiftPostingsModal()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 40px; height: 40px; color: white; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;">
+                                ✕
+                            </button>
+                        </div>
+
+                        <!-- Content Area -->
+                        <div style="padding: 2rem; height: calc(90vh - 100px); overflow-y: auto;">
+                            <div id="workerShiftPostingsContent">
+                                <div style="text-align: center; padding: 2rem; color: #666;">
+                                    <div style="font-size: 2rem; margin-bottom: 1rem;">🔄</div>
+                                    <p>Loading available shifts...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(modal);
+
+                // Load and display shift postings
+                await loadWorkerShiftPostings();
+
+            } catch (error) {
+                console.error('Error showing worker shift postings modal:', error);
+                showNotification('❌ Error loading shift postings', 'error');
+            }
+        };
+
+        window.closeWorkerShiftPostingsModal = function() {
+            const modal = document.getElementById('workerShiftPostingsModal');
+            if (modal) {
+                modal.remove();
+            }
+        };
+
+        async function loadWorkerShiftPostings() {
+            try {
+                const contentDiv = document.getElementById('workerShiftPostingsContent');
+                if (!contentDiv) return;
+
+                // Load shift postings for this workplace
+                const shiftPostingsSnapshot = await getDocs(
+                    query(
+                        collection(db, 'shift_postings'),
+                        where('workplace', '==', selectedWorkplace),
+                        where('status', '==', 'open'),
+                        orderBy('created_at', 'desc')
+                    )
+                );
+
+                const postings = [];
+                shiftPostingsSnapshot.forEach(doc => {
+                    postings.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Separate coverage requests from regular postings
+                const coverageRequests = postings.filter(p => p.type === 'coverage_request');
+                const regularPostings = postings.filter(p => p.type !== 'coverage_request');
+
+                let html = `
+                    <!-- Stats Overview -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 12px; text-align: center;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">${coverageRequests.length}</div>
+                            <div style="opacity: 0.9;">Coverage Requests</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 1.5rem; border-radius: 12px; text-align: center;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">${regularPostings.length}</div>
+                            <div style="opacity: 0.9;">Open Shifts</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%); color: white; padding: 1.5rem; border-radius: 12px; text-align: center;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">${postings.length}</div>
+                            <div style="opacity: 0.9;">Total Available</div>
+                        </div>
+                    </div>
+
+                    <!-- Worker Instructions -->
+                    <div style="background: #e3f2fd; border: 1px solid #2196f3; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
+                        <h4 style="margin: 0 0 1rem 0; color: #1976d2; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>💡</span> How to Claim Shifts
+                        </h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                            <div>
+                                <strong>Coverage Requests:</strong> Help cover for fellow workers who need assistance with their shifts.
+                            </div>
+                            <div>
+                                <strong>Open Shifts:</strong> Regular shifts posted by management for additional workers.
+                            </div>
+                            <div>
+                                <strong>First Come, First Served:</strong> Shifts are assigned automatically when you click "I Can Cover This!"
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Coverage Requests Section
+                if (coverageRequests.length > 0) {
+                    html += `
+                        <div style="margin-bottom: 2rem;">
+                            <h4 style="color: #333; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem;">URGENT</span>
+                                Coverage Requests - Help Your Fellow Workers!
+                            </h4>
+                            <div style="display: grid; gap: 1rem;">
+                    `;
+
+                    coverageRequests.forEach(posting => {
+                        const postingDate = new Date(posting.shift_date);
+                        const formattedDate = postingDate.toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            month: 'short', 
+                            day: 'numeric' 
+                        });
+
+                        html += `
+                            <div style="background: white; border: 2px solid #dc3545; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(220,53,69,0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                            <span style="background: #dc3545; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">COVERAGE NEEDED</span>
+                                            <span style="color: #666; font-size: 0.9rem;">${formattedDate}</span>
+                                        </div>
+                                        <div style="font-size: 1.2rem; font-weight: 600; color: #333; margin-bottom: 0.5rem;">
+                                            ${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}
+                                        </div>
+                                        <div style="color: #666; margin-bottom: 1rem;">
+                                            <strong>Original Workers:</strong> ${posting.workers && posting.workers.length > 0 ? posting.workers.join(', ') : 'Various workers'}
+                                        </div>
+                                        ${posting.description ? `
+                                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; border-left: 4px solid #dc3545;">
+                                                <strong>Note:</strong> ${posting.description}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                    <div style="text-align: center; min-width: 150px;">
+                                        <button onclick="applyForShift('${posting.id}', 'coverage')" 
+                                                class="btn" 
+                                                style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(220,53,69,0.3); transition: all 0.3s ease;">
+                                            🆘 I Can Cover This!
+                                        </button>
+                                        <div style="font-size: 0.8rem; color: #999; margin-top: 0.5rem;">
+                                            Posted: ${new Date(posting.created_at.seconds * 1000).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Regular Postings Section
+                if (regularPostings.length > 0) {
+                    html += `
+                        <div style="margin-bottom: 2rem;">
+                            <h4 style="color: #333; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="background: #28a745; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem;">AVAILABLE</span>
+                                Open Shift Opportunities
+                            </h4>
+                            <div style="display: grid; gap: 1rem;">
+                    `;
+
+                    regularPostings.forEach(posting => {
+                        const postingDate = new Date(posting.shift_date);
+                        const formattedDate = postingDate.toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            month: 'short', 
+                            day: 'numeric' 
+                        });
+
+                        html += `
+                            <div style="background: white; border: 2px solid #28a745; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(40,167,69,0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                            <span style="background: #28a745; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">OPEN SHIFT</span>
+                                            <span style="color: #666; font-size: 0.9rem;">${formattedDate}</span>
+                                        </div>
+                                        <div style="font-size: 1.2rem; font-weight: 600; color: #333; margin-bottom: 0.5rem;">
+                                            ${formatTime(posting.start_time)} - ${formatTime(posting.end_time)}
+                                        </div>
+                                        <div style="color: #666; margin-bottom: 1rem;">
+                                            <strong>Workers Needed:</strong> ${posting.workers_needed || 1}
+                                        </div>
+                                        ${posting.description ? `
+                                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; border-left: 4px solid #28a745;">
+                                                <strong>Details:</strong> ${posting.description}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                    <div style="text-align: center; min-width: 150px;">
+                                        <button onclick="applyForShift('${posting.id}', 'regular')" 
+                                                class="btn" 
+                                                style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(40,167,69,0.3); transition: all 0.3s ease;">
+                                            ✋ I'm Available!
+                                        </button>
+                                        <div style="font-size: 0.8rem; color: #999; margin-top: 0.5rem;">
+                                            Posted: ${new Date(posting.created_at.seconds * 1000).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // No postings message
+                if (postings.length === 0) {
+                    html += `
+                        <div style="text-align: center; padding: 3rem; color: #666;">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">😴</div>
+                            <h3 style="color: #333; margin-bottom: 0.5rem;">No Available Shifts Right Now</h3>
+                            <p>Check back later for new shift opportunities and coverage requests!</p>
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1.5rem; text-align: left;">
+                                <strong>💡 Tip:</strong> When shifts become available, you'll see both coverage requests (helping fellow workers) and open shifts (extra work opportunities) here.
+                            </div>
+                        </div>
+                    `;
+                }
+
+                contentDiv.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error loading worker shift postings:', error);
+                const contentDiv = document.getElementById('workerShiftPostingsContent');
+                if (contentDiv) {
+                    contentDiv.innerHTML = `
+                        <div style="text-align: center; padding: 2rem; color: #dc3545;">
+                            <div style="font-size: 2rem; margin-bottom: 1rem;">❌</div>
+                            <h3>Error Loading Shift Postings</h3>
+                            <p>Unable to load available shifts. Please try again later.</p>
+                            <button onclick="loadWorkerShiftPostings()" class="btn btn-primary" style="margin-top: 1rem;">
+                                🔄 Try Again
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+        }
 
         function generateShiftSelectionHTML(schedule) {
             if (!schedule || Object.keys(schedule).length === 0) {
