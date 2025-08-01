@@ -5021,6 +5021,9 @@
                                 <button class="tab-btn" data-tab="analytics" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
                                     Analytics
                                 </button>
+                                <button class="tab-btn" data-tab="shift_postings" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
+                                    🎯 Shift Postings
+                                </button>
                             </div>
                         </div>
                         <div class="tab-content">
@@ -5404,6 +5407,9 @@
                     break;
                 case 'analytics':
                     displayAnalyticsTab(contentContainer);
+                    break;
+                case 'shift_postings':
+                    await displayShiftPostingsTab(contentContainer);
                     break;
             }
         }
@@ -6150,6 +6156,764 @@
             loadSecurityLogs();
             loadInsights();
         }
+
+        async function displayShiftPostingsTab(contentContainer) {
+            try {
+                console.log('Displaying shift postings tab');
+                
+                // Load current shift postings for this workplace
+                const shiftPostingsSnapshot = await getDocs(
+                    query(
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings'),
+                        orderBy('postedAt', 'desc')
+                    )
+                );
+                
+                const postings = [];
+                shiftPostingsSnapshot.forEach(doc => {
+                    postings.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Count active vs expired postings
+                const now = new Date();
+                const activePostings = postings.filter(p => new Date(p.expiresAt) > now);
+                const expiredPostings = postings.filter(p => new Date(p.expiresAt) <= now);
+                
+                let html = `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+                            <span style="font-size: 1.5rem;">🎯</span>
+                            <h3 style="margin: 0; font-size: 1.3rem;">Shift Postings & Worker Bidding</h3>
+                        </div>
+                        <p style="margin: 0; opacity: 0.9;">Post available shifts for workers to claim and manage applications</p>
+                        ${user.isAdmin ? `
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                            <button class="btn btn-success" onclick="showCreateShiftPosting()" style="background: #28a745; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">➕</span>Post New Shift
+                            </button>
+                            <button class="btn btn-info" onclick="contactAllWorkers()" style="background: #17a2b8; border: none; padding: 0.5rem 1rem; border-radius: 6px; color: white; cursor: pointer;">
+                                <span style="margin-right: 0.5rem;">📧</span>Contact All Workers
+                            </button>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #667eea;">${postings.length}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Total Postings</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${activePostings.length}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Active Postings</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #ffc107;">${expiredPostings.length}</div>
+                            <div style="color: #666; font-size: 0.9rem;">Expired Postings</div>
+                        </div>
+                        <div style="background: white; padding: 1.5rem; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #17a2b8;" id="totalApplications">0</div>
+                            <div style="color: #666; font-size: 0.9rem;">Total Applications</div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center;">
+                        <div style="flex: 1; position: relative;">
+                            <input type="text" id="postingSearchInput" placeholder="Search postings by date, time, or description..." 
+                                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #999;">🔍</span>
+                        </div>
+                        <select id="postingFilterStatus" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <option value="all">All Postings</option>
+                            <option value="active">Active Only</option>
+                            <option value="expired">Expired Only</option>
+                            <option value="pending">Pending Applications</option>
+                            <option value="filled">Filled Positions</option>
+                        </select>
+                    </div>
+                `;
+                
+                if (postings.length === 0) {
+                    html += '<div class="warning">No shift postings found. Create your first posting to get started!</div>';
+                } else {
+                    html += await generateShiftPostingsTable(postings);
+                }
+                
+                if (contentContainer) {
+                    contentContainer.innerHTML = html;
+                    
+                    // Setup search and filter functionality
+                    setupShiftPostingSearchAndFilter();
+                    
+                    // Load application counts
+                    await updateApplicationCounts();
+                } else {
+                    console.error('No content container provided to displayShiftPostingsTab');
+                }
+                
+            } catch (error) {
+                console.error('Error displaying shift postings tab:', error);
+                if (contentContainer) {
+                    contentContainer.innerHTML = `<div class="error">Error loading shift postings: ${error.message}</div>`;
+                }
+            }
+        }
+
+        async function generateShiftPostingsTable(postings) {
+            const now = new Date();
+            
+            let html = `
+                <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f8f9fa;">
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Date & Time</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Description</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Status</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Applications</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Posted By</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 200px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            for (const posting of postings) {
+                const isExpired = new Date(posting.expiresAt) <= now;
+                const isFilled = posting.status === 'filled';
+                const statusColor = isExpired ? '#dc3545' : (isFilled ? '#28a745' : '#ffc107');
+                const statusText = isExpired ? 'Expired' : (isFilled ? 'Filled' : 'Active');
+                const statusIcon = isExpired ? '❌' : (isFilled ? '✅' : '🟡');
+                
+                // Get application count for this posting
+                const applicationsSnapshot = await getDocs(
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', posting.id, 'applications')
+                );
+                const applicationCount = applicationsSnapshot.size;
+                const pendingCount = applicationsSnapshot.docs.filter(doc => doc.data().status === 'pending').length;
+                
+                html += `
+                    <tr style="border-bottom: 1px solid #dee2e6;">
+                        <td style="padding: 1rem;">
+                            <div style="font-weight: 600;">${new Date(posting.shiftDate).toLocaleDateString()}</div>
+                            <div style="color: #666; font-size: 0.9rem;">${posting.startTime} - ${posting.endTime}</div>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <div style="font-weight: 600;">${posting.title}</div>
+                            <div style="color: #666; font-size: 0.9rem;">${posting.description || 'No description'}</div>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
+                                ${statusIcon} ${statusText}
+                            </span>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <div style="font-weight: 600;">${applicationCount} Total</div>
+                            ${pendingCount > 0 ? `<div style="color: #ffc107; font-size: 0.9rem;">${pendingCount} Pending</div>` : ''}
+                        </td>
+                        <td style="padding: 1rem;">
+                            <div style="font-weight: 600;">${posting.postedBy}</div>
+                            <div style="color: #666; font-size: 0.9rem;">${new Date(posting.postedAt).toLocaleDateString()}</div>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                                <button class="btn btn-info" onclick="viewShiftApplications('${posting.id}')" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">👥 View Applications</button>
+                                ${!user.isAdmin ? `
+                                    ${!isExpired && !isFilled ? `
+                                        <button class="btn btn-success" onclick="applyForShift('${posting.id}')" style="background: #28a745; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✋ Apply</button>
+                                    ` : ''}
+                                ` : `
+                                    <button class="btn btn-warning" onclick="editShiftPosting('${posting.id}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
+                                    <button class="btn btn-danger" onclick="deleteShiftPosting('${posting.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">🗑️ Delete</button>
+                                    ${applicationCount > 0 ? `
+                                        <button class="btn btn-primary" onclick="contactApplicants('${posting.id}')" style="background: #007bff; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">📧 Contact All</button>
+                                    ` : ''}
+                                `}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function setupShiftPostingSearchAndFilter() {
+            const searchInput = document.getElementById('postingSearchInput');
+            const statusFilter = document.getElementById('postingFilterStatus');
+            
+            if (searchInput) {
+                searchInput.addEventListener('input', filterShiftPostings);
+            }
+            if (statusFilter) {
+                statusFilter.addEventListener('change', filterShiftPostings);
+            }
+        }
+
+        function filterShiftPostings() {
+            const searchInput = document.getElementById('postingSearchInput');
+            const statusFilter = document.getElementById('postingFilterStatus');
+            
+            if (!searchInput || !statusFilter) return;
+            
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const statusFilterValue = statusFilter.value;
+            
+            // Get all table rows
+            const tableRows = document.querySelectorAll('#workersModalContent tbody tr');
+            
+            tableRows.forEach(row => {
+                const dateTimeCell = row.cells[0]?.textContent || '';
+                const descriptionCell = row.cells[1]?.textContent || '';
+                const statusCell = row.cells[2]?.textContent || '';
+                
+                // Search filter
+                const matchesSearch = searchTerm === '' || 
+                                    dateTimeCell.toLowerCase().includes(searchTerm) || 
+                                    descriptionCell.toLowerCase().includes(searchTerm);
+                
+                // Status filter
+                let matchesStatus = true;
+                if (statusFilterValue !== 'all') {
+                    switch (statusFilterValue) {
+                        case 'active':
+                            matchesStatus = statusCell.includes('Active');
+                            break;
+                        case 'expired':
+                            matchesStatus = statusCell.includes('Expired');
+                            break;
+                        case 'filled':
+                            matchesStatus = statusCell.includes('Filled');
+                            break;
+                        case 'pending':
+                            matchesStatus = row.cells[3]?.textContent.includes('Pending');
+                            break;
+                    }
+                }
+                
+                // Show/hide row based on filters
+                if (matchesSearch && matchesStatus) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        async function updateApplicationCounts() {
+            try {
+                const postingsSnapshot = await getDocs(
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings')
+                );
+                
+                let totalApplications = 0;
+                for (const postingDoc of postingsSnapshot.docs) {
+                    const applicationsSnapshot = await getDocs(
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingDoc.id, 'applications')
+                    );
+                    totalApplications += applicationsSnapshot.size;
+                }
+                
+                const totalApplicationsElement = document.getElementById('totalApplications');
+                if (totalApplicationsElement) {
+                    totalApplicationsElement.textContent = totalApplications;
+                }
+            } catch (error) {
+                console.error('Error updating application counts:', error);
+            }
+        }
+
+        // Shift Posting Management Functions
+        window.showCreateShiftPosting = function() {
+            const modal = document.getElementById('shiftPostingModal') || createShiftPostingModal();
+            
+            // Reset form for new posting
+            document.getElementById('shiftPostingTitle').value = '';
+            document.getElementById('shiftPostingDescription').value = '';
+            document.getElementById('shiftPostingDate').value = '';
+            document.getElementById('shiftPostingStartTime').value = '';
+            document.getElementById('shiftPostingEndTime').value = '';
+            document.getElementById('shiftPostingExpires').value = '';
+            
+            // Set default expire date (3 days from now)
+            const defaultExpireDate = new Date();
+            defaultExpireDate.setDate(defaultExpireDate.getDate() + 3);
+            document.getElementById('shiftPostingExpires').value = defaultExpireDate.toISOString().split('T')[0];
+            
+            modal.removeAttribute('data-edit-id');
+            document.getElementById('shiftPostingModalTitle').textContent = '🎯 Create Shift Posting';
+            modal.style.display = 'block';
+        };
+
+        function createShiftPostingModal() {
+            const modalHTML = `
+                <div id="shiftPostingModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+                    <div class="modal-content" style="background-color: #fefefe; margin: 5% auto; padding: 0; border: none; border-radius: 12px; width: 90%; max-width: 600px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                        <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 12px 12px 0 0;">
+                            <span class="close" onclick="closeModal('shiftPostingModal')" style="color: white; float: right; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1;">&times;</span>
+                            <h2 id="shiftPostingModalTitle" style="margin: 0; font-size: 1.3rem;">🎯 Create Shift Posting</h2>
+                        </div>
+                        <div class="modal-body" style="padding: 2rem;">
+                            <form id="shiftPostingForm">
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333;">Shift Title</label>
+                                    <input type="text" id="shiftPostingTitle" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;" placeholder="e.g., Evening Desk Coverage, Weekend Support">
+                                </div>
+                                
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333;">Description (Optional)</label>
+                                    <textarea id="shiftPostingDescription" rows="3" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;" placeholder="Additional details about the shift..."></textarea>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                                    <div>
+                                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333;">Shift Date</label>
+                                        <input type="date" id="shiftPostingDate" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333;">Expires On</label>
+                                        <input type="date" id="shiftPostingExpires" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                                    </div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                                    <div>
+                                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333;">Start Time</label>
+                                        <input type="time" id="shiftPostingStartTime" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333;">End Time</label>
+                                        <input type="time" id="shiftPostingEndTime" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                                    </div>
+                                </div>
+                                
+                                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                                    <button type="button" onclick="closeModal('shiftPostingModal')" style="background: #6c757d; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer;">Cancel</button>
+                                    <button type="submit" style="background: #28a745; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer;">🎯 Post Shift</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            // Add form submission handler
+            document.getElementById('shiftPostingForm').addEventListener('submit', handleShiftPostingSubmission);
+            
+            return document.getElementById('shiftPostingModal');
+        }
+
+        async function handleShiftPostingSubmission(e) {
+            e.preventDefault();
+            
+            const title = document.getElementById('shiftPostingTitle').value.trim();
+            const description = document.getElementById('shiftPostingDescription').value.trim();
+            const shiftDate = document.getElementById('shiftPostingDate').value;
+            const startTime = document.getElementById('shiftPostingStartTime').value;
+            const endTime = document.getElementById('shiftPostingEndTime').value;
+            const expiresAt = document.getElementById('shiftPostingExpires').value;
+            
+            if (!title || !shiftDate || !startTime || !endTime || !expiresAt) {
+                showNotification('❌ Please fill in all required fields', 'error');
+                return;
+            }
+            
+            // Validate that shift date is in the future
+            const shiftDateTime = new Date(shiftDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            if (shiftDateTime < today) {
+                showNotification('❌ Shift date must be in the future', 'error');
+                return;
+            }
+            
+            // Validate that expiration is before shift date
+            const expirationDate = new Date(expiresAt);
+            if (expirationDate >= shiftDateTime) {
+                showNotification('❌ Expiration date must be before the shift date', 'error');
+                return;
+            }
+            
+            try {
+                const modal = document.getElementById('shiftPostingModal');
+                const editId = modal.getAttribute('data-edit-id');
+                
+                const postingData = {
+                    title,
+                    description,
+                    shiftDate: shiftDate,
+                    startTime,
+                    endTime,
+                    expiresAt: expiresAt,
+                    postedBy: user.email,
+                    workplace: selectedWorkplace,
+                    status: 'active',
+                    updatedAt: new Date().toISOString()
+                };
+                
+                if (editId) {
+                    // Update existing posting
+                    await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', editId), postingData);
+                    showNotification('✅ Shift posting updated successfully!', 'success');
+                } else {
+                    // Create new posting
+                    postingData.postedAt = new Date().toISOString();
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shift_postings'), postingData);
+                    showNotification('✅ Shift posting created successfully!', 'success');
+                }
+                
+                closeModal('shiftPostingModal');
+                
+                // Refresh the shift postings tab
+                const contentContainer = document.querySelector('#workersModalContent .tab-content');
+                if (contentContainer) {
+                    await displayShiftPostingsTab(contentContainer);
+                }
+                
+            } catch (error) {
+                console.error('Error saving shift posting:', error);
+                showNotification('❌ Failed to save shift posting', 'error');
+            }
+        }
+
+        // Additional Shift Posting Management Functions
+        window.contactAllWorkers = function() {
+            const subject = encodeURIComponent(`New Shift Opportunities Available at ${getWorkplaceName(selectedWorkplace)}`);
+            const body = encodeURIComponent(`Hello Team,
+
+New shift opportunities have been posted for ${getWorkplaceName(selectedWorkplace)}! 
+
+Please check the Shift Postings section in the dashboard to view available shifts and apply for any that work with your schedule.
+
+To apply:
+1. Log into the dashboard
+2. Go to Worker Management → Shift Postings tab
+3. Click "Apply" on any shifts you're interested in
+
+Applications are processed on a first-come, first-served basis with consideration for work study requirements and availability.
+
+Best regards,
+Management Team`);
+            
+            // Create mailto link for all workers
+            const allWorkerEmails = workers.map(w => w.email).join(';');
+            const mailtoLink = `mailto:${allWorkerEmails}?subject=${subject}&body=${body}`;
+            
+            window.open(mailtoLink, '_blank');
+            showNotification('📧 Email template opened with all worker addresses', 'info');
+        };
+
+        window.contactApplicants = async function(postingId) {
+            try {
+                // Get all applicants for this posting
+                const applicationsSnapshot = await getDocs(
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications')
+                );
+                
+                if (applicationsSnapshot.empty) {
+                    showNotification('ℹ️ No applicants found for this posting', 'info');
+                    return;
+                }
+                
+                // Get posting details
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
+                const posting = postingDoc.data();
+                
+                const applicantEmails = [];
+                applicationsSnapshot.forEach(doc => {
+                    applicantEmails.push(doc.data().workerEmail);
+                });
+                
+                const subject = encodeURIComponent(`Update on Shift Application: ${posting.title}`);
+                const body = encodeURIComponent(`Hello,
+
+Thank you for applying for the shift: ${posting.title}
+Date: ${new Date(posting.shiftDate).toLocaleDateString()}
+Time: ${posting.startTime} - ${posting.endTime}
+
+Please respond to this email to confirm your availability or ask any questions about the position.
+
+Best regards,
+Management Team`);
+                
+                const mailtoLink = `mailto:${applicantEmails.join(';')}?subject=${subject}&body=${body}`;
+                window.open(mailtoLink, '_blank');
+                
+                showNotification(`📧 Email template opened for ${applicantEmails.length} applicants`, 'info');
+                
+            } catch (error) {
+                console.error('Error contacting applicants:', error);
+                showNotification('❌ Failed to generate contact email', 'error');
+            }
+        };
+
+        window.viewShiftApplications = async function(postingId) {
+            try {
+                // Get posting details
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
+                const posting = postingDoc.data();
+                
+                // Get applications
+                const applicationsSnapshot = await getDocs(
+                    query(
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications'),
+                        orderBy('appliedAt', 'asc')
+                    )
+                );
+                
+                const applications = [];
+                applicationsSnapshot.forEach(doc => {
+                    applications.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Create or show applications modal
+                showApplicationsModal(postingId, posting, applications);
+                
+            } catch (error) {
+                console.error('Error viewing applications:', error);
+                showNotification('❌ Failed to load applications', 'error');
+            }
+        };
+
+        function showApplicationsModal(postingId, posting, applications) {
+            const modalId = 'shiftApplicationsModal';
+            
+            // Remove existing modal if present
+            const existingModal = document.getElementById(modalId);
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            let applicationsHTML = '';
+            if (applications.length === 0) {
+                applicationsHTML = '<div style="text-align: center; padding: 2rem; color: #666;">No applications yet</div>';
+            } else {
+                applicationsHTML = `
+                    <div style="background: white; border-radius: 8px; overflow: hidden;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f8f9fa;">
+                                    <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6;">Worker</th>
+                                    <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6;">Applied</th>
+                                    <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6;">Status</th>
+                                    <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6;">Notes</th>
+                                    <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                applications.forEach(app => {
+                    const worker = workers.find(w => w.email === app.workerEmail);
+                    const statusColor = app.status === 'approved' ? '#28a745' : 
+                                      app.status === 'denied' ? '#dc3545' : '#ffc107';
+                    const statusIcon = app.status === 'approved' ? '✅' : 
+                                     app.status === 'denied' ? '❌' : '⏳';
+                    
+                    applicationsHTML += `
+                        <tr style="border-bottom: 1px solid #dee2e6;">
+                            <td style="padding: 1rem;">
+                                <div style="font-weight: 600;">${worker ? `${worker.first_name} ${worker.last_name}` : app.workerEmail}</div>
+                                <div style="color: #666; font-size: 0.9rem;">${app.workerEmail}</div>
+                            </td>
+                            <td style="padding: 1rem;">
+                                <div>${new Date(app.appliedAt).toLocaleDateString()}</div>
+                                <div style="color: #666; font-size: 0.9rem;">${new Date(app.appliedAt).toLocaleTimeString()}</div>
+                            </td>
+                            <td style="padding: 1rem;">
+                                <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                                    ${statusIcon} ${app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                                </span>
+                            </td>
+                            <td style="padding: 1rem;">
+                                <div style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${app.notes || 'No notes'}</div>
+                            </td>
+                            <td style="padding: 1rem;">
+                                ${user.isAdmin && app.status === 'pending' ? `
+                                    <div style="display: flex; gap: 0.25rem;">
+                                        <button onclick="approveApplication('${postingId}', '${app.id}')" style="background: #28a745; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">✅ Approve</button>
+                                        <button onclick="denyApplication('${postingId}', '${app.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">❌ Deny</button>
+                                    </div>
+                                ` : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                applicationsHTML += '</tbody></table></div>';
+            }
+            
+            const modalHTML = `
+                <div id="${modalId}" class="modal" style="display: block; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+                    <div class="modal-content" style="background-color: #fefefe; margin: 5% auto; padding: 0; border: none; border-radius: 12px; width: 95%; max-width: 900px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                        <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 12px 12px 0 0;">
+                            <span class="close" onclick="closeModal('${modalId}')" style="color: white; float: right; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1;">&times;</span>
+                            <h2 style="margin: 0; font-size: 1.3rem;">👥 Applications for: ${posting.title}</h2>
+                            <div style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.9;">
+                                ${new Date(posting.shiftDate).toLocaleDateString()} • ${posting.startTime} - ${posting.endTime}
+                            </div>
+                        </div>
+                        <div class="modal-body" style="padding: 2rem; max-height: 60vh; overflow-y: auto;">
+                            ${applicationsHTML}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        window.applyForShift = async function(postingId) {
+            try {
+                // Check if user has already applied
+                const existingApplicationSnapshot = await getDocs(
+                    query(
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications'),
+                        where('workerEmail', '==', user.email)
+                    )
+                );
+                
+                if (!existingApplicationSnapshot.empty) {
+                    showNotification('ℹ️ You have already applied for this shift', 'info');
+                    return;
+                }
+                
+                // Get user notes
+                const notes = prompt('Any additional notes for your application? (Optional)') || '';
+                
+                // Create application
+                const applicationData = {
+                    workerEmail: user.email,
+                    appliedAt: new Date().toISOString(),
+                    status: 'pending',
+                    notes: notes
+                };
+                
+                await addDoc(
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications'),
+                    applicationData
+                );
+                
+                showNotification('✅ Application submitted successfully!', 'success');
+                
+                // Refresh the shift postings display
+                const contentContainer = document.querySelector('#workersModalContent .tab-content');
+                if (contentContainer) {
+                    await displayShiftPostingsTab(contentContainer);
+                }
+                
+            } catch (error) {
+                console.error('Error applying for shift:', error);
+                showNotification('❌ Failed to submit application', 'error');
+            }
+        };
+
+        window.approveApplication = async function(postingId, applicationId) {
+            try {
+                await updateDoc(
+                    doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications', applicationId),
+                    {
+                        status: 'approved',
+                        approvedAt: new Date().toISOString(),
+                        approvedBy: user.email
+                    }
+                );
+                
+                showNotification('✅ Application approved!', 'success');
+                
+                // Refresh the applications modal
+                await viewShiftApplications(postingId);
+                
+            } catch (error) {
+                console.error('Error approving application:', error);
+                showNotification('❌ Failed to approve application', 'error');
+            }
+        };
+
+        window.denyApplication = async function(postingId, applicationId) {
+            const reason = prompt('Reason for denial (optional):') || '';
+            
+            try {
+                await updateDoc(
+                    doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications', applicationId),
+                    {
+                        status: 'denied',
+                        deniedAt: new Date().toISOString(),
+                        deniedBy: user.email,
+                        denialReason: reason
+                    }
+                );
+                
+                showNotification('❌ Application denied', 'info');
+                
+                // Refresh the applications modal
+                await viewShiftApplications(postingId);
+                
+            } catch (error) {
+                console.error('Error denying application:', error);
+                showNotification('❌ Failed to deny application', 'error');
+            }
+        };
+
+        window.editShiftPosting = async function(postingId) {
+            try {
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
+                const posting = postingDoc.data();
+                
+                const modal = document.getElementById('shiftPostingModal') || createShiftPostingModal();
+                
+                // Populate form with existing data
+                document.getElementById('shiftPostingTitle').value = posting.title;
+                document.getElementById('shiftPostingDescription').value = posting.description || '';
+                document.getElementById('shiftPostingDate').value = posting.shiftDate;
+                document.getElementById('shiftPostingStartTime').value = posting.startTime;
+                document.getElementById('shiftPostingEndTime').value = posting.endTime;
+                document.getElementById('shiftPostingExpires').value = posting.expiresAt;
+                
+                modal.setAttribute('data-edit-id', postingId);
+                document.getElementById('shiftPostingModalTitle').textContent = '✏️ Edit Shift Posting';
+                modal.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading posting for edit:', error);
+                showNotification('❌ Failed to load posting data', 'error');
+            }
+        };
+
+        window.deleteShiftPosting = async function(postingId) {
+            if (!confirm('Are you sure you want to delete this shift posting? This will also delete all applications and cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                // Delete all applications first
+                const applicationsSnapshot = await getDocs(
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications')
+                );
+                
+                const deletePromises = applicationsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+                
+                // Delete the posting
+                await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
+                
+                showNotification('✅ Shift posting deleted successfully!', 'success');
+                
+                // Refresh the shift postings display
+                const contentContainer = document.querySelector('#workersModalContent .tab-content');
+                if (contentContainer) {
+                    await displayShiftPostingsTab(contentContainer);
+                }
+                
+            } catch (error) {
+                console.error('Error deleting shift posting:', error);
+                showNotification('❌ Failed to delete shift posting', 'error');
+            }
+        };
 
         // Helper function to check if login was recent (within 7 days)
         function isRecentLogin(loginText) {
