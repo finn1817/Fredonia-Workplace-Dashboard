@@ -5417,11 +5417,17 @@
             const pinnedWorkers = workersList.filter(w => pinned.includes(w.id) || w.isPinned);
             const unpinnedWorkers = workersList.filter(w => !pinned.includes(w.id) && !w.isPinned);
             
-            // Sort both groups alphabetically by first name, then last name
+            // Sort both groups alphabetically by last name, then first name
             const sortAlphabetically = (a, b) => {
-                const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
-                const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
-                return nameA.localeCompare(nameB);
+                const lastNameA = a.last_name.toLowerCase();
+                const lastNameB = b.last_name.toLowerCase();
+                if (lastNameA === lastNameB) {
+                    // If last names are the same, sort by first name
+                    const firstNameA = a.first_name.toLowerCase();
+                    const firstNameB = b.first_name.toLowerCase();
+                    return firstNameA.localeCompare(firstNameB);
+                }
+                return lastNameA.localeCompare(lastNameB);
             };
             
             pinnedWorkers.sort(sortAlphabetically);
@@ -5504,6 +5510,26 @@
                             <div style="color: #666; font-size: 0.9rem;">With Availability</div>
                         </div>
                     </div>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center;">
+                        <div style="flex: 1; position: relative;">
+                            <input type="text" id="workerSearchInput" placeholder="Search workers by name or email..." 
+                                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #999;">🔍</span>
+                        </div>
+                        <select id="workerFilterType" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <option value="all">All Workers</option>
+                            <option value="regular">Regular Workers</option>
+                            <option value="cover">Cover Workers</option>
+                            <option value="work_study">Work Study Only</option>
+                        </select>
+                        <select id="workerFilterStatus" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            <option value="all">All Status</option>
+                            <option value="pinned">Pinned Workers</option>
+                            <option value="has_availability">Has Availability</option>
+                            <option value="no_availability">No Availability Set</option>
+                        </select>
+                    </div>
                 `;
                 
                 if (workers.length === 0) {
@@ -5515,7 +5541,8 @@
                                 <thead>
                                     <tr style="background: #f8f9fa;">
                                         <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
-                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">First Name</th>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Last Name</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Work Study</th>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Worker Type</th>
@@ -5545,9 +5572,12 @@
                                 </td>
                                 <td style="padding: 1rem; font-weight: 600;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <strong>${worker.first_name} ${worker.last_name}</strong>
-                                        ${isPinned ? '<span style="color: #667eea; font-size: 0.8rem;">📌 Pinned</span>' : ''}
+                                        <strong>${worker.first_name}</strong>
+                                        ${isPinned ? '<span style="color: #667eea; font-size: 0.8rem;">📌</span>' : ''}
                                     </div>
+                                </td>
+                                <td style="padding: 1rem; font-weight: 600;">
+                                    <strong>${worker.last_name}</strong>
                                 </td>
                                 <td style="padding: 1rem;">${worker.email}</td>
                                 <td style="padding: 1rem;">${worker.work_study ? '✅ Yes' : '❌ No'}</td>
@@ -5572,6 +5602,9 @@
                 
                 if (contentContainer) {
                     contentContainer.innerHTML = html;
+                    
+                    // Add search and filter functionality for workers
+                    setupWorkerSearchAndFilter();
                 } else {
                     console.error('No content container provided to displayWorkersTab');
                 }
@@ -5582,6 +5615,97 @@
                     contentContainer.innerHTML = `<div class="error">Error loading workers: ${error.message}</div>`;
                 }
             }
+        }
+
+        function setupWorkerSearchAndFilter() {
+            const searchInput = document.getElementById('workerSearchInput');
+            const typeFilter = document.getElementById('workerFilterType');
+            const statusFilter = document.getElementById('workerFilterStatus');
+            
+            if (searchInput) {
+                searchInput.addEventListener('input', filterWorkers);
+            }
+            if (typeFilter) {
+                typeFilter.addEventListener('change', filterWorkers);
+            }
+            if (statusFilter) {
+                statusFilter.addEventListener('change', filterWorkers);
+            }
+        }
+
+        async function filterWorkers() {
+            const searchInput = document.getElementById('workerSearchInput');
+            const typeFilter = document.getElementById('workerFilterType');
+            const statusFilter = document.getElementById('workerFilterStatus');
+            
+            if (!searchInput || !typeFilter || !statusFilter) return;
+            
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const typeFilterValue = typeFilter.value;
+            const statusFilterValue = statusFilter.value;
+            
+            const pinnedList = await getPinnedWorkers();
+            
+            // Get all table rows
+            const tableRows = document.querySelectorAll('#workersModalContent tbody tr');
+            
+            tableRows.forEach(row => {
+                // Get the worker data from the row
+                const firstNameCell = row.cells[1]?.textContent || '';
+                const lastNameCell = row.cells[2]?.textContent || '';
+                const emailCell = row.cells[3]?.textContent || '';
+                const workStudyCell = row.cells[4]?.textContent || '';
+                const workerTypeCell = row.cells[5]?.textContent || '';
+                
+                const fullName = `${firstNameCell} ${lastNameCell}`.toLowerCase();
+                const email = emailCell.toLowerCase();
+                
+                // Search filter (name or email)
+                const matchesSearch = searchTerm === '' || 
+                                    fullName.includes(searchTerm) || 
+                                    email.includes(searchTerm);
+                
+                // Type filter
+                let matchesType = true;
+                if (typeFilterValue !== 'all') {
+                    switch (typeFilterValue) {
+                        case 'regular':
+                            matchesType = workerTypeCell.includes('Regular');
+                            break;
+                        case 'cover':
+                            matchesType = workerTypeCell.includes('Cover');
+                            break;
+                        case 'work_study':
+                            matchesType = workStudyCell.includes('Yes');
+                            break;
+                    }
+                }
+                
+                // Status filter
+                let matchesStatus = true;
+                if (statusFilterValue !== 'all') {
+                    switch (statusFilterValue) {
+                        case 'pinned':
+                            matchesStatus = row.querySelector('[title*="Unpin"]') !== null;
+                            break;
+                        case 'has_availability':
+                            const availabilityCell = row.cells[6]?.textContent || '';
+                            matchesStatus = !availabilityCell.includes('No availability set');
+                            break;
+                        case 'no_availability':
+                            const availabilityCell2 = row.cells[6]?.textContent || '';
+                            matchesStatus = availabilityCell2.includes('No availability set');
+                            break;
+                    }
+                }
+                
+                // Show/hide row based on all filters
+                if (matchesSearch && matchesType && matchesStatus) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
         }
 
         async function displayUsersTab(contentContainer) {
