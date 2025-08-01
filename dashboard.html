@@ -10144,17 +10144,17 @@
 
         async function loadCoverRequests() {
             try {
+                // Try to load from cover_requests collection, but handle if it doesn't exist
                 const requestsSnapshot = await getDocs(
-                    query(
-                        collection(db, 'cover_requests'),
-                        where('workplace', '==', selectedWorkplace),
-                        orderBy('createdAt', 'desc')
-                    )
+                    collection(db, 'cover_requests')
                 );
                 
                 const requests = [];
                 requestsSnapshot.forEach(doc => {
-                    requests.push({ id: doc.id, ...doc.data() });
+                    const data = doc.data();
+                    if (data.workplace === selectedWorkplace) {
+                        requests.push({ id: doc.id, ...data });
+                    }
                 });
                 
                 return requests;
@@ -10166,12 +10166,9 @@
 
         async function loadActiveCoverage() {
             try {
+                // Load all shift coverage records for this workplace
                 const coverageSnapshot = await getDocs(
-                    query(
-                        collection(db, 'shift_coverage'),
-                        where('workplace', '==', selectedWorkplace),
-                        where('status', '==', 'active')
-                    )
+                    collection(db, 'shift_coverage')
                 );
                 
                 const coverage = [];
@@ -10179,15 +10176,26 @@
                 
                 coverageSnapshot.forEach(doc => {
                     const data = doc.data();
-                    // Include all active coverage, mark if it's future coverage
-                    const shiftDateTime = new Date(data.day + 'T' + data.start);
-                    coverage.push({ 
-                        id: doc.id, 
-                        ...data,
-                        isFuture: shiftDateTime > now,
-                        isActive: shiftDateTime <= now && new Date(data.autoRestoreAt) > now
-                    });
+                    // Filter by workplace and include historical records too
+                    if (data.workplace === selectedWorkplace) {
+                        // Calculate shift date/time
+                        const shiftDateTime = new Date(data.shiftDateTime || data.day + 'T' + data.start);
+                        const autoRestoreAt = new Date(data.autoRestoreAt);
+                        
+                        coverage.push({ 
+                            id: doc.id, 
+                            ...data,
+                            shiftDateTime: shiftDateTime,
+                            autoRestoreAt: autoRestoreAt,
+                            isFuture: shiftDateTime > now,
+                            isActive: shiftDateTime <= now && autoRestoreAt > now,
+                            isCompleted: autoRestoreAt <= now
+                        });
+                    }
                 });
+                
+                // Sort by most recent first
+                coverage.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                 
                 return coverage;
             } catch (error) {
@@ -10246,7 +10254,7 @@
 
                 <!-- Active Coverage -->
                 <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <h4 style="margin: 0 0 1rem 0; color: #333;">🔄 Active & Scheduled Coverage</h4>
+                    <h4 style="margin: 0 0 1rem 0; color: #333;">🔄 Coverage History & Active Coverage</h4>
                     ${activeCoverage.length > 0 ? `
                         <div style="overflow-x: auto;">
                             <table style="width: 100%; border-collapse: collapse;">
@@ -10257,15 +10265,20 @@
                                         <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Cover Worker</th>
                                         <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Type</th>
                                         <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Status</th>
-                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Auto-Restore</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Auto-Restore Time</th>
                                         ${user.isAdmin ? '<th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Actions</th>' : ''}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${activeCoverage.map(coverage => `
+                                    ${activeCoverage.map(coverage => {
+                                        const status = coverage.isCompleted ? 'Completed' : coverage.isActive ? 'Active' : 'Scheduled';
+                                        const statusColor = coverage.isCompleted ? '#6c757d' : coverage.isActive ? '#28a745' : '#17a2b8';
+                                        const statusBg = coverage.isCompleted ? '#f8f9fa' : coverage.isActive ? '#d4edda' : '#d1ecf1';
+                                        
+                                        return `
                                         <tr style="border-bottom: 1px solid #dee2e6;">
                                             <td style="padding: 0.75rem;">${coverage.day}</td>
-                                            <td style="padding: 0.75rem;">${formatTime(coverage.originalData?.start || 'N/A')} - ${formatTime(coverage.originalData?.end || 'N/A')}</td>
+                                            <td style="padding: 0.75rem;">${formatTime(coverage.start)} - ${formatTime(coverage.end)}</td>
                                             <td style="padding: 0.75rem;">${coverage.coverWorkerName}</td>
                                             <td style="padding: 0.75rem;">
                                                 <span style="background: ${coverage.coverageType === 'replace' ? '#fff3cd' : '#d1ecf1'}; color: ${coverage.coverageType === 'replace' ? '#856404' : '#0c5460'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
@@ -10273,24 +10286,24 @@
                                                 </span>
                                             </td>
                                             <td style="padding: 0.75rem;">
-                                                <span style="background: ${coverage.isFuture ? '#e2f0ff' : '#d4edda'}; color: ${coverage.isFuture ? '#004085' : '#155724'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
-                                                    ${coverage.isFuture ? '⏳ Scheduled' : '✅ Active'}
+                                                <span style="background: ${statusBg}; color: ${statusColor}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                                                    ${status === 'Completed' ? '✅ ' + status : status === 'Active' ? '🔄 ' + status : '⏳ ' + status}
                                                 </span>
                                             </td>
                                             <td style="padding: 0.75rem;">${new Date(coverage.autoRestoreAt).toLocaleString()}</td>
-                                            ${user.isAdmin ? `<td style="padding: 0.75rem;">
+                                            ${user.isAdmin && !coverage.isCompleted ? `<td style="padding: 0.75rem;">
                                                 <button class="btn btn-sm btn-danger" onclick="cancelCoverage('${coverage.id}')" style="background: #dc3545; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
                                                     Cancel
                                                 </button>
-                                            </td>` : ''}
+                                            </td>` : user.isAdmin ? '<td style="padding: 0.75rem;">-</td>' : ''}
                                         </tr>
-                                    `).join('')}
+                                        `;
+                                    }).join('')}
                                 </tbody>
                             </table>
                         </div>
                     ` : `
-                        <p style="color: #666; font-style: italic;">No coverage scheduled at this time.</p>
-                    `}
+                        <p style="color: #666; font-style: italic;">No coverage history found.</p>`}
                 </div>
 
                 <!-- Cover Workers List -->
