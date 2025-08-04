@@ -6059,11 +6059,14 @@
                             <div style="display: flex; gap: 0.5rem;">
                                 <select id="activityFilter" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
                                     <option value="all">All Activities</option>
-                                    <option value="login">Logins</option>
-                                    <option value="edit">Edits</option>
-                                    <option value="view">Views</option>
-                                    <option value="suspend">Suspensions</option>
-                                    <option value="delete">Deletions</option>
+                                    <option value="login">🔐 Logins & Authentication</option>
+                                    <option value="edit">✏️ Edits & Updates</option>
+                                    <option value="view">👁️ Views & Access</option>
+                                    <option value="suspend">⚠️ Suspensions & Account Actions</option>
+                                    <option value="delete">🗑️ Deletions & Removals</option>
+                                    <option value="admin">👑 Admin Actions Only</option>
+                                    <option value="failed">❌ Failed/Error Actions</option>
+                                    <option value="recent">⏰ Last 24 Hours</option>
                                 </select>
                                 <button onclick="exportActivityLogs()" class="btn btn-success" style="background: #28a745; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-size: 14px; cursor: pointer;">
                                     📥 Export
@@ -7923,10 +7926,106 @@ Management Team`);
             }
             
             const filter = document.getElementById('activityFilter')?.value || 'all';
-            const filteredLogs = filter === 'all' ? allActivityLogs : allActivityLogs.filter(log => log.action === filter);
             
-            let html = '';
-            filteredLogs.slice(0, 50).forEach(log => {
+            // Smart filtering logic
+            let filteredLogs;
+            if (filter === 'all') {
+                filteredLogs = allActivityLogs;
+            } else if (filter === 'login') {
+                // Include all login-related activities
+                filteredLogs = allActivityLogs.filter(log => 
+                    log.action === 'login_attempt' || 
+                    log.action === 'login_success' || 
+                    log.action === 'login_failed' ||
+                    log.action === 'session_start' ||
+                    log.action.includes('login')
+                );
+            } else if (filter === 'edit') {
+                // Include all edit-related activities
+                filteredLogs = allActivityLogs.filter(log => 
+                    log.action === 'edit' ||
+                    log.action === 'update' ||
+                    log.action === 'modify' ||
+                    log.action.includes('edit') ||
+                    log.action.includes('update')
+                );
+            } else if (filter === 'view') {
+                // Include all view-related activities
+                filteredLogs = allActivityLogs.filter(log => 
+                    log.action === 'view' ||
+                    log.action === 'access' ||
+                    log.action === 'open' ||
+                    log.action.includes('view')
+                );
+            } else if (filter === 'suspend') {
+                // Include all suspension-related activities
+                filteredLogs = allActivityLogs.filter(log => 
+                    log.action === 'suspend' ||
+                    log.action === 'unsuspend' ||
+                    log.action.includes('suspend') ||
+                    log.details?.toLowerCase().includes('suspend')
+                );
+            } else if (filter === 'delete') {
+                // Include all deletion-related activities
+                filteredLogs = allActivityLogs.filter(log => 
+                    log.action === 'delete' ||
+                    log.action === 'remove' ||
+                    log.action.includes('delete') ||
+                    log.details?.toLowerCase().includes('delete')
+                );
+            } else if (filter === 'admin') {
+                // Show only admin actions
+                filteredLogs = allActivityLogs.filter(log => 
+                    log.userRole === 'ADMIN' || 
+                    log.isAdmin === true ||
+                    log.details?.toLowerCase().includes('admin')
+                );
+            } else if (filter === 'failed') {
+                // Show only failed/error actions
+                filteredLogs = allActivityLogs.filter(log => 
+                    log.action.includes('failed') ||
+                    log.action.includes('error') ||
+                    log.action === 'login_failed' ||
+                    log.details?.toLowerCase().includes('failed') ||
+                    log.details?.toLowerCase().includes('error')
+                );
+            } else if (filter === 'recent') {
+                // Show only last 24 hours
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                filteredLogs = allActivityLogs.filter(log => 
+                    new Date(log.timestamp) > yesterday
+                );
+            } else {
+                // Fallback to exact match for any other filters
+                filteredLogs = allActivityLogs.filter(log => log.action === filter);
+            }
+            
+            // Add filter results info
+            const displayCount = Math.min(filteredLogs.length, 50);
+            const filterInfo = filter === 'all' 
+                ? `Showing ${displayCount} of ${filteredLogs.length} total activities`
+                : `Found ${filteredLogs.length} "${filter}" activities, showing ${displayCount}`;
+            
+            let html = `
+                <div style="background: #f8f9fa; padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; border-left: 4px solid #007bff;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #495057; font-weight: 500;">📊 ${filterInfo}</span>
+                        <span style="color: #6c757d; font-size: 0.85rem;">Last updated: ${new Date().toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `;
+            
+            if (filteredLogs.length === 0) {
+                html += `
+                    <div style="text-align: center; padding: 3rem; background: white; border-radius: 8px; border: 2px dashed #dee2e6;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
+                        <h4 style="color: #6c757d; margin-bottom: 0.5rem;">No activities found</h4>
+                        <p style="color: #adb5bd; margin: 0;">Try selecting a different filter or check back later.</p>
+                    </div>
+                `;
+            } else {
+                filteredLogs.slice(0, 50).forEach(log => {
                 const timestamp = new Date(log.timestamp).toLocaleString();
                 const actionIcon = getActionIcon(log.action);
                 const actionColor = getActionColor(log.action);
@@ -7947,6 +8046,7 @@ Management Team`);
                     </div>
                 `;
             });
+            }
             
             container.innerHTML = html;
         }
