@@ -7,8 +7,18 @@
     <style>
         * {
             margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+            padding: 0;            try {
+                // Get IP address for security logging
+                const clientIP = await getClientIP();
+                
+                // Log login attempt
+                const loginAttempt = {
+                    timestamp: new Date().toISOString(),
+                    email: email,
+                    ipAddress: clientIP,
+                    userAgent: navigator.userAgent,
+                    action: 'login_attempt'
+                };     box-sizing: border-box;
         }
 
         body {
@@ -238,6 +248,18 @@
                 .join('');
         }
 
+        // Get IP address (for security logging)
+        async function getClientIP() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                return data.ip;
+            } catch (error) {
+                console.warn('Failed to get IP address:', error);
+                return 'Unknown';
+            }
+        }
+
         // Handle login
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -255,11 +277,14 @@
             try {
                 console.log('Attempting login for:', email);
                 
+                // Get IP address for security logging
+                const clientIP = await getClientIP();
+                
                 // Log login attempt
                 const loginAttempt = {
                     timestamp: new Date().toISOString(),
                     email: email,
-                    ipAddress: 'Unknown', // Will be updated when we get IP
+                    ipAddress: clientIP,
                     userAgent: navigator.userAgent,
                     action: 'login_attempt'
                 };
@@ -308,7 +333,7 @@
                     email: userData.email,
                     userId: userData.id,
                     isAdmin: userData.isAdmin === 1 || userData.isAdmin === true,
-                    ipAddress: 'Unknown',
+                    ipAddress: clientIP,
                     userAgent: navigator.userAgent,
                     action: 'login_success'
                 };
@@ -348,7 +373,7 @@
                     timestamp: new Date().toISOString(),
                     email: email,
                     error: error.message,
-                    ipAddress: 'Unknown',
+                    ipAddress: clientIP,
                     userAgent: navigator.userAgent,
                     action: 'login_failed'
                 };

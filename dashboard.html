@@ -7349,7 +7349,7 @@ Management Team`);
         window.viewUser = async function(email) {
             try {
                 // Log the view action
-                logActivity('view', `Viewed user details for ${email}`, user.email);
+                await logActivity('view', `Viewed user details for ${email}`, user.email);
                 
                 // Get user data from both databases
                 const authApp = getApp('authApp');
@@ -7489,7 +7489,7 @@ Management Team`);
             
             try {
                 // Log the edit action
-                logActivity('edit', `Opened edit form for user ${email}`, user.email);
+                await logActivity('edit', `Opened edit form for user ${email}`, user.email);
                 
                 // Get user data from auth database
                 const authApp = getApp('authApp');
@@ -7606,8 +7606,8 @@ Management Team`);
                         });
                         
                         // Log the successful edit
-                        logActivity('edit', `Successfully updated user ${email}`, user.email);
-                        logSecurityEvent('user_updated', `Admin updated user ${email}`, 'info');
+                        await logActivity('edit', `Successfully updated user ${email}`, user.email);
+                        await logSecurityEvent('user_updated', `Admin updated user ${email}`, 'info');
                         
                         showNotification('✅ User updated successfully!', 'success');
                         closeModal('userEditModal');
@@ -7635,7 +7635,7 @@ Management Team`);
             
             try {
                 // Log the suspend action attempt
-                logActivity('suspend', `Attempted to suspend/unsuspend user ${email}`, user.email);
+                await logActivity('suspend', `Attempted to suspend/unsuspend user ${email}`, user.email);
                 
                 // Get user data from auth database
                 const authApp = getApp('authApp');
@@ -7684,8 +7684,8 @@ Management Team`);
                 
                 // Log the suspension action
                 const suspendAction = userData.suspended ? 'unsuspend' : 'suspend';
-                logActivity('suspend', `Successfully ${suspendAction}ed user ${email}`, user.email);
-                logSecurityEvent(`user_${suspendAction}ed`, `Admin ${suspendAction}ed user ${email}`, 'warning');
+                await logActivity('suspend', `Successfully ${suspendAction}ed user ${email}`, user.email);
+                await logSecurityEvent(`user_${suspendAction}ed`, `Admin ${suspendAction}ed user ${email}`, 'warning');
                 
                 const successMessage = userData.suspended ? 
                     `✅ ${userData.firstName} ${userData.lastName} has been unsuspended` :
@@ -7707,9 +7707,14 @@ Management Team`);
         const securityLogs = [];
         
         // Log activity function
-        function logActivity(action, details, userId = null, ipAddress = null) {
+        async function logActivity(action, details, userId = null, ipAddress = null) {
             // Get current user info safely
             const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            // Get IP address if not provided
+            if (!ipAddress) {
+                ipAddress = await getClientIP();
+            }
             
             const logEntry = {
                 id: Date.now() + Math.random(),
@@ -7738,9 +7743,14 @@ Management Team`);
         }
         
         // Log security events
-        function logSecurityEvent(event, details, severity = 'info', ipAddress = null) {
+        async function logSecurityEvent(event, details, severity = 'info', ipAddress = null) {
             // Get current user info safely
             const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            // Get IP address if not provided
+            if (!ipAddress) {
+                ipAddress = await getClientIP();
+            }
             
             const securityEntry = {
                 id: Date.now() + Math.random(),
@@ -7786,7 +7796,7 @@ Management Team`);
         }
         
         // Initialize session tracking
-        function initializeSessionTracking() {
+        async function initializeSessionTracking() {
             if (!sessionStorage.getItem('sessionId')) {
                 sessionStorage.setItem('sessionId', Date.now() + Math.random());
             }
@@ -7795,8 +7805,8 @@ Management Team`);
             const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
             
             // Log session start
-            logActivity('session_start', 'User session started', currentUser.email);
-            logSecurityEvent('session_start', 'User session initiated', 'info');
+            await logActivity('session_start', 'User session started', currentUser.email);
+            await logSecurityEvent('session_start', 'User session initiated', 'info');
         }
         
         // Analytics tab functionality
@@ -8231,8 +8241,8 @@ Management Team`);
         };
         
         // Initialize session tracking when dashboard loads
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeSessionTracking();
+        document.addEventListener('DOMContentLoaded', async function() {
+            await initializeSessionTracking();
             
             // Generate some sample data if no logs exist (for testing)
             generateSampleData();
@@ -8305,8 +8315,8 @@ Management Team`);
             
             try {
                 // Log the delete action attempt
-                logActivity('delete', `Attempted to delete user ${email}`, user.email);
-                logSecurityEvent('user_deletion_attempt', `Admin attempted to delete user ${email}`, 'warning');
+                await logActivity('delete', `Attempted to delete user ${email}`, user.email);
+                await logSecurityEvent('user_deletion_attempt', `Admin attempted to delete user ${email}`, 'warning');
                 
                 // Get user data from auth database
                 const authApp = getApp('authApp');
@@ -8349,8 +8359,8 @@ Management Team`);
                 await deleteDoc(userDocRef);
                 
                 // Log the successful deletion
-                logActivity('delete', `Successfully deleted user ${email}`, user.email);
-                logSecurityEvent('user_deleted', `Admin deleted user ${email}`, 'critical');
+                await logActivity('delete', `Successfully deleted user ${email}`, user.email);
+                await logSecurityEvent('user_deleted', `Admin deleted user ${email}`, 'critical');
                 
                 showNotification(`🗑️ ${userData.firstName} ${userData.lastName} has been deleted`, 'error');
                 
