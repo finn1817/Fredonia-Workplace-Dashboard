@@ -6164,9 +6164,7 @@
                 // Load current shift postings for this workplace (including coverage requests)
                 const shiftPostingsSnapshot = await getDocs(
                     query(
-                        collection(db, 'shift_postings'),
-                        where('workplace', '==', selectedWorkplace),
-                        orderBy('created_at', 'desc')
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings')
                     )
                 );
                 
@@ -6316,8 +6314,7 @@
                 
                 // Get application count for this posting
                 const applicationsSnapshot = await getDocs(
-                    collection(db, 'applications'),
-                    where('shift_posting_id', '==', posting.id)
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', posting.id, 'applications')
                 );
                 const applicationCount = applicationsSnapshot.size;
                 const pendingCount = applicationsSnapshot.docs.filter(doc => doc.data().status === 'pending').length;
@@ -6469,15 +6466,20 @@
 
         async function updateApplicationCounts() {
             try {
-                // Get all applications for this workplace
-                const applicationsSnapshot = await getDocs(
-                    query(
-                        collection(db, 'applications'),
-                        where('workplace', '==', selectedWorkplace)
-                    )
+                // Get all shift postings first
+                const shiftPostingsSnapshot = await getDocs(
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings')
                 );
                 
-                const totalApplications = applicationsSnapshot.size;
+                let totalApplications = 0;
+                
+                // Count applications across all postings
+                for (const postingDoc of shiftPostingsSnapshot.docs) {
+                    const applicationsSnapshot = await getDocs(
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingDoc.id, 'applications')
+                    );
+                    totalApplications += applicationsSnapshot.size;
+                }
                 
                 const totalApplicationsElement = document.getElementById('totalApplications');
                 if (totalApplicationsElement) {
@@ -6835,20 +6837,18 @@ Management Team`);
             try {
                 // Check if user has already applied
                 const existingApplicationSnapshot = await getDocs(
-                    query(
-                        collection(db, 'applications'),
-                        where('shift_posting_id', '==', postingId),
-                        where('applicant_email', '==', user.email)
-                    )
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications')
                 );
                 
-                if (!existingApplicationSnapshot.empty) {
+                // Check if current user already applied
+                const userApplication = existingApplicationSnapshot.docs.find(doc => doc.data().applicant_email === user.email);
+                if (userApplication) {
                     showNotification('ℹ️ You have already applied for this shift', 'info');
                     return;
                 }
                 
                 // Get shift posting details
-                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
                 if (!postingDoc.exists()) {
                     showNotification('❌ Shift posting not found', 'error');
                     return;
@@ -6899,10 +6899,10 @@ Management Team`);
                 };
                 
                 // Add application to database
-                await addDoc(collection(db, 'applications'), applicationData);
-                
+                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications'), applicationData);
+
                 // Update the posting status to filled
-                await updateDoc(doc(db, 'shift_postings', postingId), {
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId), {
                     status: 'filled',
                     assigned_worker: user.email,
                     assigned_worker_name: user.displayName || user.email.split('@')[0],
@@ -6958,20 +6958,18 @@ Management Team`);
             try {
                 // Check if user has already responded
                 const existingResponseSnapshot = await getDocs(
-                    query(
-                        collection(db, 'applications'),
-                        where('shift_posting_id', '==', postingId),
-                        where('applicant_email', '==', user.email)
-                    )
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications')
                 );
                 
-                if (!existingResponseSnapshot.empty) {
+                // Check if current user already responded
+                const userResponse = existingResponseSnapshot.docs.find(doc => doc.data().applicant_email === user.email);
+                if (userResponse) {
                     showNotification('ℹ️ You have already responded to this shift', 'info');
                     return;
                 }
                 
                 // Get shift posting details
-                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
                 if (!postingDoc.exists()) {
                     showNotification('❌ Shift posting not found', 'error');
                     return;
@@ -6998,7 +6996,7 @@ Management Team`);
                     response_type: 'cannot_cover'
                 };
                 
-                await addDoc(collection(db, 'applications'), responseData);
+                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications'), responseData);
                 
                 showNotification('✅ Response recorded. You indicated you CANNOT cover this shift.', 'success');
                 
@@ -7070,7 +7068,7 @@ Management Team`);
 
             try {
                 // Get shift posting details
-                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
                 if (!postingDoc.exists()) {
                     showNotification('❌ Shift posting not found', 'error');
                     return;
@@ -7095,7 +7093,7 @@ Management Team`);
                 }
 
                 // Update the posting back to open status
-                await updateDoc(doc(db, 'shift_postings', postingId), {
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId), {
                     status: 'open',
                     assigned_worker: null,
                     assigned_worker_name: null,
@@ -7108,19 +7106,19 @@ Management Team`);
 
                 // Update any existing applications for this shift to reflect the reopening
                 const applicationsSnapshot = await getDocs(
-                    query(
-                        collection(db, 'applications'),
-                        where('shift_posting_id', '==', postingId),
-                        where('applicant_email', '==', posting.assigned_worker)
-                    )
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications')
                 );
 
                 applicationsSnapshot.forEach(async (appDoc) => {
-                    await updateDoc(doc(db, 'applications', appDoc.id), {
-                        status: 'unassigned',
-                        unassigned_at: new Date().toISOString(),
-                        unassigned_by: user.email
-                    });
+                    // Find the application from the assigned worker
+                    const appData = appDoc.data();
+                    if (appData.applicant_email === posting.assigned_worker) {
+                        await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications', appDoc.id), {
+                            status: 'unassigned',
+                            unassigned_at: new Date().toISOString(),
+                            unassigned_by: user.email
+                        });
+                    }
                 });
 
                 showNotification(`✅ ${workerName} has been unassigned. The shift is now available for other workers.`, 'success');
@@ -7150,7 +7148,7 @@ Management Team`);
 
             try {
                 // Get shift posting details
-                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
                 if (!postingDoc.exists()) {
                     showNotification('❌ Shift posting not found', 'error');
                     return;
@@ -7174,7 +7172,7 @@ Management Team`);
                 }
 
                 // Update the posting to open status
-                await updateDoc(doc(db, 'shift_postings', postingId), {
+                await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId), {
                     status: 'open',
                     reopened_at: new Date().toISOString(),
                     reopened_by: user.email,
@@ -7208,7 +7206,7 @@ Management Team`);
 
             try {
                 // Get shift posting details
-                const postingDoc = await getDoc(doc(db, 'shift_postings', postingId));
+                const postingDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
                 if (!postingDoc.exists()) {
                     showNotification('❌ Shift posting not found', 'error');
                     return;
@@ -7230,13 +7228,12 @@ Management Team`);
                 }
 
                 // Delete the posting
-                await deleteDoc(doc(db, 'shift_postings', postingId));
+                await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId));
 
                 // Delete any associated applications
                 const applicationsSnapshot = await getDocs(
                     query(
-                        collection(db, 'applications'),
-                        where('shift_posting_id', '==', postingId)
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings', postingId, 'applications')
                     )
                 );
 
@@ -11452,10 +11449,7 @@ Management Team`);
                 try {
                     console.log('Attempting to load shift postings...');
                     const shiftPostingsSnapshot = await getDocs(
-                        query(
-                            collection(db, 'shift_postings'),
-                            where('workplace', '==', selectedWorkplace)
-                        )
+                        collection(db, 'workplaces', selectedWorkplace, 'shift_postings')
                     );
 
                     shiftPostingsSnapshot.forEach(doc => {
@@ -12378,11 +12372,7 @@ Management Team`);
 
                 // Load shift postings for this workplace - simplified query to avoid index issues
                 const shiftPostingsSnapshot = await getDocs(
-                    query(
-                        collection(db, 'shift_postings'),
-                        where('workplace', '==', selectedWorkplace),
-                        orderBy('created_at', 'desc')
-                    )
+                    collection(db, 'workplaces', selectedWorkplace, 'shift_postings')
                 );
 
                 const postings = [];
@@ -12768,7 +12758,7 @@ Management Team`);
                 };
 
                 // Save to shift_postings collection
-                const docRef = await addDoc(collection(db, 'shift_postings'), coverageRequest);
+                const docRef = await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shift_postings'), coverageRequest);
                 
                 // Create email template for contacting workers
                 const emailSubject = `Coverage Available - ${day} Shift at ${selectedWorkplace}`;
