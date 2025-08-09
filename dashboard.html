@@ -8795,7 +8795,12 @@ Management Team`);
 
         // Remove time slot
         window.removeTimeSlot = function(day, slotId) {
+            console.log(`Removing slot ${slotId} from ${day}`);
+            console.log('Before removal:', availabilitySlots[day]);
+            
             availabilitySlots[day] = availabilitySlots[day].filter(slot => slot.id !== slotId);
+            
+            console.log('After removal:', availabilitySlots[day]);
             
             const container = document.getElementById(`slots-${day}`);
             const slotElement = container.querySelector(`[data-slot-id="${slotId}"]`);
@@ -8808,6 +8813,7 @@ Management Team`);
                 container.innerHTML = '<div class="empty-slot-message">No time slots added</div>';
             }
             
+            console.log('Calling updateAvailabilityField after slot removal');
             updateAvailabilityField();
         };
 
@@ -8844,7 +8850,10 @@ Management Team`);
                 });
             });
             
-            document.getElementById('workerAvailability').value = availabilityParts.join(', ');
+            const finalAvailability = availabilityParts.join(', ');
+            console.log('Updating availability field with:', finalAvailability);
+            console.log('Current availabilitySlots:', availabilitySlots);
+            document.getElementById('workerAvailability').value = finalAvailability;
         }
 
         // Load worker availability from existing data
@@ -8955,6 +8964,8 @@ Management Team`);
             let availability = document.getElementById('workerAvailability').value.trim();
             
             console.log('Form data:', { firstName, lastName, email, workStudy, workerType, availability });
+            console.log('Raw availability value from form:', availability);
+            console.log('Current availabilitySlots state:', availabilitySlots);
             
             // Enhanced validation
             if (!firstName || !lastName) {
