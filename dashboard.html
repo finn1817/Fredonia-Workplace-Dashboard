@@ -8732,7 +8732,7 @@ Management Team`);
                 }
                 
                 const slot = {
-                    id: Date.now() + Math.random(),
+                    id: `slot_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
                     day: day,
                     startTime: startTime,
                     endTime: endTime
@@ -8797,15 +8797,26 @@ Management Team`);
         window.removeTimeSlot = function(day, slotId) {
             console.log(`Removing slot ${slotId} from ${day}`);
             console.log('Before removal:', availabilitySlots[day]);
+            console.log('Looking for slot with ID:', slotId);
+            console.log('Available slot IDs:', availabilitySlots[day].map(s => s.id));
             
-            availabilitySlots[day] = availabilitySlots[day].filter(slot => slot.id !== slotId);
+            const originalLength = availabilitySlots[day].length;
+            availabilitySlots[day] = availabilitySlots[day].filter(slot => {
+                const matches = slot.id !== slotId;
+                console.log(`Slot ${slot.id} ${matches ? 'kept' : 'removed'} (comparing with ${slotId})`);
+                return matches;
+            });
             
             console.log('After removal:', availabilitySlots[day]);
+            console.log(`Removed ${originalLength - availabilitySlots[day].length} slots`);
             
             const container = document.getElementById(`slots-${day}`);
             const slotElement = container.querySelector(`[data-slot-id="${slotId}"]`);
             if (slotElement) {
                 slotElement.remove();
+                console.log('Removed slot element from DOM');
+            } else {
+                console.log('Slot element not found in DOM');
             }
             
             // Show empty message if no slots remain
