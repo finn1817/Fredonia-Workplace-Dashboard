@@ -2135,6 +2135,69 @@
         const workplaceApp = initializeApp(workplaceConfig);
         const db = getFirestore(workplaceApp);
 
+        // Logging Configuration
+        const LOG_CONFIG = {
+            level: 'production', // 'development' or 'production' - CHANGE THIS FOR DEVELOPMENT
+            enabledLevels: {
+                development: ['debug', 'info', 'warn', 'error'],
+                production: ['error'] // Only show errors in production
+            }
+        };
+
+        // 🔧 DEVELOPER NOTE: 
+        // To enable development logging, change LOG_CONFIG.level to 'development'
+        // This will show all debug, info, warn, and error messages
+        // For production, keep it as 'production' to minimize console output
+
+        // Enhanced logging system
+        const logger = {
+            debug: (...args) => {
+                if (LOG_CONFIG.enabledLevels[LOG_CONFIG.level].includes('debug')) {
+                    console.log('🔍 [DEBUG]', ...args);
+                }
+            },
+            info: (...args) => {
+                if (LOG_CONFIG.enabledLevels[LOG_CONFIG.level].includes('info')) {
+                    console.log('ℹ️ [INFO]', ...args);
+                }
+            },
+            warn: (...args) => {
+                if (LOG_CONFIG.enabledLevels[LOG_CONFIG.level].includes('warn')) {
+                    console.warn('⚠️ [WARN]', ...args);
+                }
+            },
+            error: (...args) => {
+                if (LOG_CONFIG.enabledLevels[LOG_CONFIG.level].includes('error')) {
+                    console.error('❌ [ERROR]', ...args);
+                }
+            },
+            // For backward compatibility, keep existing console calls working
+            log: (...args) => {
+                if (LOG_CONFIG.enabledLevels[LOG_CONFIG.level].includes('info')) {
+                    console.log('📝 [LOG]', ...args);
+                }
+            }
+        };
+
+        // Override global console for development mode control
+        if (LOG_CONFIG.level === 'production') {
+            const originalConsole = { ...console };
+            console.log = (...args) => {
+                // Only allow critical logs in production
+                if (args[0] && typeof args[0] === 'string' && 
+                    (args[0].includes('❌') || args[0].includes('🚨') || args[0].includes('ERROR'))) {
+                    originalConsole.log(...args);
+                }
+            };
+            console.warn = (...args) => {
+                // Allow warnings but suppress routine ones
+                if (args[0] && typeof args[0] === 'string' && 
+                    !args[0].includes('⚠️ Worker') && !args[0].includes('Missing data')) {
+                    originalConsole.warn(...args);
+                }
+            };
+        }
+
         // Global state
         let selectedWorkplace = null;
         let workers = [];
@@ -2150,6 +2213,134 @@
             const [h, m] = timeStr.split(':').map(Number);
             // Convert to 24-hour format for internal calculations
             return h + (m / 60);
+        };
+
+        // Centralized Validation System
+        const Validator = {
+            // Time validation
+            time: {
+                isValid: (timeStr) => {
+                    if (!timeStr) return false;
+                    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+                    return timeRegex.test(timeStr);
+                },
+                compare: (startTime, endTime) => {
+                    if (!Validator.time.isValid(startTime) || !Validator.time.isValid(endTime)) {
+                        return { valid: false, error: 'Invalid time format' };
+                    }
+                    const startHour = timeToHour(startTime);
+                    const endHour = timeToHourWithMidnight(endTime, endTime === '00:00');
+                    if (startHour >= endHour) {
+                        return { valid: false, error: 'End time must be after start time' };
+                    }
+                    return { valid: true };
+                },
+                format24Hour: (time) => {
+                    if (!time) return '';
+                    const [hours, minutes] = time.split(':');
+                    const hour = parseInt(hours);
+                    const minute = parseInt(minutes);
+                    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                }
+            },
+            
+            // Worker validation
+            worker: {
+                validateBasicInfo: (firstName, lastName, email) => {
+                    const errors = [];
+                    if (!firstName || !firstName.trim()) errors.push('First name is required');
+                    if (!lastName || !lastName.trim()) errors.push('Last name is required');
+                    if (!email || !email.includes('@')) errors.push('Valid email address is required');
+                    return { valid: errors.length === 0, errors };
+                },
+                validateAvailability: (availabilityText) => {
+                    if (!availabilityText) return { valid: true };
+                    
+                    const blocks = availabilityText.split(',').map(s => s.trim()).filter(Boolean);
+                    const dayMap = {
+                        'sunday': 'Sunday', 'sun': 'Sunday',
+                        'monday': 'Monday', 'mon': 'Monday',
+                        'tuesday': 'Tuesday', 'tue': 'Tuesday',
+                        'wednesday': 'Wednesday', 'wed': 'Wednesday',
+                        'thursday': 'Thursday', 'thu': 'Thursday',
+                        'friday': 'Friday', 'fri': 'Friday',
+                        'saturday': 'Saturday', 'sat': 'Saturday'
+                    };
+                    
+                    for (const block of blocks) {
+                        const match = block.match(/(\w+)\s+(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/i);
+                        if (!match) {
+                            return { valid: false, error: `Block "${block}" is not in the format Day HH:MM-HH:MM.` };
+                        }
+                        
+                        const [, dayRaw, sh, sm, eh, em] = match;
+                        const day = dayMap[dayRaw.toLowerCase()];
+                        if (!day) {
+                            return { valid: false, error: `Block "${block}" has an invalid day.` };
+                        }
+                        
+                        const startHour = parseInt(sh, 10), startMin = parseInt(sm, 10);
+                        let endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
+                        
+                        if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 || 
+                            startMin < 0 || startMin > 59 || endMin < 0 || endMin > 59) {
+                            return { valid: false, error: `Block "${block}" has invalid hour or minute values.` };
+                        }
+                        
+                        const startTotal = startHour * 60 + startMin;
+                        let endTotal = endHour * 60 + endMin;
+                        if (endHour === 0 && endMin === 0) endTotal = 24 * 60; // Treat 00:00 as 24:00
+                        
+                        if (endTotal <= startTotal) {
+                            return { valid: false, error: `Block "${block}": end time must be after start time.` };
+                        }
+                    }
+                    
+                    return { valid: true };
+                },
+                checkDuplicateEmail: (email, editingWorkerId) => {
+                    const duplicateWorker = workers.find(w => 
+                        w.email.toLowerCase() === email.toLowerCase() && 
+                        w.id !== editingWorkerId
+                    );
+                    return duplicateWorker ? 
+                        { valid: false, error: 'A worker with this email already exists' } : 
+                        { valid: true };
+                }
+            },
+            
+            // Password validation
+            password: {
+                isStrong: (password) => {
+                    if (password.length < 6) {
+                        return { valid: false, error: 'Password must be at least 6 characters' };
+                    }
+                    return { valid: true };
+                },
+                matches: (password, confirmPassword) => {
+                    if (password !== confirmPassword) {
+                        return { valid: false, error: 'Passwords do not match' };
+                    }
+                    return { valid: true };
+                }
+            },
+            
+            // Form validation helpers
+            form: {
+                validateRequired: (value, fieldName) => {
+                    if (!value || !value.trim()) {
+                        return { valid: false, error: `${fieldName} is required` };
+                    }
+                    return { valid: true };
+                },
+                validateEmail: (email) => {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(email)) {
+                        return { valid: false, error: 'Please enter a valid email address' };
+                    }
+                    return { valid: true };
+                }
+            }
         };
 
         // Helper function for handling midnight crossover in time ranges
@@ -4476,27 +4667,6 @@
                 throw error;
             }
         }
-
-        // OLD NOTES FUNCTION - REMOVED IN FAVOR OF ANNOUNCEMENTS
-        // async function loadWorkplaceNotes() {
-        //     const notesDiv = document.getElementById('workplaceNotesContent');
-        //     if (!selectedWorkplace) {
-        //         notesDiv.innerHTML = '<div class="info">No workplace selected.</div>';
-        //         return;
-        //     }
-        //     const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace));
-        //     const notes = docSnap.exists() && docSnap.data().notes ? docSnap.data().notes : '';
-        //     if (user.isAdmin) {
-        //         notesDiv.innerHTML = `<textarea id='workplaceNotesTextarea' rows='4' style='width:100%;border-radius:8px;padding:1rem;'>${notes}</textarea><button class='btn btn-success' id='saveNotesBtn' style='margin-top:0.5rem;'>💾 Save Notes</button>`;
-        //         document.getElementById('saveNotesBtn').onclick = async function() {
-        //             const newNotes = document.getElementById('workplaceNotesTextarea').value;
-        //             await updateDoc(doc(db, 'workplaces', selectedWorkplace), 'notes', newNotes);
-        //             showNotification('✅ Notes updated!', 'success');
-        //         };
-        //     } else {
-        //         notesDiv.innerHTML = `<div style='background:#f8f9fa;padding:1rem;border-radius:8px;'>${notes ? notes.replace(/\n/g, '<br>') : '<span style="color:#888;">No notes for this workplace.</span>'}</div>`;
-        //     }
-        // }
 
         // --- ENHANCED ANNOUNCEMENTS SYSTEM ---
         // Load and display announcements
@@ -8559,12 +8729,246 @@ Management Team`);
             if (modal) {
                 modal.style.display = 'none';
                 
+                // Memory cleanup for modal operations
+                ModalMemoryManager.cleanup(modalId);
+                
                 // Special handling for announcement modal to clear edit state
                 if (modalId === 'announcementModal') {
                     modal.removeAttribute('data-edit-id');
                 }
             }
         };
+
+        // Memory Management System for Modals
+        const ModalMemoryManager = {
+            // Track active modal data
+            activeData: new Map(),
+            
+            // Register data for cleanup
+            register: (modalId, data) => {
+                ModalMemoryManager.activeData.set(modalId, data);
+                logger.debug(`Registered data for modal: ${modalId}`);
+            },
+            
+            // Cleanup modal data
+            cleanup: (modalId) => {
+                try {
+                    // Clear form data
+                    const modal = document.getElementById(modalId);
+                    if (modal) {
+                        const forms = modal.querySelectorAll('form');
+                        forms.forEach(form => {
+                            form.reset();
+                            // Clear custom form states
+                            const inputs = form.querySelectorAll('input, select, textarea');
+                            inputs.forEach(input => {
+                                input.removeAttribute('data-original-value');
+                                input.classList.remove('error', 'valid');
+                            });
+                        });
+                        
+                        // Clear dynamic content containers
+                        const dynamicContainers = modal.querySelectorAll('[data-dynamic-content]');
+                        dynamicContainers.forEach(container => {
+                            container.innerHTML = '';
+                        });
+                    }
+                    
+                    // Clear availability slots if it's the worker form modal
+                    if (modalId === 'workerFormModal' || modalId === 'timeSlotModal') {
+                        if (typeof currentEditingDay !== 'undefined') {
+                            currentEditingDay = null;
+                        }
+                        // Don't clear availabilitySlots here as it might be needed for form submission
+                    }
+                    
+                    // Clear registered data
+                    if (ModalMemoryManager.activeData.has(modalId)) {
+                        const data = ModalMemoryManager.activeData.get(modalId);
+                        ModalMemoryManager.activeData.delete(modalId);
+                        logger.debug(`Cleaned up data for modal: ${modalId}`, data);
+                    }
+                    
+                    // Clear editing states
+                    if (modalId === 'workerFormModal') {
+                        editingWorkerId = null;
+                    }
+                    
+                    logger.debug(`Memory cleanup completed for modal: ${modalId}`);
+                } catch (error) {
+                    logger.error('Error during modal memory cleanup:', error);
+                }
+            },
+            
+            // Force cleanup all modals (for page unload)
+            cleanupAll: () => {
+                const modalIds = Array.from(ModalMemoryManager.activeData.keys());
+                modalIds.forEach(modalId => ModalMemoryManager.cleanup(modalId));
+                logger.debug('All modal memory cleaned up');
+            }
+        };
+
+        // Add cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            ModalMemoryManager.cleanupAll();
+        });
+
+        // Comprehensive Error Boundary System
+        const ErrorBoundary = {
+            // Global error handler
+            setup: () => {
+                // Handle uncaught JavaScript errors
+                window.addEventListener('error', (event) => {
+                    logger.error('Uncaught error:', event.error);
+                    ErrorBoundary.handleError(event.error, 'Uncaught Error');
+                });
+
+                // Handle unhandled promise rejections
+                window.addEventListener('unhandledrejection', (event) => {
+                    logger.error('Unhandled promise rejection:', event.reason);
+                    ErrorBoundary.handleError(event.reason, 'Promise Rejection');
+                });
+
+                // Override console.error to catch manual errors
+                const originalError = console.error;
+                console.error = (...args) => {
+                    originalError.apply(console, args);
+                    if (args[0] && typeof args[0] === 'string' && args[0].includes('❌')) {
+                        ErrorBoundary.logError(args.join(' '));
+                    }
+                };
+            },
+
+            // Handle errors gracefully
+            handleError: (error, context = 'Unknown') => {
+                try {
+                    const errorInfo = {
+                        message: error.message || String(error),
+                        stack: error.stack || 'No stack trace',
+                        context: context,
+                        timestamp: new Date().toISOString(),
+                        userAgent: navigator.userAgent,
+                        url: window.location.href,
+                        workplace: selectedWorkplace || 'None'
+                    };
+
+                    // Log to localStorage for debugging
+                    ErrorBoundary.logError(errorInfo);
+
+                    // Show user-friendly message
+                    const userMessage = ErrorBoundary.getUserFriendlyMessage(error, context);
+                    showNotification(userMessage, 'error', { duration: 8000 });
+
+                } catch (handlerError) {
+                    // If error handler fails, use basic alert
+                    console.error('Error handler failed:', handlerError);
+                    alert('A critical error occurred. Please refresh the page and try again.');
+                }
+            },
+
+            // Log errors for debugging
+            logError: (errorInfo) => {
+                try {
+                    const errorLog = JSON.parse(localStorage.getItem('errorLog') || '[]');
+                    errorLog.unshift(errorInfo);
+                    
+                    // Keep only last 50 errors
+                    if (errorLog.length > 50) {
+                        errorLog.splice(50);
+                    }
+                    
+                    localStorage.setItem('errorLog', JSON.stringify(errorLog));
+                } catch (e) {
+                    console.warn('Failed to log error to localStorage:', e);
+                }
+            },
+
+            // Get user-friendly error messages
+            getUserFriendlyMessage: (error, context) => {
+                const message = error.message || String(error);
+                
+                // Firebase errors
+                if (message.includes('permission-denied')) {
+                    return '🔒 Access denied. Please check your permissions or contact an administrator.';
+                }
+                if (message.includes('network-request-failed')) {
+                    return '🌐 Network error. Please check your internet connection and try again.';
+                }
+                if (message.includes('quota-exceeded')) {
+                    return '💾 Storage limit exceeded. Please contact the administrator.';
+                }
+
+                // Form validation errors
+                if (context.includes('validation') || message.includes('required')) {
+                    return '📝 Please check your form inputs and try again.';
+                }
+
+                // Schedule generation errors
+                if (context.includes('schedule') || message.includes('availability')) {
+                    return '📅 Schedule generation error. Please check worker availability and try again.';
+                }
+
+                // Generic errors
+                if (message.includes('fetch')) {
+                    return '🔄 Connection error. Please try again in a moment.';
+                }
+
+                // Default fallback
+                return '⚠️ An unexpected error occurred. If this persists, please contact support.';
+            },
+
+            // Wrap async functions with error boundary
+            wrapAsync: (fn, context = 'Async Operation') => {
+                return async (...args) => {
+                    try {
+                        return await fn(...args);
+                    } catch (error) {
+                        ErrorBoundary.handleError(error, context);
+                        throw error; // Re-throw for local handling if needed
+                    }
+                };
+            },
+
+            // Wrap functions with error boundary
+            wrap: (fn, context = 'Operation') => {
+                return (...args) => {
+                    try {
+                        return fn(...args);
+                    } catch (error) {
+                        ErrorBoundary.handleError(error, context);
+                        throw error; // Re-throw for local handling if needed
+                    }
+                };
+            },
+
+            // Clear error log
+            clearLog: () => {
+                localStorage.removeItem('errorLog');
+                logger.info('Error log cleared');
+            },
+
+            // Get error log for debugging
+            getLog: () => {
+                return JSON.parse(localStorage.getItem('errorLog') || '[]');
+            }
+        };
+
+        // Initialize error boundary
+        ErrorBoundary.setup();
+
+        // Add debug functions for admins
+        if (user.isAdmin) {
+            window.debugErrors = () => {
+                const errors = ErrorBoundary.getLog();
+                console.table(errors);
+                return errors;
+            };
+            
+            window.clearErrorLog = () => {
+                ErrorBoundary.clearLog();
+                showNotification('✅ Error log cleared', 'success');
+            };
+        }
 
         // Enhanced worker management with validation
         window.showAddWorker = function() {
@@ -8593,7 +8997,10 @@ Management Team`);
                 return;
             }
 
-            try {
+            const wrappedFunction = ErrorBoundary.wrapAsync(async () => {
+                // Register modal data for cleanup
+                ModalMemoryManager.register('workerFormModal', { action: 'edit', workerId });
+                
                 // Always fetch the latest worker data from Firestore to ensure we have the most up-to-date availability
                 const workerDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId));
                 if (!workerDoc.exists()) {
@@ -8612,8 +9019,8 @@ Management Team`);
                     availability_text: data['Days & Times Available'] || ''
                 };
 
-                console.log('Editing worker (fresh from database):', worker);
-                console.log('Worker availability:', worker.availability_text);
+                logger.debug('Editing worker (fresh from database):', worker);
+                logger.debug('Worker availability:', worker.availability_text);
 
                 editingWorkerId = workerId;
                 document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
@@ -8632,10 +9039,9 @@ Management Team`);
                 
                 closeModal('workersModal');
                 document.getElementById('workerFormModal').style.display = 'block';
-            } catch (error) {
-                console.error('Error loading worker for editing:', error);
-                showNotification('❌ Error loading worker data', 'error');
-            }
+            }, 'Edit Worker');
+
+            await wrappedFunction();
         };
 
         // Availability Management Functions
@@ -8688,7 +9094,7 @@ Management Team`);
         
         // Manual submission function for time slot form
         window.submitTimeSlotForm = function() {
-            try {
+            const wrappedFunction = ErrorBoundary.wrap(() => {
                 const startTime = document.getElementById('slotStartTime').value;
                 const endTime = document.getElementById('slotEndTime').value;
                 
@@ -8697,37 +9103,34 @@ Management Team`);
                     return;
                 }
                 
-                // Convert times to comparable format for proper validation
-                const startHour = timeToHour(startTime);
-                const endHour = timeToHourWithMidnight(endTime, endTime === '00:00');
-                
-                if (startHour >= endHour) {
-                    showNotification('❌ End time must be after start time', 'error');
+                // Use centralized validation
+                const timeValidation = Validator.time.compare(startTime, endTime);
+                if (!timeValidation.valid) {
+                    showNotification(`❌ ${timeValidation.error}`, 'error');
                     return;
                 }
                 
                 if (!currentEditingDay) {
-                    console.error('currentEditingDay is not set');
+                    logger.error('currentEditingDay is not set');
                     showNotification('❌ Error: No day selected', 'error');
                     return;
                 }
                 
                 addTimeSlot(currentEditingDay, startTime, endTime);
                 closeModal('timeSlotModal');
-            } catch (error) {
-                console.error('Error in time slot form submission:', error);
-                showNotification('❌ Error adding time slot', 'error');
-            }
+            }, 'Time Slot Submission');
+
+            wrappedFunction();
         };
 
         // Add time slot to the specified day
         function addTimeSlot(day, startTime, endTime) {
-            try {
-                console.log('Adding time slot:', { day, startTime, endTime });
-                console.log('Current availabilitySlots:', availabilitySlots);
+            const wrappedFunction = ErrorBoundary.wrap(() => {
+                logger.debug('Adding time slot:', { day, startTime, endTime });
+                logger.debug('Current availabilitySlots:', availabilitySlots);
                 
                 if (!availabilitySlots[day]) {
-                    console.error('Day not found in availabilitySlots:', day);
+                    logger.error('Day not found in availabilitySlots:', day);
                     availabilitySlots[day] = [];
                 }
                 
@@ -8738,19 +9141,18 @@ Management Team`);
                     endTime: endTime
                 };
                 
-                console.log('Created slot:', slot);
+                logger.debug('Created slot:', slot);
                 
                 availabilitySlots[day].push(slot);
-                console.log('Updated availabilitySlots:', availabilitySlots);
+                logger.debug('Updated availabilitySlots:', availabilitySlots);
                 
                 renderTimeSlot(day, slot);
                 updateAvailabilityField();
                 
-                console.log('Time slot added successfully');
-            } catch (error) {
-                console.error('Error in addTimeSlot:', error);
-                showNotification('❌ Error adding time slot', 'error');
-            }
+                logger.debug('Time slot added successfully');
+            }, 'Add Time Slot');
+
+            wrappedFunction();
         }
 
         // Render a time slot in the UI
@@ -8795,37 +9197,41 @@ Management Team`);
 
         // Remove time slot
         window.removeTimeSlot = function(day, slotId) {
-            console.log(`Removing slot ${slotId} from ${day}`);
-            console.log('Before removal:', availabilitySlots[day]);
-            console.log('Looking for slot with ID:', slotId);
-            console.log('Available slot IDs:', availabilitySlots[day].map(s => s.id));
-            
-            const originalLength = availabilitySlots[day].length;
-            availabilitySlots[day] = availabilitySlots[day].filter(slot => {
-                const matches = slot.id !== slotId;
-                console.log(`Slot ${slot.id} ${matches ? 'kept' : 'removed'} (comparing with ${slotId})`);
-                return matches;
-            });
-            
-            console.log('After removal:', availabilitySlots[day]);
-            console.log(`Removed ${originalLength - availabilitySlots[day].length} slots`);
-            
-            const container = document.getElementById(`slots-${day}`);
-            const slotElement = container.querySelector(`[data-slot-id="${slotId}"]`);
-            if (slotElement) {
-                slotElement.remove();
-                console.log('Removed slot element from DOM');
-            } else {
-                console.log('Slot element not found in DOM');
-            }
-            
-            // Show empty message if no slots remain
-            if (availabilitySlots[day].length === 0) {
-                container.innerHTML = '<div class="empty-slot-message">No time slots added</div>';
-            }
-            
-            console.log('Calling updateAvailabilityField after slot removal');
-            updateAvailabilityField();
+            const wrappedFunction = ErrorBoundary.wrap(() => {
+                logger.debug(`Removing slot ${slotId} from ${day}`);
+                logger.debug('Before removal:', availabilitySlots[day]);
+                logger.debug('Looking for slot with ID:', slotId);
+                logger.debug('Available slot IDs:', availabilitySlots[day].map(s => s.id));
+                
+                const originalLength = availabilitySlots[day].length;
+                availabilitySlots[day] = availabilitySlots[day].filter(slot => {
+                    const matches = slot.id !== slotId;
+                    logger.debug(`Slot ${slot.id} ${matches ? 'kept' : 'removed'} (comparing with ${slotId})`);
+                    return matches;
+                });
+                
+                logger.debug('After removal:', availabilitySlots[day]);
+                logger.debug(`Removed ${originalLength - availabilitySlots[day].length} slots`);
+                
+                const container = document.getElementById(`slots-${day}`);
+                const slotElement = container.querySelector(`[data-slot-id="${slotId}"]`);
+                if (slotElement) {
+                    slotElement.remove();
+                    logger.debug('Removed slot element from DOM');
+                } else {
+                    logger.debug('Slot element not found in DOM');
+                }
+                
+                // Show empty message if no slots remain
+                if (availabilitySlots[day].length === 0) {
+                    container.innerHTML = '<div class="empty-slot-message">No time slots added</div>';
+                }
+                
+                logger.debug('Calling updateAvailabilityField after slot removal');
+                updateAvailabilityField();
+            }, 'Remove Time Slot');
+
+            wrappedFunction();
         };
 
         // Format time for display (convert 24h to 12h with AM/PM)
@@ -8960,7 +9366,7 @@ Management Team`);
 
         // Manual submission function for worker form
         window.submitWorkerForm = async function() {
-            console.log('Worker form submitted manually');
+            logger.debug('Worker form submitted manually');
             
             if (!user.isAdmin) {
                 showNotification('❌ Admin access required', 'error');
@@ -8974,73 +9380,37 @@ Management Team`);
             const workerType = document.getElementById('workerType').value;
             let availability = document.getElementById('workerAvailability').value.trim();
             
-            console.log('Form data:', { firstName, lastName, email, workStudy, workerType, availability });
-            console.log('Raw availability value from form:', availability);
-            console.log('Current availabilitySlots state:', availabilitySlots);
+            logger.debug('Form data:', { firstName, lastName, email, workStudy, workerType, availability });
+            logger.debug('Raw availability value from form:', availability);
+            logger.debug('Current availabilitySlots state:', availabilitySlots);
             
-            // Enhanced validation
-            if (!firstName || !lastName) {
-                showNotification('❌ First and last name are required', 'error');
+            // Enhanced validation using centralized system
+            const basicValidation = Validator.worker.validateBasicInfo(firstName, lastName, email);
+            if (!basicValidation.valid) {
+                showNotification(`❌ ${basicValidation.errors.join(', ')}`, 'error');
                 return;
             }
-            if (!email || !email.includes('@')) {
-                showNotification('❌ Valid email address is required', 'error');
+            
+            const emailValidation = Validator.form.validateEmail(email);
+            if (!emailValidation.valid) {
+                showNotification(`❌ ${emailValidation.error}`, 'error');
                 return;
             }
-            // Check for duplicate email (excluding current worker if editing)
-            const duplicateWorker = workers.find(w => 
-                w.email.toLowerCase() === email.toLowerCase() && 
-                w.id !== editingWorkerId
-            );
-            if (duplicateWorker) {
-                showNotification('❌ A worker with this email already exists', 'error');
+            
+            const duplicateCheck = Validator.worker.checkDuplicateEmail(email, editingWorkerId);
+            if (!duplicateCheck.valid) {
+                showNotification(`❌ ${duplicateCheck.error}`, 'error');
                 return;
             }
+            
             // Validate availability format if provided
             if (availability) {
-                // Split and check each block
-                const blocks = availability.split(',').map(s => s.trim()).filter(Boolean);
-                let errorMsg = '';
-                const dayMap = {
-                    'sunday': 'Sunday', 'sun': 'Sunday',
-                    'monday': 'Monday', 'mon': 'Monday',
-                    'tuesday': 'Tuesday', 'tue': 'Tuesday',
-                    'wednesday': 'Wednesday', 'wed': 'Wednesday',
-                    'thursday': 'Thursday', 'thu': 'Thursday',
-                    'friday': 'Friday', 'fri': 'Friday',
-                    'saturday': 'Saturday', 'sat': 'Saturday'
-                };
-                for (const block of blocks) {
-                    const match = block.match(/(\w+)\s+(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/i);
-                    if (!match) {
-                        errorMsg = `Block "${block}" is not in the format Day HH:MM-HH:MM.`;
-                        break;
-                    }
-                    const [, dayRaw, sh, sm, eh, em] = match;
-                    const day = dayMap[dayRaw.toLowerCase()];
-                    if (!day) {
-                        errorMsg = `Block "${block}" has an invalid day.`;
-                        break;
-                    }
-                    const startHour = parseInt(sh, 10), startMin = parseInt(sm, 10);
-                    let endHour = parseInt(eh, 10), endMin = parseInt(em, 10);
-                    if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 || startMin < 0 || startMin > 59 || endMin < 0 || endMin > 59) {
-                        errorMsg = `Block "${block}" has invalid hour or minute values.`;
-                        break;
-                    }
-                    const startTotal = startHour * 60 + startMin;
-                    let endTotal = endHour * 60 + endMin;
-                    if (endHour === 0 && endMin === 0) endTotal = 24 * 60; // Treat 00:00 as 24:00
-                    if (endTotal <= startTotal) {
-                        errorMsg = `Block "${block}": end time must be after start time.`;
-                        break;
-                    }
-                }
-                if (errorMsg) {
+                const availabilityValidation = Validator.worker.validateAvailability(availability);
+                if (!availabilityValidation.valid) {
                     showAvailabilityFormatModal(availability, (newVal) => {
                         document.getElementById('workerAvailability').value = newVal;
                         submitWorkerForm();
-                    }, errorMsg);
+                    }, availabilityValidation.error);
                     return;
                 }
             }
