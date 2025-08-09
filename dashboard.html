@@ -3017,6 +3017,84 @@
             
             return { gaps, warnings };
         };
+
+        // CRITICAL: Function to validate that ALL operating hours are covered
+        const validateCompleteScheduleCoverage = (schedule, hoursOfOperation) => {
+            const gaps = [];
+            let hasGaps = false;
+            
+            console.log('🔍 Validating complete schedule coverage...');
+            
+            for (const [day, operations] of Object.entries(hoursOfOperation)) {
+                const daySchedule = schedule[day] || [];
+                
+                for (const operation of operations) {
+                    const opStart = timeToHour(operation.start);
+                    let opEnd = timeToHour(operation.end);
+                    if (opEnd <= opStart) opEnd += 24; // Handle overnight operations
+                    
+                    console.log(`Checking ${day} operations: ${operation.start}-${operation.end} (${opStart}-${opEnd})`);
+                    
+                    // Get all shifts that overlap with this operation period
+                    const relevantShifts = daySchedule
+                        .filter(shift => !shift.isGap) // Exclude gap markers
+                        .map(shift => ({
+                            start: timeToHour(shift.start),
+                            end: timeToHour(shift.end),
+                            hasWorkers: shift.raw_assigned && shift.raw_assigned.length > 0
+                        }))
+                        .filter(shift => {
+                            // Check for any overlap with operation hours
+                            let shiftEnd = shift.end;
+                            if (shiftEnd <= shift.start) shiftEnd += 24; // Handle overnight shifts
+                            
+                            return !(shiftEnd <= opStart || shift.start >= opEnd); // Has overlap
+                        })
+                        .sort((a, b) => a.start - b.start);
+                    
+                    console.log(`Found ${relevantShifts.length} relevant shifts for ${day} ${operation.start}-${operation.end}`);
+                    
+                    // Check for gaps in coverage
+                    let coverageStart = opStart;
+                    
+                    for (const shift of relevantShifts) {
+                        if (shift.start > coverageStart) {
+                            // Gap found
+                            gaps.push({
+                                day: day,
+                                start: hourToTime(coverageStart),
+                                end: hourToTime(shift.start),
+                                startHour: coverageStart,
+                                endHour: shift.start,
+                                duration: shift.start - coverageStart,
+                                reason: "No shift coverage during operating hours"
+                            });
+                            hasGaps = true;
+                            console.error(`❌ COVERAGE GAP: ${day} ${hourToTime(coverageStart)}-${hourToTime(shift.start)}`);
+                        }
+                        
+                        coverageStart = Math.max(coverageStart, shift.end);
+                    }
+                    
+                    // Check if operation end is covered
+                    if (coverageStart < opEnd) {
+                        gaps.push({
+                            day: day,
+                            start: hourToTime(coverageStart),
+                            end: hourToTime(opEnd),
+                            startHour: coverageStart,
+                            endHour: opEnd,
+                            duration: opEnd - coverageStart,
+                            reason: "No shift coverage at end of operating hours"
+                        });
+                        hasGaps = true;
+                        console.error(`❌ COVERAGE GAP: ${day} ${hourToTime(coverageStart)}-${hourToTime(opEnd)}`);
+                    }
+                }
+            }
+            
+            return { hasGaps, gaps };
+        };
         
         const safeAssignWorkerToShift = (worker, day, start, end, schedule, assignedHours, shiftAssignments, maxWorkersPerShift) => {
             try {
@@ -4486,84 +4564,6 @@
                 },
                 coverageValidation: finalCoverageValidation
             };
-        };
-
-        // CRITICAL: Function to validate that ALL operating hours are covered
-        const validateCompleteScheduleCoverage = (schedule, hoursOfOperation) => {
-            const gaps = [];
-            let hasGaps = false;
-            
-            console.log('🔍 Validating complete schedule coverage...');
-            
-            for (const [day, operations] of Object.entries(hoursOfOperation)) {
-                const daySchedule = schedule[day] || [];
-                
-                for (const operation of operations) {
-                    const opStart = timeToHour(operation.start);
-                    let opEnd = timeToHour(operation.end);
-                    if (opEnd <= opStart) opEnd += 24; // Handle overnight operations
-                    
-                    console.log(`Checking ${day} operations: ${operation.start}-${operation.end} (${opStart}-${opEnd})`);
-                    
-                    // Get all shifts that overlap with this operation period
-                    const relevantShifts = daySchedule
-                        .filter(shift => !shift.isGap) // Exclude gap markers
-                        .map(shift => ({
-                            start: timeToHour(shift.start),
-                            end: timeToHour(shift.end),
-                            hasWorkers: shift.raw_assigned && shift.raw_assigned.length > 0
-                        }))
-                        .filter(shift => {
-                            // Check for any overlap with operation hours
-                            let shiftEnd = shift.end;
-                            if (shiftEnd <= shift.start) shiftEnd += 24; // Handle overnight shifts
-                            
-                            return !(shiftEnd <= opStart || shift.start >= opEnd); // Has overlap
-                        })
-                        .sort((a, b) => a.start - b.start);
-                    
-                    console.log(`Found ${relevantShifts.length} relevant shifts for ${day} ${operation.start}-${operation.end}`);
-                    
-                    // Check for gaps in coverage
-                    let coverageStart = opStart;
-                    
-                    for (const shift of relevantShifts) {
-                        if (shift.start > coverageStart) {
-                            // Gap found
-                            gaps.push({
-                                day: day,
-                                start: hourToTime(coverageStart),
-                                end: hourToTime(shift.start),
-                                startHour: coverageStart,
-                                endHour: shift.start,
-                                duration: shift.start - coverageStart,
-                                reason: "No shift coverage during operating hours"
-                            });
-                            hasGaps = true;
-                            console.error(`❌ COVERAGE GAP: ${day} ${hourToTime(coverageStart)}-${hourToTime(shift.start)}`);
-                        }
-                        
-                        coverageStart = Math.max(coverageStart, shift.end);
-                    }
-                    
-                    // Check if operation end is covered
-                    if (coverageStart < opEnd) {
-                        gaps.push({
-                            day: day,
-                            start: hourToTime(coverageStart),
-                            end: hourToTime(opEnd),
-                            startHour: coverageStart,
-                            endHour: opEnd,
-                            duration: opEnd - coverageStart,
-                            reason: "No shift coverage at end of operating hours"
-                        });
-                        hasGaps = true;
-                        console.error(`❌ COVERAGE GAP: ${day} ${hourToTime(coverageStart)}-${hourToTime(opEnd)}`);
-                    }
-                }
-            }
-            
-            return { hasGaps, gaps };
         };
 
         // CRITICAL: Validate Work Study Requirements
