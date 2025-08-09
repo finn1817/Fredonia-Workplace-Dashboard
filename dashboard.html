@@ -8587,38 +8587,55 @@ Management Team`);
             document.getElementById('workerFormModal').style.display = 'block';
         };
 
-        window.editWorker = function(workerId) {
+        window.editWorker = async function(workerId) {
             if (!user.isAdmin) {
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
 
-            const worker = workers.find(w => w.id === workerId);
-            if (!worker) {
-                showNotification('❌ Worker not found', 'error');
-                return;
+            try {
+                // Always fetch the latest worker data from Firestore to ensure we have the most up-to-date availability
+                const workerDoc = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId));
+                if (!workerDoc.exists()) {
+                    showNotification('❌ Worker not found', 'error');
+                    return;
+                }
+
+                const data = workerDoc.data();
+                const worker = {
+                    id: workerDoc.id,
+                    first_name: data['First Name'] || 'Unknown',
+                    last_name: data['Last Name'] || 'Worker',
+                    email: data['Email'] || 'no-email',
+                    work_study: data['Work Study'] === 'Yes',
+                    worker_type: data['Worker Type'] || 'Regular',
+                    availability_text: data['Days & Times Available'] || ''
+                };
+
+                console.log('Editing worker (fresh from database):', worker);
+                console.log('Worker availability:', worker.availability_text);
+
+                editingWorkerId = workerId;
+                document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
+                
+                document.getElementById('workerFirstName').value = worker.first_name;
+                document.getElementById('workerLastName').value = worker.last_name;
+                document.getElementById('workerEmail').value = worker.email;
+                document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
+                
+                // Set worker type, defaulting to 'Regular' if not set
+                document.getElementById('workerType').value = worker.worker_type || 'Regular';
+                
+                // Clear existing slots and load worker's availability
+                clearAllAvailabilitySlots();
+                loadWorkerAvailability(worker.availability_text);
+                
+                closeModal('workersModal');
+                document.getElementById('workerFormModal').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading worker for editing:', error);
+                showNotification('❌ Error loading worker data', 'error');
             }
-
-            console.log('Editing worker:', worker);
-            console.log('Worker availability:', worker.availability_text);
-
-            editingWorkerId = workerId;
-            document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
-            
-            document.getElementById('workerFirstName').value = worker.first_name;
-            document.getElementById('workerLastName').value = worker.last_name;
-            document.getElementById('workerEmail').value = worker.email;
-            document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
-            
-            // Set worker type, defaulting to 'Regular' if not set
-            document.getElementById('workerType').value = worker.worker_type || 'Regular';
-            
-            // Clear existing slots and load worker's availability
-            clearAllAvailabilitySlots();
-            loadWorkerAvailability(worker.availability_text);
-            
-            closeModal('workersModal');
-            document.getElementById('workerFormModal').style.display = 'block';
         };
 
         // Availability Management Functions
