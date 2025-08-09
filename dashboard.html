@@ -10210,26 +10210,57 @@ Management Team`);
                     if (!a.work_study && b.work_study) return 1;
                     return calculateAvailabilityHours(a) - calculateAvailabilityHours(b);
                 });
-                // Generate schedule
-                const result = createShiftsFromAvailability(
-                    hours, 
-                    processedWorkers,
+                
+                console.log('🚀 Starting schedule generation with:', {
+                    workers: processedWorkers.length,
                     maxHours,
                     workersPerShift,
                     minHours,
-                    ensureFullCoverage
-                );
+                    ensureFullCoverage,
+                    hours: Object.keys(hours).length
+                });
+                
+                // Generate schedule with enhanced error handling
+                let result;
+                try {
+                    result = createShiftsFromAvailability(
+                        hours, 
+                        processedWorkers,
+                        maxHours,
+                        workersPerShift,
+                        minHours,
+                        ensureFullCoverage
+                    );
+                    
+                    if (!result || typeof result !== 'object') {
+                        throw new Error('createShiftsFromAvailability returned invalid result: ' + typeof result);
+                    }
+                    
+                    console.log('✅ Schedule generation result:', result);
+                    
+                } catch (scheduleError) {
+                    console.error('❌ Error in createShiftsFromAvailability:', scheduleError);
+                    document.getElementById('scheduleDisplay').innerHTML = `<div class="error">❌ Schedule generation error: ${scheduleError.message}</div>`;
+                    showNotification('❌ Schedule generation failed: ' + scheduleError.message, 'error');
+                    setLoading('generateScheduleBtn', false);
+                    return;
+                }
+                
+                // Safe destructuring with defaults
                 const {
-                    schedule: generatedSchedule,
-                    assignedHours,
-                    lowHours,
-                    unassigned,
-                    altSols,
-                    unfilledShifts,
-                    wsIssues,
-                    minHoursIssues,
-                    coverageGaps,
-                    forcedAssignments
+                    schedule: generatedSchedule = {},
+                    assignedHours = {},
+                    lowHours = [],
+                    unassigned = [],
+                    altSols = {},
+                    unfilledShifts = [],
+                    wsIssues = [],
+                    minHoursIssues = [],
+                    coverageGaps = [],
+                    forcedAssignments = [],
+                    productionIssues = [],
+                    validationSummary = {},
+                    coverageValidation = { hasGaps: false, gaps: [] }
                 } = result;
                 
                 // PRODUCTION-READY: Enhanced schedule validation
@@ -10293,9 +10324,30 @@ Management Team`);
                 hideAllForms();
                 showNotification('✅ Schedule generated successfully! Use "Schedule History" to set it as current for workers.', 'success', { duration: 8000, replaceAll: true });
             } catch (error) {
-                console.error('Error generating schedule:', error);
-                document.getElementById('scheduleDisplay').innerHTML = `<div class="error">❌ Error generating schedule: ${error.message}</div>`;
-                showNotification('❌ Failed to generate schedule', 'error');
+                console.error('❌ CRITICAL ERROR in generateSchedule:', error);
+                console.error('Error stack:', error.stack);
+                console.error('Error details:', {
+                    message: error.message,
+                    name: error.name,
+                    selectedWorkplace,
+                    workersCount: workers.length,
+                    hoursConfigured: Object.keys(hours).length,
+                    userIsAdmin: user.isAdmin
+                });
+                
+                const errorDetails = `${error.message || 'Unknown error'}`;
+                document.getElementById('scheduleDisplay').innerHTML = `
+                    <div class="error">
+                        <h3>❌ Schedule Generation Failed</h3>
+                        <p><strong>Error:</strong> ${errorDetails}</p>
+                        <p><strong>Workplace:</strong> ${selectedWorkplace || 'None selected'}</p>
+                        <p><strong>Workers:</strong> ${workers.length}</p>
+                        <p><strong>Hours configured:</strong> ${Object.keys(hours).length} days</p>
+                        <p style="font-size: 0.9em; color: #666; margin-top: 1rem;">
+                            Check browser console (F12) for detailed error information.
+                        </p>
+                    </div>`;
+                showNotification(`❌ Failed to generate schedule: ${errorDetails}`, 'error');
             } finally {
                 setLoading('generateScheduleBtn', false);
             }
