@@ -4462,6 +4462,55 @@
                 }
             }
             
+            // ENHANCED: Try to automatically fix coverage gaps
+            const maxHoursLimit = 40; // Or get from parameters
+            const { fixes, suggestions } = attemptGapFixes(schedule, hoursOfOperation, workersData, finalValidation, maxHoursLimit);
+            
+            // Apply automatic fixes that don't violate constraints
+            let appliedFixes = 0;
+            for (const fix of fixes) {
+                try {
+                    if (fix.type === 'extend_shift') {
+                        fix.originalShift.end = fix.newEndTime;
+                        console.log(`🔧 AUTO-FIX: Extended ${fix.day} shift to ${fix.newEndTime} (filled ${fix.gapFilled.toFixed(1)}h gap)`);
+                        appliedFixes++;
+                    } else if (fix.type === 'start_earlier') {
+                        fix.originalShift.start = fix.newStartTime;
+                        console.log(`🔧 AUTO-FIX: Started ${fix.day} shift earlier at ${fix.newStartTime} (filled ${fix.gapFilled.toFixed(1)}h gap)`);
+                        appliedFixes++;
+                    } else if (fix.type === 'extend_to_close') {
+                        fix.originalShift.end = fix.newEndTime;
+                        console.log(`🔧 AUTO-FIX: Extended ${fix.day} shift to closing time ${fix.newEndTime} (filled ${fix.gapFilled.toFixed(1)}h gap)`);
+                        appliedFixes++;
+                    }
+                } catch (error) {
+                    console.error('Error applying fix:', error);
+                }
+            }
+            
+            if (appliedFixes > 0) {
+                console.log(`✅ Applied ${appliedFixes} automatic gap fixes`);
+                // Recalculate hours after fixes
+                finalValidation = calculateAssignedHours(schedule);
+            }
+            
+            // Add suggestions to unfilled shifts for user review
+            for (const suggestion of suggestions) {
+                if (suggestion.type === 'new_shift_needed') {
+                    unfilledShifts.push({
+                        day: suggestion.day,
+                        start: suggestion.gapStart,
+                        end: suggestion.gapEnd,
+                        start_hour: timeToHour(suggestion.gapStart),
+                        end_hour: timeToHour(suggestion.gapEnd),
+                        isGap: true,
+                        isCritical: true,
+                        reason: `Coverage gap (${suggestion.duration.toFixed(1)}h) - ${suggestion.availableWorkers.length} workers available`,
+                        availableWorkers: suggestion.availableWorkers
+                    });
+                }
+            }
+            
             return {
                 schedule,
                 assignedHours: finalValidation, // Use the validated hours
@@ -4474,6 +4523,7 @@
                 coverageGaps: [...coverageGaps, ...schedCoverageValidation.gaps],
                 forcedAssignments,
                 productionIssues,
+                appliedFixes, // Add the number of applied fixes
                 validationSummary: {
                     totalShifts: totalShiftsCount,
                     totalWorkers: totalWorkersCount,
@@ -4513,6 +4563,148 @@
             }
             
             return { violations, issues };
+        };
+
+        // ENHANCED: Try to automatically fix coverage gaps by extending shifts or suggesting solutions
+        const attemptGapFixes = (schedule, hoursOfOperation, workersData, assignedHours, maxHours) => {
+            const fixes = [];
+            const suggestions = [];
+            
+            console.log('🔧 Attempting to fix coverage gaps...');
+            
+            for (const [day, operations] of Object.entries(hoursOfOperation)) {
+                const dayShifts = schedule[day] || [];
+                
+                for (const operation of operations) {
+                    const opStart = timeToHour(operation.start);
+                    let opEnd = timeToHour(operation.end);
+                    if (opEnd <= opStart) opEnd += 24; // Handle overnight operations
+                    
+                    // Sort shifts by start time
+                    const sortedShifts = dayShifts
+                        .filter(shift => !shift.isGap && shift.raw_assigned && shift.raw_assigned.length > 0)
+                        .sort((a, b) => timeToHour(a.start) - timeToHour(b.start));
+                    
+                    let currentCoverage = opStart;
+                    
+                    for (const shift of sortedShifts) {
+                        const shiftStart = timeToHour(shift.start);
+                        const shiftEnd = timeToHour(shift.end);
+                        
+                        // Check if there's a gap before this shift
+                        if (shiftStart > currentCoverage) {
+                            const gapDuration = shiftStart - currentCoverage;
+                            
+                            // Try to extend previous shift to fill gap
+                            if (sortedShifts.indexOf(shift) > 0) {
+                                const prevShift = sortedShifts[sortedShifts.indexOf(shift) - 1];
+                                const prevWorkers = prevShift.raw_assigned || [];
+                                
+                                // Check if any of the previous shift workers can extend
+                                const extensibleWorkers = prevWorkers.filter(email => {
+                                    const worker = workersData.find(w => w.email === email);
+                                    const currentHours = assignedHours[email] || 0;
+                                    
+                                    return worker && 
+                                           isWorkerAvailable(worker, day, timeToHour(prevShift.start), shiftStart) &&
+                                           (currentHours + gapDuration) <= maxHours;
+                                });
+                                
+                                if (extensibleWorkers.length > 0) {
+                                    fixes.push({
+                                        type: 'extend_shift',
+                                        day: day,
+                                        originalShift: prevShift,
+                                        newEndTime: hourToTime(shiftStart),
+                                        workers: extensibleWorkers,
+                                        gapFilled: gapDuration
+                                    });
+                                }
+                            }
+                            
+                            // Try to start current shift earlier
+                            const currentWorkers = shift.raw_assigned || [];
+                            const earlierStartWorkers = currentWorkers.filter(email => {
+                                const worker = workersData.find(w => w.email === email);
+                                const currentHours = assignedHours[email] || 0;
+                                
+                                return worker && 
+                                       isWorkerAvailable(worker, day, currentCoverage, timeToHour(shift.end)) &&
+                                       (currentHours + gapDuration) <= maxHours;
+                            });
+                            
+                            if (earlierStartWorkers.length > 0) {
+                                fixes.push({
+                                    type: 'start_earlier',
+                                    day: day,
+                                    originalShift: shift,
+                                    newStartTime: hourToTime(currentCoverage),
+                                    workers: earlierStartWorkers,
+                                    gapFilled: gapDuration
+                                });
+                            }
+                            
+                            // If no automatic fixes, suggest alternatives
+                            if (extensibleWorkers.length === 0 && earlierStartWorkers.length === 0) {
+                                // Find any available workers for this gap
+                                const availableWorkers = workersData.filter(worker => {
+                                    const currentHours = assignedHours[worker.email] || 0;
+                                    return isWorkerAvailable(worker, day, currentCoverage, shiftStart) &&
+                                           (currentHours + gapDuration) <= maxHours;
+                                });
+                                
+                                suggestions.push({
+                                    type: 'new_shift_needed',
+                                    day: day,
+                                    gapStart: hourToTime(currentCoverage),
+                                    gapEnd: hourToTime(shiftStart),
+                                    duration: gapDuration,
+                                    availableWorkers: availableWorkers.map(w => ({
+                                        name: `${w.first_name} ${w.last_name}`,
+                                        email: w.email,
+                                        currentHours: assignedHours[w.email] || 0
+                                    }))
+                                });
+                            }
+                        }
+                        
+                        currentCoverage = Math.max(currentCoverage, shiftEnd);
+                    }
+                    
+                    // Check if there's a gap at the end
+                    if (currentCoverage < opEnd) {
+                        const gapDuration = opEnd - currentCoverage;
+                        
+                        if (sortedShifts.length > 0) {
+                            const lastShift = sortedShifts[sortedShifts.length - 1];
+                            const lastWorkers = lastShift.raw_assigned || [];
+                            
+                            const extensibleWorkers = lastWorkers.filter(email => {
+                                const worker = workersData.find(w => w.email === email);
+                                const currentHours = assignedHours[email] || 0;
+                                
+                                return worker && 
+                                       isWorkerAvailable(worker, day, timeToHour(lastShift.start), opEnd) &&
+                                       (currentHours + gapDuration) <= maxHours;
+                            });
+                            
+                            if (extensibleWorkers.length > 0) {
+                                fixes.push({
+                                    type: 'extend_to_close',
+                                    day: day,
+                                    originalShift: lastShift,
+                                    newEndTime: hourToTime(opEnd),
+                                    workers: extensibleWorkers,
+                                    gapFilled: gapDuration
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            console.log(`🔧 Found ${fixes.length} potential automatic fixes and ${suggestions.length} suggestions`);
+            return { fixes, suggestions };
         };
 
         // Initialize workplaces with enhanced error handling
@@ -10180,6 +10372,7 @@ Management Team`);
                     coverageGaps = [],
                     forcedAssignments = [],
                     productionIssues = [],
+                    appliedFixes = 0,
                     validationSummary = {}
                 } = result;
                 
@@ -10230,14 +10423,15 @@ Management Team`);
                     setLoading('generateScheduleBtn', false);
                     return;
                 }
-                if (unfilledShifts.length > 0 || wsIssues.length > 0 || minHoursIssues.length > 0 || coverageGaps.length > 0) {
+                if (unfilledShifts.length > 0 || wsIssues.length > 0 || minHoursIssues.length > 0 || coverageGaps.length > 0 || appliedFixes > 0) {
                     showEnhancedIssuesDialog({
                         unfilledShifts,
                         wsIssues,
                         minHoursIssues,
                         coverageGaps,
                         altSols,
-                        forcedAssignments
+                        forcedAssignments,
+                        appliedFixes
                     });
                 }
                 displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, false, coverageGaps);
@@ -10307,17 +10501,26 @@ Management Team`);
 
         // Enhanced issues dialog with coverage gaps
         function showEnhancedIssuesDialog(issues) {
-            const { unfilledShifts, wsIssues, minHoursIssues, coverageGaps, altSols, forcedAssignments } = issues;
+            const { unfilledShifts, wsIssues, minHoursIssues, coverageGaps, altSols, forcedAssignments, appliedFixes } = issues;
             
             let html = '<div class="modal-content"><div class="modal-header"><h3>⚠️ Schedule Analysis & Issues</h3><span class="close" onclick="closeIssuesDialog()">&times;</span></div>';
+            
+            // Show applied automatic fixes first (success section)
+            if (appliedFixes && appliedFixes > 0) {
+                html += `<div class="success"><h4>🔧 Automatic Fixes Applied: ${appliedFixes}</h4><p>The system automatically extended shifts or adjusted timing to reduce coverage gaps where possible. Check the schedule for details.</p></div>`;
+            }
             
             // Coverage gaps (critical)
             if (coverageGaps && coverageGaps.length > 0) {
                 html += '<div class="error"><h4>🚨 Critical Coverage Gaps:</h4><ul>';
                 coverageGaps.forEach(gap => {
-                    html += `<li><strong>${gap.day}</strong> ${formatTime(gap.start)} - ${formatTime(gap.end)} (${gap.duration.toFixed(1)} hours uncovered)</li>`;
+                    html += `<li><strong>${gap.day}</strong> ${formatTime(gap.start)} - ${formatTime(gap.end)} (${gap.duration.toFixed(1)} hours uncovered)`;
+                    if (gap.availableWorkers && gap.availableWorkers.length > 0) {
+                        html += `<br><small style="color: #666;">💡 <strong>Available workers:</strong> ${gap.availableWorkers.map(w => `${w.name} (${w.currentHours}h)`).join(', ')}</small>`;
+                    }
+                    html += '</li>';
                 });
-                html += '</ul><p><strong>Action needed:</strong> These time periods have no worker coverage during operating hours.</p></div>';
+                html += '</ul><p><strong>Action needed:</strong> These time periods have no worker coverage during operating hours. Consider extending shifts, starting shifts earlier, or adding new shifts with available workers.</p></div>';
             }
             
             // Forced assignments section
@@ -10353,9 +10556,12 @@ Management Team`);
                 unfilledShifts.forEach(shift => {
                     const key = `${shift.day} ${shift.start}-${shift.end}`;
                     html += `<li><strong>${key}</strong>`;
+                    if (shift.reason) {
+                        html += ` - <em>${shift.reason}</em>`;
+                    }
                     if (altSols[key] && altSols[key].length > 0) {
                         html += ` - <em>Potential alternatives:</em> ${altSols[key].join(', ')}`;
-                    } else {
+                    } else if (!shift.availableWorkers) {
                         html += ' - <em>No available alternatives found</em>';
                     }
                     html += '</li>';
@@ -11788,6 +11994,30 @@ Management Team`);
                     const w = workers.find(x => x.email === email);
                     return w ? `${w.first_name} ${w.last_name}` : email;
                 });
+                
+                // ENHANCED: Check for availability conflicts with new times
+                const newStartHour = timeToHour(newStart);
+                const newEndHour = timeToHour(newEnd);
+                const conflictWorkers = [];
+                
+                checked.forEach(email => {
+                    const worker = workers.find(w => w.email === email);
+                    if (worker && !isWorkerAvailable(worker, day, newStartHour, newEndHour)) {
+                        conflictWorkers.push(worker);
+                    }
+                });
+                
+                // Show warnings for availability conflicts
+                if (conflictWorkers.length > 0) {
+                    const conflictNames = conflictWorkers.map(w => `${w.first_name} ${w.last_name}`).join(', ');
+                    showNotification(`⚠️ WARNING: ${conflictWorkers.length} worker(s) not available for new time ${formatTime(newStart)}-${formatTime(newEnd)}: ${conflictNames}`, 'warning', { duration: 8000 });
+                    
+                    // Ask for confirmation
+                    if (!confirm(`⚠️ WARNING: The following workers are not available for the new shift time ${formatTime(newStart)}-${formatTime(newEnd)}:\n\n${conflictNames}\n\nDo you want to proceed anyway? This may require manual schedule adjustments.`)) {
+                        return;
+                    }
+                }
+                
                 shift.assigned = newAssigned;
                 shift.raw_assigned = checked;
                 shift.all_available = workers.filter(w => checked.includes(w.email));
