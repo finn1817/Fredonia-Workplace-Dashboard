@@ -1792,15 +1792,15 @@
                 <h4 style="margin-bottom:1rem;">🔒 Change Password</h4>
                 <div class="form-group">
                     <label for="oldPasswordModal">Current Password</label>
-                    <input type="password" id="oldPasswordModal" required>
+                    <input type="password" id="oldPasswordModal" autocomplete="current-password" required>
                 </div>
                 <div class="form-group">
                     <label for="newPasswordModal">New Password</label>
-                    <input type="password" id="newPasswordModal" required>
+                    <input type="password" id="newPasswordModal" autocomplete="new-password" required>
                 </div>
                 <div class="form-group">
                     <label for="confirmNewPasswordModal">Confirm New Password</label>
-                    <input type="password" id="confirmNewPasswordModal" required>
+                    <input type="password" id="confirmNewPasswordModal" autocomplete="new-password" required>
                 </div>
                 <button type="button" class="btn btn-info" id="changePasswordBtnModal" style="margin-top:0.5rem;">Change Password</button>
             </form>
@@ -2417,18 +2417,42 @@
         };
 
         const isWorkerAvailable = (worker, day, startHour, endHour) => {
+            // Input validation
+            if (!worker || !worker.availability || !day) {
+                console.warn(`⚠️ Invalid worker availability check: worker=${!!worker}, day=${day}`);
+                return false;
+            }
+            
             const dayAvail = worker.availability[day] || [];
-            return dayAvail.some(slot => {
+            if (dayAvail.length === 0) {
+                console.log(`📋 Worker ${worker.first_name} ${worker.last_name} has no availability on ${day}`);
+                return false;
+            }
+            
+            // Enhanced availability checking with detailed logging
+            for (const slot of dayAvail) {
                 let slotStart = slot.start_hour;
                 let slotEnd = slot.end_hour;
+                
+                // Validate slot data
+                if (typeof slotStart !== 'number' || typeof slotEnd !== 'number') {
+                    console.warn(`⚠️ Invalid availability slot for ${worker.first_name} ${worker.last_name} on ${day}:`, slot);
+                    continue;
+                }
                 
                 // Handle overnight availability slots (e.g., 22:00 to 6:00 next day)
                 if (slotEnd < slotStart) {
                     // This is an overnight slot, split it into two parts
                     // Part 1: start to midnight (24:00)
                     // Part 2: midnight to end (treat as next day)
-                    return (slotStart <= startHour && startHour < 24 && endHour <= 24) ||
-                           (0 <= startHour && startHour < 24 && endHour <= slotEnd);
+                    const part1Covers = (slotStart <= startHour && startHour < 24 && endHour <= 24);
+                    const part2Covers = (0 <= startHour && startHour < 24 && endHour <= slotEnd);
+                    
+                    if (part1Covers || part2Covers) {
+                        console.log(`✅ Worker ${worker.first_name} ${worker.last_name} available ${startHour}-${endHour} (overnight slot ${slotStart}-${slotEnd})`);
+                        return true;
+                    }
+                    continue;
                 }
                 
                 // Handle overnight shift requests (endHour > 24 means crossing midnight)
@@ -2444,12 +2468,25 @@
                         tomorrowSlot.start_hour <= tomorrowStart && tomorrowEnd <= tomorrowSlot.end_hour
                     );
                     
-                    return coversTodayPart && coversTomorrowPart;
+                    if (coversTodayPart && coversTomorrowPart) {
+                        console.log(`✅ Worker ${worker.first_name} ${worker.last_name} available ${startHour}-${endHour} (overnight request)`);
+                        return true;
+                    }
+                    continue;
                 }
                 
-                // Normal same-day check
-                return slotStart <= startHour && endHour <= slotEnd;
-            });
+                // Normal same-day check with tolerance for floating point precision
+                const tolerance = 0.1; // 6 minutes tolerance
+                const slotCanCover = (slotStart <= startHour + tolerance) && (endHour <= slotEnd + tolerance);
+                
+                if (slotCanCover) {
+                    console.log(`✅ Worker ${worker.first_name} ${worker.last_name} available ${startHour}-${endHour} (slot ${slotStart}-${slotEnd})`);
+                    return true;
+                }
+            }
+            
+            console.log(`❌ Worker ${worker.first_name} ${worker.last_name} NOT available ${startHour}-${endHour} on ${day}`);
+            return false;
         };
 
         // Enhanced loading state management
@@ -2920,24 +2957,6 @@
             }
             
             return { valid: true, errors, warnings, duration };
-        };
-        
-        const validateWorkStudyRequirements = (wsWorkers, assignedHours) => {
-            const issues = [];
-            const violations = [];
-            
-            for (const worker of wsWorkers) {
-                const hours = assignedHours[worker.email] || 0;
-                if (hours < 5) {
-                    issues.push(`${worker.first_name} ${worker.last_name}: Only ${hours.toFixed(1)} hours assigned (needs 5)`);
-                    violations.push({ worker, hours, required: 5 });
-                } else if (hours > 5.1) {
-                    issues.push(`${worker.first_name} ${worker.last_name}: ${hours.toFixed(1)} hours assigned (should be exactly 5)`);
-                    violations.push({ worker, hours, required: 5 });
-                }
-            }
-            
-            return { issues, violations };
         };
         
         const validateScheduleCoverageComprehensive = (schedule, hoursOfOperation) => {
@@ -3557,34 +3576,64 @@
                             gaps.push([currentTime, opEnd]);
                         }
 
-                        // CRITICAL FIX: Filter out gaps where no workers are available at all
+                        // CRITICAL FIX: Check gaps thoroughly and ALWAYS try to fill critical coverage gaps
                         const validGaps = [];
                         for (const [gapStart, gapEnd] of gaps) {
-                            // Check if any workers are available during this gap
-                            let hasAvailableWorkers = false;
+                            const gapDuration = gapEnd - gapStart;
+                            
+                            // Check if any workers are available during this gap (with more thorough checking)
+                            let availableWorkerCount = 0;
+                            const availableWorkerNames = [];
+                            
                             for (const worker of workersData) {
+                                // More flexible availability checking - try smaller time segments
+                                let canCoverGap = false;
+                                
+                                // Check if worker can cover the full gap
                                 if (isWorkerAvailable(worker, day, gapStart, gapEnd)) {
-                                    hasAvailableWorkers = true;
-                                    break;
+                                    canCoverGap = true;
+                                } else {
+                                    // Check if worker can cover ANY part of the gap (partial coverage)
+                                    for (let testStart = gapStart; testStart < gapEnd - 1; testStart += 0.5) {
+                                        const testEnd = Math.min(testStart + 2, gapEnd); // Minimum 2-hour segments
+                                        if (isWorkerAvailable(worker, day, testStart, testEnd)) {
+                                            canCoverGap = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (canCoverGap) {
+                                    availableWorkerCount++;
+                                    availableWorkerNames.push(`${worker.first_name} ${worker.last_name}`);
+                                    
+                                    // Don't break - count all available workers for better logging
                                 }
                             }
                             
-                            if (hasAvailableWorkers) {
+                            // CRITICAL: Always include gaps during operating hours - even if no workers available
+                            // This ensures we create coverage gap indicators instead of completely ignoring time periods
+                            if (availableWorkerCount > 0) {
                                 validGaps.push([gapStart, gapEnd]);
-                                console.log(`✅ Valid gap: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} - workers available`);
+                                console.log(`✅ COVERAGE GAP FOUND: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} - ${availableWorkerCount} workers available: ${availableWorkerNames.join(', ')}`);
                             } else {
-                                console.log(`❌ Invalid gap: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} - no workers available, skipping`);
+                                // CRITICAL: Still include the gap but mark it as uncoverable
+                                validGaps.push([gapStart, gapEnd, true]); // Third parameter indicates "no workers available"
+                                console.error(`🚨 CRITICAL COVERAGE GAP: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} (${gapDuration.toFixed(1)}h) - NO WORKERS AVAILABLE - MUST BE ADDRESSED`);
                             }
                         }
 
-                        // Fill each gap
-                        for (const [gapStart, gapEnd] of validGaps) {
-                            console.log(`Filling gap: ${hourToTime(gapStart)}-${hourToTime(gapEnd)} (${gapStart}-${gapEnd} hours)`);
+                        // Fill each gap with MANDATORY coverage
+                        for (const gapData of validGaps) {
+                            const [gapStart, gapEnd, isUncoverable] = Array.isArray(gapData) && gapData.length === 3 ? gapData : [gapData[0], gapData[1], false];
+                            
+                            console.log(`🔧 MANDATORY COVERAGE: Processing gap ${hourToTime(gapStart)}-${hourToTime(gapEnd)} (uncoverable: ${isUncoverable})`);
+                            
                             let cur = gapStart;
                             while (cur < gapEnd) {
                                 const remainingTime = gapEnd - cur;
-                                if (remainingTime < 2) {
-                                    // Leave as a coverage gap, do not create a shift
+                                if (remainingTime < 1.5) {
+                                    // Don't create tiny shifts
                                     break;
                                 }
                                 const shiftLength = Math.min(Math.max(2, remainingTime), 4); // 2-4 hour shifts
@@ -3600,13 +3649,13 @@
                                     finalEndShift = opEnd;
                                     finalDuration = finalEndShift - cur;
                                     
-                                    if (finalDuration < 2) {
+                                    if (finalDuration < 1.5) {
                                         console.log(`⚠️ Adjusted shift too short (${finalDuration.toFixed(1)}h), skipping`);
                                         break;
                                     }
                                 }
 
-                                // Find available workers for this gap
+                                // ENHANCED: Find workers with more flexible criteria if gap is uncoverable
                                 const availableWorkers = [];
                                 
                                 for (const x of workersData) {
@@ -3615,23 +3664,61 @@
                                     // Skip work study students who already have 5 hours
                                     if (wsStatus[xEmail] && assignedHours[xEmail] >= 5) continue;
                                     
-                                    // CRITICAL: Never skip work study students with 0 hours - they MUST be assigned first
-                                    if (wsStatus[xEmail] && assignedHours[xEmail] === 0) {
-                                        console.warn(`🚨 CRITICAL: Work study student ${x.first_name} ${x.last_name} has 0 hours but is being considered for regular assignment - this should not happen!`);
-                                        // Continue to include them in regular assignment as fallback
+                                    // More flexible worker checking for uncoverable gaps
+                                    let isAvailable = false;
+                                    if (isUncoverable) {
+                                        // For uncoverable gaps, try more flexible criteria
+                                        // Check for ANY overlap with worker availability
+                                        for (const availSlot of x.availability[day] || []) {
+                                            const overlapStart = Math.max(cur, availSlot.start_hour);
+                                            const overlapEnd = Math.min(finalEndShift, availSlot.end_hour);
+                                            
+                                            if (overlapEnd > overlapStart && (overlapEnd - overlapStart) >= 1.5) {
+                                                // At least 1.5 hours of overlap
+                                                isAvailable = true;
+                                                console.log(`� FLEXIBLE MATCH: ${x.first_name} ${x.last_name} has ${(overlapEnd - overlapStart).toFixed(1)}h overlap for uncoverable gap`);
+                                                break;
+                                            }
+                                        }
+                                    } else {
+                                        // Normal availability check
+                                        isAvailable = isWorkerAvailable(x, day, cur, finalEndShift);
                                     }
                                     
-                                    if (isWorkerAvailable(x, day, cur, finalEndShift) && 
-                                        assignedHours[xEmail] + finalDuration <= maxHoursPerWorker) {
-                                        
+                                    if (isAvailable && assignedHours[xEmail] + finalDuration <= maxHoursPerWorker) {
                                         availableWorkers.push(x);
                                     }
                                 }
 
-                                // CRITICAL FIX: Only create shifts if workers are actually available
+                                // CRITICAL: ALWAYS create a shift entry, even if no workers are available
                                 if (availableWorkers.length === 0) {
-                                    console.log(`⚠️ No workers available for ${hourToTime(cur)}-${hourToTime(endShift)}, skipping shift creation`);
-                                    cur = endShift;
+                                    console.error(`🚨 FORCED COVERAGE GAP: Creating gap marker for ${hourToTime(cur)}-${hourToTime(finalEndShift)} on ${day} - NO WORKERS AVAILABLE`);
+                                    
+                                    // Create an explicit coverage gap marker
+                                    schedule[day].push({
+                                        start: hourToTime(cur),
+                                        end: hourToTime(finalEndShift),
+                                        assigned: ["⚠️ CRITICAL COVERAGE GAP - NO WORKERS AVAILABLE"],
+                                        available: [],
+                                        raw_assigned: [],
+                                        all_available: [],
+                                        isGap: true,
+                                        isCritical: true,
+                                        gapReason: "No workers available during operating hours"
+                                    });
+                                    
+                                    unfilledShifts.push({
+                                        day: day,
+                                        start: hourToTime(cur),
+                                        end: hourToTime(finalEndShift),
+                                        start_hour: cur,
+                                        end_hour: finalEndShift,
+                                        isGap: true,
+                                        isCritical: true,
+                                        reason: "No workers available"
+                                    });
+                                    
+                                    cur = finalEndShift;
                                     continue;
                                 }
 
@@ -4257,9 +4344,9 @@
             }
             
             // 2. Validate Schedule Coverage
-            const coverageValidation = validateScheduleCoverageComprehensive(schedule, hoursOfOperation);
-            if (coverageValidation.gaps.length > 0) {
-                console.warn('⚠️ PRODUCTION: Coverage gaps detected:', coverageValidation.gaps.length);
+            const schedCoverageValidation = validateScheduleCoverageComprehensive(schedule, hoursOfOperation);
+            if (schedCoverageValidation.gaps.length > 0) {
+                console.warn('⚠️ PRODUCTION: Coverage gaps detected:', schedCoverageValidation.gaps.length);
             }
             
             // 3. Validate Assignment Tracking
@@ -4352,6 +4439,29 @@
             
             console.log('Enhanced schedule generation complete with comprehensive validation');
             
+            // CRITICAL: Validate complete coverage before returning schedule
+            console.log('🔍 CRITICAL VALIDATION: Checking complete schedule coverage...');
+            const finalCoverageValidation = validateCompleteScheduleCoverage(schedule, hoursOfOperation);
+            
+            if (finalCoverageValidation.hasGaps) {
+                console.error('🚨 CRITICAL: Schedule has coverage gaps that must be addressed');
+                console.error('Coverage gaps:', finalCoverageValidation.gaps);
+                
+                // Add critical gaps to unfilled shifts for visibility
+                for (const gap of finalCoverageValidation.gaps) {
+                    unfilledShifts.push({
+                        day: gap.day,
+                        start: gap.start,
+                        end: gap.end,
+                        start_hour: gap.startHour,
+                        end_hour: gap.endHour,
+                        isGap: true,
+                        isCritical: true,
+                        reason: gap.reason || "No coverage during operating hours"
+                    });
+                }
+            }
+            
             return {
                 schedule,
                 assignedHours: finalValidation, // Use the validated hours
@@ -4361,7 +4471,7 @@
                 unfilledShifts,
                 wsIssues: [...wsIssues, ...wsValidation.issues],
                 minHoursIssues,
-                coverageGaps: [...coverageGaps, ...coverageValidation.gaps],
+                coverageGaps: [...coverageGaps, ...schedCoverageValidation.gaps, ...(finalCoverageValidation.gaps || [])],
                 forcedAssignments,
                 productionIssues,
                 validationSummary: {
@@ -4369,12 +4479,119 @@
                     totalWorkers: totalWorkersCount,
                     assignedWorkers: assignedWorkersCount,
                     wsAssigned,
-                    coverageGaps: coverageValidation.gaps.length,
+                    coverageGaps: schedCoverageValidation.gaps.length,
                     wsIssues: wsValidation.issues.length,
                     assignmentErrors: assignmentErrors.length,
                     hourErrors: hourErrors.length
-                }
+                },
+                coverageValidation: finalCoverageValidation
             };
+        };
+
+        // CRITICAL: Function to validate that ALL operating hours are covered
+        const validateCompleteScheduleCoverage = (schedule, hoursOfOperation) => {
+            const gaps = [];
+            let hasGaps = false;
+            
+            console.log('🔍 Validating complete schedule coverage...');
+            
+            for (const [day, operations] of Object.entries(hoursOfOperation)) {
+                const daySchedule = schedule[day] || [];
+                
+                for (const operation of operations) {
+                    const opStart = timeToHour(operation.start);
+                    let opEnd = timeToHour(operation.end);
+                    if (opEnd <= opStart) opEnd += 24; // Handle overnight operations
+                    
+                    console.log(`Checking ${day} operations: ${operation.start}-${operation.end} (${opStart}-${opEnd})`);
+                    
+                    // Get all shifts that overlap with this operation period
+                    const relevantShifts = daySchedule
+                        .filter(shift => !shift.isGap) // Exclude gap markers
+                        .map(shift => ({
+                            start: timeToHour(shift.start),
+                            end: timeToHour(shift.end),
+                            hasWorkers: shift.raw_assigned && shift.raw_assigned.length > 0
+                        }))
+                        .filter(shift => {
+                            // Check for any overlap with operation hours
+                            let shiftEnd = shift.end;
+                            if (shiftEnd <= shift.start) shiftEnd += 24; // Handle overnight shifts
+                            
+                            return !(shiftEnd <= opStart || shift.start >= opEnd); // Has overlap
+                        })
+                        .sort((a, b) => a.start - b.start);
+                    
+                    console.log(`Found ${relevantShifts.length} relevant shifts for ${day} ${operation.start}-${operation.end}`);
+                    
+                    // Check for gaps in coverage
+                    let coverageStart = opStart;
+                    
+                    for (const shift of relevantShifts) {
+                        if (shift.start > coverageStart) {
+                            // Gap found
+                            gaps.push({
+                                day: day,
+                                start: hourToTime(coverageStart),
+                                end: hourToTime(shift.start),
+                                startHour: coverageStart,
+                                endHour: shift.start,
+                                duration: shift.start - coverageStart,
+                                reason: "No shift coverage during operating hours"
+                            });
+                            hasGaps = true;
+                            console.error(`❌ COVERAGE GAP: ${day} ${hourToTime(coverageStart)}-${hourToTime(shift.start)}`);
+                        }
+                        
+                        coverageStart = Math.max(coverageStart, shift.end);
+                    }
+                    
+                    // Check if operation end is covered
+                    if (coverageStart < opEnd) {
+                        gaps.push({
+                            day: day,
+                            start: hourToTime(coverageStart),
+                            end: hourToTime(opEnd),
+                            startHour: coverageStart,
+                            endHour: opEnd,
+                            duration: opEnd - coverageStart,
+                            reason: "No shift coverage at end of operating hours"
+                        });
+                        hasGaps = true;
+                        console.error(`❌ COVERAGE GAP: ${day} ${hourToTime(coverageStart)}-${hourToTime(opEnd)}`);
+                    }
+                }
+            }
+            
+            return { hasGaps, gaps };
+        };
+
+        // CRITICAL: Validate Work Study Requirements
+        const validateWorkStudyRequirements = (wsWorkers, assignedHours) => {
+            const violations = [];
+            const issues = [];
+            
+            for (const worker of wsWorkers) {
+                const hours = assignedHours[worker.email] || 0;
+                
+                if (Math.abs(hours - 5) > 0.1) {
+                    violations.push({
+                        worker: `${worker.first_name} ${worker.last_name}`,
+                        email: worker.email,
+                        assigned: hours,
+                        required: 5,
+                        difference: hours - 5
+                    });
+                    
+                    if (hours < 5) {
+                        issues.push(`${worker.first_name} ${worker.last_name}: ${hours.toFixed(1)}h assigned, needs ${(5 - hours).toFixed(1)}h more`);
+                    } else {
+                        issues.push(`${worker.first_name} ${worker.last_name}: ${hours.toFixed(1)}h assigned, ${(hours - 5).toFixed(1)}h over limit`);
+                    }
+                }
+            }
+            
+            return { violations, issues };
         };
 
         // Initialize workplaces with enhanced error handling
