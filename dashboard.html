@@ -15495,13 +15495,18 @@ Thank you!`;
                     throw new Error('End time must be after start time');
                 }
                 
-                // Check required fields
-                if (!shift.assigned || !Array.isArray(shift.assigned) || shift.assigned.length === 0) {
-                    throw new Error('At least one assigned worker is required');
+                // Skip worker validation for gap shifts or unfilled shifts
+                if (shift.isGap || shift.reason || shift.isCritical) {
+                    return true;
                 }
                 
-                if (!shift.raw_assigned || !Array.isArray(shift.raw_assigned) || shift.raw_assigned.length === 0) {
-                    throw new Error('Raw assigned data is required');
+                // For regular shifts, check for assigned workers (more lenient)
+                if (!shift.assigned || !Array.isArray(shift.assigned)) {
+                    shift.assigned = []; // Initialize if missing
+                }
+                
+                if (!shift.raw_assigned || !Array.isArray(shift.raw_assigned)) {
+                    shift.raw_assigned = []; // Initialize if missing
                 }
                 
                 return true;
