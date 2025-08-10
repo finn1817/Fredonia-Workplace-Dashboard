@@ -2657,7 +2657,13 @@
                     const coveredPeriods = [];
                     
                     dayShifts.forEach(shift => {
-                        if (!shift.assigned.includes('Unfilled')) {
+                        // Skip gap shifts and unfilled shifts
+                        if (shift.isGap || shift.assigned.includes('Unfilled') || 
+                            shift.assigned.some(worker => worker.includes('COVERAGE GAP'))) {
+                            return;
+                        }
+                        // Only count shifts with actual workers assigned
+                        if (shift.assigned && shift.assigned.length > 0) {
                             let shiftStart = timeToHour(shift.start);
                             let shiftEnd = timeToHourWithMidnight(shift.end, shift.end === '00:00');
                             coveredPeriods.push([shiftStart, shiftEnd]);
@@ -3501,11 +3507,14 @@
 
                     // Create continuous coverage for entire operating period
                     if (ensureFullCoverage) {
-                        // Calculate existing coverage
-                        const existingShifts = schedule[day].map(s => ({
-                            start: timeToHour(s.start),
-                            end: timeToHour(s.end)
-                        })).sort((a, b) => a.start - b.start);
+                        // Calculate existing coverage - EXCLUDE gap shifts and unfilled shifts
+                        const existingShifts = schedule[day]
+                            .filter(s => !s.isGap && !s.assigned.includes('Unfilled') && 
+                                        !s.assigned.some(worker => worker.includes('COVERAGE GAP')))
+                            .map(s => ({
+                                start: timeToHour(s.start),
+                                end: timeToHour(s.end)
+                            })).sort((a, b) => a.start - b.start);
 
                         // Merge overlapping shifts
                         const mergedShifts = [];
