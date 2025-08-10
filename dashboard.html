@@ -2430,7 +2430,7 @@
             }
             
             // Enhanced availability checking with detailed logging
-            for (const slot of dayAvail) {
+            for (let slot of dayAvail) {
                 let slotStart = slot.start_hour;
                 let slotEnd = slot.end_hour;
                 
@@ -2754,7 +2754,7 @@
         const calculateAvailabilityHours = (worker) => {
             let totalHours = 0;
             for (const daySlots of Object.values(worker.availability || {})) {
-                for (const slot of daySlots) {
+                for (let slot of daySlots) {
                     totalHours += slot.end_hour - slot.start_hour;
                 }
             }
