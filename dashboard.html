@@ -2101,6 +2101,34 @@
             window.location.href = 'index.html';
         }
         
+        // CRITICAL: For non-admin users, suppress ALL error popups and alerts
+        if (!user.isAdmin) {
+            // Override window.alert to prevent any popups
+            window.alert = function(message) {
+                console.log('Alert suppressed for non-admin:', message);
+            };
+            
+            // Override window.confirm to prevent any popups
+            const originalConfirm = window.confirm;
+            window.confirm = function(message) {
+                console.log('Confirm suppressed for non-admin:', message);
+                return false; // Default to false for safety
+            };
+            
+            // Wrap any potential error sources in try-catch
+            window.addEventListener('error', function(e) {
+                console.log('Error caught and suppressed for non-admin:', e.error);
+                e.preventDefault();
+                return true;
+            });
+            
+            window.addEventListener('unhandledrejection', function(e) {
+                console.log('Promise rejection caught and suppressed for non-admin:', e.reason);
+                e.preventDefault();
+                return true;
+            });
+        }
+        
         const userEmailElement = document.getElementById('userEmail');
         if (userEmailElement) {
             userEmailElement.textContent = user.email;
@@ -5018,8 +5046,10 @@
             }
         }
         
-        // Initialize health monitoring after a short delay
-        setTimeout(initializeDatabaseHealth, 2000);
+        // Initialize health monitoring after a short delay (admin only)
+        if (user.isAdmin) {
+            setTimeout(initializeDatabaseHealth, 2000);
+        }
 
         // Enhanced workplace selection
         window.selectWorkplace = async function(id) {
@@ -9193,12 +9223,14 @@ Management Team`);
             }
         };
         
-        // Initialize session tracking when dashboard loads
+        // Initialize session tracking when dashboard loads (admin only)
         document.addEventListener('DOMContentLoaded', async function() {
-            await initializeSessionTracking();
-            
-            // Generate some sample data if no logs exist (for testing)
-            generateSampleData();
+            if (user.isAdmin) {
+                await initializeSessionTracking();
+                
+                // Generate some sample data if no logs exist (for testing)
+                generateSampleData();
+            }
         });
         
         // Generate sample data for testing
@@ -9500,6 +9532,12 @@ Management Team`);
         const ErrorBoundary = {
             // Global error handler
             setup: () => {
+                // Only set up error boundary for admin users to prevent popup spam
+                if (!user.isAdmin) {
+                    console.log('Error boundary disabled for non-admin users');
+                    return;
+                }
+                
                 // Handle uncaught JavaScript errors
                 window.addEventListener('error', (event) => {
                     logger.error('Uncaught error:', event.error);
@@ -9538,14 +9576,16 @@ Management Team`);
                     // Log to localStorage for debugging
                     ErrorBoundary.logError(errorInfo);
 
-                    // Show user-friendly message
-                    const userMessage = ErrorBoundary.getUserFriendlyMessage(error, context);
-                    showNotification(userMessage, 'error', { duration: 8000 });
+                    // Only show error notifications for admin users
+                    if (user.isAdmin) {
+                        const userMessage = ErrorBoundary.getUserFriendlyMessage(error, context);
+                        showNotification(userMessage, 'error', { duration: 8000 });
+                    }
 
                 } catch (handlerError) {
-                    // If error handler fails, use basic alert
+                    // If error handler fails, just log to console (no alert popup)
                     console.error('Error handler failed:', handlerError);
-                    alert('A critical error occurred. Please refresh the page and try again.');
+                    // Removed alert() to prevent popup spam for non-admin users
                 }
             },
 
@@ -9636,8 +9676,10 @@ Management Team`);
             }
         };
 
-        // Initialize error boundary
-        ErrorBoundary.setup();
+        // Initialize error boundary (admin only)
+        if (user.isAdmin) {
+            ErrorBoundary.setup();
+        }
 
         // Add debug functions for admins
         if (user.isAdmin) {
