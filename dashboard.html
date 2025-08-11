@@ -4942,7 +4942,14 @@
             }
         }
 
-        initializeDefaultWorkplaces();
+        // Only initialize workplaces for admins to prevent database errors for regular users
+        if (user.isAdmin) {
+            try {
+                initializeDefaultWorkplaces();
+            } catch (error) {
+                console.error('Error initializing workplaces:', error);
+            }
+        }
         
         // Initialize Database Consistency Manager (admin only)
         if (user.isAdmin) {
@@ -14230,14 +14237,23 @@ Thank you!`;
                 console.log('Testing Firestore connection...');
                 const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
                 console.log(`✅ Connected! Found ${workplacesSnapshot.size} workplaces in database.`);
-                showNotification('✅ Database connection successful', 'success');
+                // Only show notification for admins to avoid popup errors for regular users
+                if (user.isAdmin) {
+                    showNotification('✅ Database connection successful', 'success');
+                }
             } catch (error) {
                 console.error('❌ Connection test failed:', error);
-                showNotification('❌ Database connection failed', 'error');
+                // Only show error notification for admins
+                if (user.isAdmin) {
+                    showNotification('❌ Database connection failed', 'error');
+                }
             }
         }
 
-        testConnection();
+        // Only test connection for admins and add delay to ensure DOM is ready
+        if (user.isAdmin) {
+            setTimeout(testConnection, 3000);
+        }
 
         // Debug function to check current hours
         window.debugHours = function() {
@@ -14575,68 +14591,91 @@ Thank you!`;
         }
 
         // My Account modal logic for all users
-        document.getElementById('myAccountBtn').onclick = function() {
-            // Pre-fill modal fields with user info
-            document.getElementById('accountFirstNameModal').value = user.firstName || '';
-            document.getElementById('accountLastNameModal').value = user.lastName || '';
-            document.getElementById('accountEmailModal').value = user.email || '';
-            document.getElementById('accountPhoneModal').value = user.phone || '';
-            document.getElementById('currentEmailModal').value = user.email || '';
-            document.getElementById('myAccountModal').style.display = 'block';
-            
-            // Load email change requests history
-            loadEmailChangeRequestsHistory();
-        };
+        const myAccountBtn = document.getElementById('myAccountBtn');
+        if (myAccountBtn) {
+            myAccountBtn.onclick = function() {
+                // Pre-fill modal fields with user info
+                const accountFirstNameModal = document.getElementById('accountFirstNameModal');
+                const accountLastNameModal = document.getElementById('accountLastNameModal');
+                const accountEmailModal = document.getElementById('accountEmailModal');
+                const accountPhoneModal = document.getElementById('accountPhoneModal');
+                const currentEmailModal = document.getElementById('currentEmailModal');
+                const myAccountModal = document.getElementById('myAccountModal');
+                
+                if (accountFirstNameModal) accountFirstNameModal.value = user.firstName || '';
+                if (accountLastNameModal) accountLastNameModal.value = user.lastName || '';
+                if (accountEmailModal) accountEmailModal.value = user.email || '';
+                if (accountPhoneModal) accountPhoneModal.value = user.phone || '';
+                if (currentEmailModal) currentEmailModal.value = user.email || '';
+                if (myAccountModal) myAccountModal.style.display = 'block';
+                
+                // Load email change requests history
+                loadEmailChangeRequestsHistory();
+            };
+        }
         
         // Save account changes handler
-        document.getElementById('saveAccountBtnModal').onclick = async function() {
-            const firstName = document.getElementById('accountFirstNameModal').value.trim();
-            const lastName = document.getElementById('accountLastNameModal').value.trim();
-            const phone = document.getElementById('accountPhoneModal').value.trim();
-            
-            // Validation
-            if (!firstName || !lastName) {
-                showNotification('❌ First name and last name are required', 'error');
-                return;
-            }
-            
-            try {
-                // Update user document in Firestore
-                const userDocRef = doc(db, 'users', user.uid);
-                await updateDoc(userDocRef, {
-                    firstName: firstName,
-                    lastName: lastName,
-                    phone: phone
-                });
+        const saveAccountBtnModal = document.getElementById('saveAccountBtnModal');
+        if (saveAccountBtnModal) {
+            saveAccountBtnModal.onclick = async function() {
+                const accountFirstNameModal = document.getElementById('accountFirstNameModal');
+                const accountLastNameModal = document.getElementById('accountLastNameModal');
+                const accountPhoneModal = document.getElementById('accountPhoneModal');
                 
-                // Update local user object
-                user.firstName = firstName;
-                user.lastName = lastName;
-                user.phone = phone;
+                const firstName = accountFirstNameModal ? accountFirstNameModal.value.trim() : '';
+                const lastName = accountLastNameModal ? accountLastNameModal.value.trim() : '';
+                const phone = accountPhoneModal ? accountPhoneModal.value.trim() : '';
                 
-                // Update localStorage
-                localStorage.setItem('user', JSON.stringify(user));
-                
-                // Update welcome message if user is non-admin
-                if (!user.isAdmin) {
-                    let welcomeName = '';
-                    if (user.firstName && user.lastName) {
-                        welcomeName = `${user.firstName} ${user.lastName}`;
-                    } else if (user.firstName) {
-                        welcomeName = user.firstName;
-                    } else {
-                        welcomeName = user.email || 'User';
-                    }
-                    document.getElementById('userWelcome').textContent = `Welcome, ${welcomeName}!`;
+                // Validation
+                if (!firstName || !lastName) {
+                    showNotification('❌ First name and last name are required', 'error');
+                    return;
                 }
                 
-                showNotification('✅ Account information updated successfully', 'success');
-                document.getElementById('myAccountModal').style.display = 'none';
-            } catch (error) {
-                console.error('Error updating account:', error);
-                showNotification('❌ Failed to update account information', 'error');
-            }
-        };
+                try {
+                    // Update user document in Firestore
+                    const userDocRef = doc(db, 'users', user.uid);
+                    await updateDoc(userDocRef, {
+                        firstName: firstName,
+                        lastName: lastName,
+                        phone: phone
+                    });
+                    
+                    // Update local user object
+                    user.firstName = firstName;
+                    user.lastName = lastName;
+                    user.phone = phone;
+                    
+                    // Update localStorage
+                    localStorage.setItem('user', JSON.stringify(user));
+                    
+                    // Update welcome message if user is non-admin
+                    if (!user.isAdmin) {
+                        let welcomeName = '';
+                        if (user.firstName && user.lastName) {
+                            welcomeName = `${user.firstName} ${user.lastName}`;
+                        } else if (user.firstName) {
+                            welcomeName = user.firstName;
+                        } else {
+                            welcomeName = user.email || 'User';
+                        }
+                        const userWelcome = document.getElementById('userWelcome');
+                        if (userWelcome) {
+                            userWelcome.textContent = `Welcome, ${welcomeName}!`;
+                        }
+                    }
+                    
+                    showNotification('✅ Account information updated successfully', 'success');
+                    const myAccountModal = document.getElementById('myAccountModal');
+                    if (myAccountModal) {
+                        myAccountModal.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Error updating account:', error);
+                    showNotification('❌ Failed to update account information', 'error');
+                }
+            };
+        }
         
         // Change password handler
         document.getElementById('changePasswordBtnModal').onclick = async function() {
