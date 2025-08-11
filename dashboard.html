@@ -11651,7 +11651,9 @@ Management Team`);
                 showNotification('❌ Shift not found', 'error');
                 return;
             }
-            const maxWorkers = shift.raw_assigned ? shift.raw_assigned.length : 1;
+            
+            // Allow editing up to 5 workers per shift (reasonable maximum for most workplaces)
+            const maxWorkers = 5;
             const assignedEmails = new Set(shift.raw_assigned || []);
             // Editable time fields
             const startVal = shift.start;
