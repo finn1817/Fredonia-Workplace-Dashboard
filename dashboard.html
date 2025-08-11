@@ -889,6 +889,30 @@
             white-space: pre-wrap;
         }
 
+        .announcement-image-container {
+            text-align: center;
+            margin: 15px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .announcement-image {
+            max-width: 100%;
+            max-height: 400px;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .announcement-image:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        }
+
         .announcement-actions {
             display: flex;
             gap: 0.5rem;
@@ -4788,6 +4812,99 @@
             }
         }
 
+        // Helper function to process announcement messages and convert image URLs to images
+        function processAnnouncementMessage(message) {
+            if (!message) return '';
+            
+            // Image URL patterns (supports common image formats and GitHub raw links)
+            const imageUrlPattern = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s]*)?|https?:\/\/[^\s]*github[^\s]*\.(?:jpg|jpeg|png|gif|webp|svg)\?raw=true)/gi;
+            
+            // Replace line breaks first
+            let processedMessage = message.replace(/\n/g, '<br>');
+            
+            // Find and replace image URLs with img tags
+            processedMessage = processedMessage.replace(imageUrlPattern, (url) => {
+                return `<br><div class="announcement-image-container">
+                    <img src="${url}" alt="Announcement Image" class="announcement-image" 
+                         style="opacity: 0; transition: opacity 0.3s;" 
+                         onload="this.style.opacity=1" 
+                         onclick="viewImageFullSize('${url}')"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div style="display:none; color: #666; font-style: italic; padding: 10px; background: #f5f5f5; border-radius: 4px;">
+                        📷 Image failed to load: <a href="${url}" target="_blank" style="color: #007bff;">${url}</a>
+                    </div>
+                </div>`;
+            });
+            
+            return processedMessage;
+        }
+
+        // Function to view image in full size
+        function viewImageFullSize(imageUrl) {
+            // Create overlay modal for full-size image viewing
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.9);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 10000;
+                cursor: pointer;
+            `;
+            
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.style.cssText = `
+                max-width: 95%;
+                max-height: 95%;
+                object-fit: contain;
+                border-radius: 8px;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            `;
+            
+            const closeButton = document.createElement('button');
+            closeButton.innerHTML = '✕';
+            closeButton.style.cssText = `
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                background: rgba(255,255,255,0.9);
+                border: none;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                font-size: 20px;
+                cursor: pointer;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            `;
+            
+            overlay.appendChild(img);
+            overlay.appendChild(closeButton);
+            
+            // Close on click anywhere or close button
+            overlay.onclick = () => document.body.removeChild(overlay);
+            closeButton.onclick = (e) => {
+                e.stopPropagation();
+                document.body.removeChild(overlay);
+            };
+            
+            // Close on Escape key
+            const escapeHandler = (e) => {
+                if (e.key === 'Escape') {
+                    document.body.removeChild(overlay);
+                    document.removeEventListener('keydown', escapeHandler);
+                }
+            };
+            document.addEventListener('keydown', escapeHandler);
+            
+            document.body.appendChild(overlay);
+        }
+
         // --- ENHANCED ANNOUNCEMENTS SYSTEM ---
         // Load and display announcements
         async function loadAnnouncements() {
@@ -4842,7 +4959,7 @@
                                     ${user.isAdmin ? `<span>by ${announcement.createdBy}</span>` : ''}
                                 </div>
                             </div>
-                            <div class="announcement-message">${announcement.message.replace(/\n/g, '<br>')}</div>
+                            <div class="announcement-message">${processAnnouncementMessage(announcement.message)}</div>
                             ${user.isAdmin ? `
                                 <div class="announcement-actions">
                                     <button class="btn btn-info" onclick="editAnnouncement('${announcement.id}')">✏️ Edit</button>
