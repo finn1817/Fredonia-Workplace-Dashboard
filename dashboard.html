@@ -1326,7 +1326,8 @@
     <div class="header">
         <h1>🏢 Workplace Scheduler</h1>
         <div class="user-info">
-            <div id="databaseHealthIndicator" style="display: inline-block; margin-right: 1rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold; background: #f8f9fa; color: #666;">
+            <!-- Database health indicator - only for admins -->
+            <div id="databaseHealthIndicator" style="display: none; margin-right: 1rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold; background: #f8f9fa; color: #666;">
                 <span id="healthIcon">🔄</span> <span id="healthText">Checking...</span>
             </div>
             <span id="userEmail"></span>
@@ -2102,20 +2103,33 @@
         
         document.getElementById('userEmail').textContent = user.email;
         if (user.isAdmin) {
-            document.getElementById('adminBadge').style.display = 'inline';
-            document.getElementById('adminSection').style.display = 'block';
-            document.getElementById('userBadge').style.display = 'none';
+            const adminBadge = document.getElementById('adminBadge');
+            const adminSection = document.getElementById('adminSection');
+            const userBadge = document.getElementById('userBadge');
+            const generateBtn = document.getElementById('generateBtn');
+            const historyBtn = document.getElementById('historyBtn');
+            const checkAvailabilityBtn = document.getElementById('checkAvailabilityBtn');
+            
+            if (adminBadge) adminBadge.style.display = 'inline';
+            if (adminSection) adminSection.style.display = 'block';
+            if (userBadge) userBadge.style.display = 'none';
             // Show admin-only buttons
-            document.getElementById('generateBtn').style.display = 'inline-block';
-            document.getElementById('historyBtn').style.display = 'inline-block';
-            document.getElementById('checkAvailabilityBtn').style.display = 'inline-block';
+            if (generateBtn) generateBtn.style.display = 'inline-block';
+            if (historyBtn) historyBtn.style.display = 'inline-block';
+            if (checkAvailabilityBtn) checkAvailabilityBtn.style.display = 'inline-block';
         } else {
-            document.getElementById('adminBadge').style.display = 'none';
-            document.getElementById('userBadge').style.display = 'inline';
+            const adminBadge = document.getElementById('adminBadge');
+            const userBadge = document.getElementById('userBadge');
+            const generateBtn = document.getElementById('generateBtn');
+            const historyBtn = document.getElementById('historyBtn');
+            const checkAvailabilityBtn = document.getElementById('checkAvailabilityBtn');
+            
+            if (adminBadge) adminBadge.style.display = 'none';
+            if (userBadge) userBadge.style.display = 'inline';
             // Hide admin-only buttons for non-admin users
-            document.getElementById('generateBtn').style.display = 'none';
-            document.getElementById('historyBtn').style.display = 'none';
-            document.getElementById('checkAvailabilityBtn').style.display = 'none';
+            if (generateBtn) generateBtn.style.display = 'none';
+            if (historyBtn) historyBtn.style.display = 'none';
+            if (checkAvailabilityBtn) checkAvailabilityBtn.style.display = 'none';
         }
 
         // Tab management system for double-click closing
@@ -4937,6 +4951,12 @@
             const healthIndicator = document.getElementById('databaseHealthIndicator');
             const healthIcon = document.getElementById('healthIcon');
             const healthText = document.getElementById('healthText');
+            
+            // Check if health elements exist before proceeding
+            if (!healthIndicator || !healthIcon || !healthText) {
+                console.log('Database health elements not found - skipping health monitoring');
+                return;
+            }
             
             if (user.isAdmin) {
                 healthIndicator.style.display = 'inline-block';
