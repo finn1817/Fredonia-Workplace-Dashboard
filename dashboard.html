@@ -10465,8 +10465,15 @@ Management Team`);
                 const shifts = schedule[day] || [];
                 if (shifts.length === 0) return;
                 
+                // Sort shifts by start time to ensure proper chronological order
+                const sortedShifts = shifts.sort((a, b) => {
+                    const timeA = timeToHour(a.start);
+                    const timeB = timeToHour(b.start);
+                    return timeA - timeB;
+                });
+                
                 html += `<div class="day-header">${day}</div>`;
-                shifts.forEach((shift, index) => {
+                sortedShifts.forEach((shift, index) => {
                     const unfilled = shift.assigned.includes('Unfilled');
                     const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
                     const workStudy = shift.is_work_study || false;
