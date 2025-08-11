@@ -2101,7 +2101,10 @@
             window.location.href = 'index.html';
         }
         
-        document.getElementById('userEmail').textContent = user.email;
+        const userEmailElement = document.getElementById('userEmail');
+        if (userEmailElement) {
+            userEmailElement.textContent = user.email;
+        }
         if (user.isAdmin) {
             const adminBadge = document.getElementById('adminBadge');
             const adminSection = document.getElementById('adminSection');
@@ -5025,21 +5028,25 @@
             });
             event.target.closest('.workplace-card').classList.add('selected');
             
-            document.getElementById('scheduleContent').style.display = 'block';
+            const scheduleContent = document.getElementById('scheduleContent');
+            const scheduleDisplay = document.getElementById('scheduleDisplay');
+            const announcementsSection = document.getElementById('announcementsSection');
+            
+            if (scheduleContent) scheduleContent.style.display = 'block';
             
             // Show loading state
-            document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">🔄 Loading workplace data...</div>';
+            if (scheduleDisplay) scheduleDisplay.innerHTML = '<div class="loading">🔄 Loading workplace data...</div>';
             
             try {
                 await loadWorkplaceData();
                 await loadCurrentScheduleData(); // Load schedule data for "Who's Working Now" functionality
                 await loadAnnouncements(); // Load announcements
-                document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">✅ Ready! Select an option above to get started.</div>';
+                if (scheduleDisplay) scheduleDisplay.innerHTML = '<div class="loading">✅ Ready! Select an option above to get started.</div>';
                 hideAllForms();
-                document.getElementById('announcementsSection').style.display = 'block'; // Show announcements section
+                if (announcementsSection) announcementsSection.style.display = 'block'; // Show announcements section
             } catch (error) {
                 console.error('Error loading workplace:', error);
-                document.getElementById('scheduleDisplay').innerHTML = '<div class="error">❌ Error loading workplace data. Please try again.</div>';
+                if (scheduleDisplay) scheduleDisplay.innerHTML = '<div class="error">❌ Error loading workplace data. Please try again.</div>';
             }
 
             // At the end of selectWorkplace, after loading data and notes:
@@ -5410,25 +5417,37 @@
 
         // Add announcement button handler
         if (user.isAdmin) {
-            document.getElementById('addAnnouncementBtn').onclick = function() {
-                document.getElementById('announcementModalTitle').textContent = '📢 Add Announcement';
-                document.getElementById('announcementSubject').value = '';
-                document.getElementById('announcementMessage').value = '';
-                document.getElementById('announcementPriority').value = 'medium';
-                // Clear any edit ID to ensure this is treated as a new announcement
-                document.getElementById('announcementModal').removeAttribute('data-edit-id');
-                document.getElementById('announcementModal').style.display = 'block';
-            };
+            const addAnnouncementBtn = document.getElementById('addAnnouncementBtn');
+            if (addAnnouncementBtn) {
+                addAnnouncementBtn.onclick = function() {
+                    const announcementModalTitle = document.getElementById('announcementModalTitle');
+                    const announcementSubject = document.getElementById('announcementSubject');
+                    const announcementMessage = document.getElementById('announcementMessage');
+                    const announcementPriority = document.getElementById('announcementPriority');
+                    const announcementModal = document.getElementById('announcementModal');
+                    
+                    if (announcementModalTitle) announcementModalTitle.textContent = '📢 Add Announcement';
+                    if (announcementSubject) announcementSubject.value = '';
+                    if (announcementMessage) announcementMessage.value = '';
+                    if (announcementPriority) announcementPriority.value = 'medium';
+                    // Clear any edit ID to ensure this is treated as a new announcement
+                    if (announcementModal) {
+                        announcementModal.removeAttribute('data-edit-id');
+                        announcementModal.style.display = 'block';
+                    }
+                };
+            }
         }
 
         // Announcement form submission
         const announcementForm = document.getElementById('announcementForm');
-        announcementForm.onsubmit = async function(e) {
-            e.preventDefault();
-            
-            const subject = document.getElementById('announcementSubject').value.trim();
-            const message = document.getElementById('announcementMessage').value.trim();
-            const priority = document.getElementById('announcementPriority').value;
+        if (announcementForm) {
+            announcementForm.onsubmit = async function(e) {
+                e.preventDefault();
+                
+                const subject = document.getElementById('announcementSubject').value.trim();
+                const message = document.getElementById('announcementMessage').value.trim();
+                const priority = document.getElementById('announcementPriority').value;
             
             if (!selectedWorkplace) {
                 showNotification('❌ Please select a workplace first', 'error');
@@ -5477,7 +5496,8 @@
                 console.error('Error saving announcement:', error);
                 showNotification('❌ Failed to save announcement', 'error');
             }
-        };
+            };
+        }
 
         // Edit announcement
         window.editAnnouncement = async function(announcementId) {
@@ -14926,13 +14946,14 @@ Thank you!`;
         }
         // User: Submit request
         const availabilityRequestForm = document.getElementById('availabilityRequestForm');
-        availabilityRequestForm.onsubmit = async function(e) {
-            e.preventDefault();
-            const name = document.getElementById('requestName').value.trim();
-            const email = document.getElementById('requestEmail').value.trim();
-            const requestedAvailability = document.getElementById('requestAvailability').value.trim();
-            if (!selectedWorkplace) {
-                showNotification('❌ Please select a workplace first', 'error');
+        if (availabilityRequestForm) {
+            availabilityRequestForm.onsubmit = async function(e) {
+                e.preventDefault();
+                const name = document.getElementById('requestName').value.trim();
+                const email = document.getElementById('requestEmail').value.trim();
+                const requestedAvailability = document.getElementById('requestAvailability').value.trim();
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
                 return;
             }
             if (!name || !email || !requestedAvailability) {
@@ -14952,15 +14973,17 @@ Thank you!`;
             } catch (error) {
                 showNotification('❌ Failed to submit request', 'error');
             }
-        };
+            };
+        }
         
         // User: Submit time off request
         const timeOffRequestForm = document.getElementById('timeOffRequestForm');
-        timeOffRequestForm.onsubmit = async function(e) {
-            e.preventDefault();
-            const startDate = document.getElementById('timeOffStartDate').value;
-            const endDate = document.getElementById('timeOffEndDate').value;
-            const reason = document.getElementById('timeOffReason').value.trim();
+        if (timeOffRequestForm) {
+            timeOffRequestForm.onsubmit = async function(e) {
+                e.preventDefault();
+                const startDate = document.getElementById('timeOffStartDate').value;
+                const endDate = document.getElementById('timeOffEndDate').value;
+                const reason = document.getElementById('timeOffReason').value.trim();
             
             if (!selectedWorkplace) {
                 showNotification('❌ Please select a workplace first', 'error');
@@ -14996,7 +15019,8 @@ Thank you!`;
                 console.error('Error submitting time off request:', error);
                 showNotification('❌ Failed to submit time off request', 'error');
             }
-        };
+            };
+        }
         
         // Admin: Hour Requests button logic
         if (user.isAdmin) {
@@ -16245,10 +16269,12 @@ Thank you!`;
 
 
         // 4. Handle shift swap request form submission
-        document.getElementById('shiftSwapRequestForm').addEventListener('submit', async function(e) {
-            try {
-                console.log('DEBUG: Form submission started');
-                e.preventDefault();
+        const shiftSwapRequestForm = document.getElementById('shiftSwapRequestForm');
+        if (shiftSwapRequestForm) {
+            shiftSwapRequestForm.addEventListener('submit', async function(e) {
+                try {
+                    console.log('DEBUG: Form submission started');
+                    e.preventDefault();
                 
                 console.log('DEBUG: Getting form values...');
                 const requesterShiftData = JSON.parse(document.getElementById('swapRequesterShiftTime').value || '{}');
@@ -16322,7 +16348,8 @@ Thank you!`;
             console.error('DEBUG: Outer error in form submission:', outerError);
             showNotification('❌ Form submission failed', 'error');
         }
-        });
+            });
+        }
 
         // 5. Load and display shift swap requests
         async function loadShiftSwapRequests() {
