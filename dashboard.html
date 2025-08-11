@@ -2127,6 +2127,13 @@
                 e.preventDefault();
                 return true;
             });
+            
+            // CRITICAL: Override showNotification function to prevent ALL notification popups
+            window.showNotificationOriginal = window.showNotification || function() {};
+            window.showNotification = function(message, type = 'info', options = {}) {
+                console.log('Notification suppressed for non-admin:', message, type);
+                // Do nothing - completely suppress all notifications
+            };
         }
         
         const userEmailElement = document.getElementById('userEmail');
@@ -3052,6 +3059,19 @@
         const showCriticalError = (message) => showNotification(message, 'error', { duration: 10000, replaceAll: true });
         const showQuickInfo = (message) => showNotification(message, 'info', { duration: 2000 });
         const showPersistentWarning = (message) => showNotification(message, 'warning', { duration: 0 }); // 0 = doesn't auto-dismiss
+
+        // ULTIMATE FIX: Override all notification functions for non-admin users
+        if (!user.isAdmin) {
+            // Completely disable ALL notification functions for non-admin users
+            window.showNotification = function() { console.log('showNotification suppressed for non-admin'); };
+            window.showSuccess = function() { console.log('showSuccess suppressed for non-admin'); };
+            window.showError = function() { console.log('showError suppressed for non-admin'); };
+            window.showWarning = function() { console.log('showWarning suppressed for non-admin'); };
+            window.showInfo = function() { console.log('showInfo suppressed for non-admin'); };
+            window.showCriticalError = function() { console.log('showCriticalError suppressed for non-admin'); };
+            window.showQuickInfo = function() { console.log('showQuickInfo suppressed for non-admin'); };
+            window.showPersistentWarning = function() { console.log('showPersistentWarning suppressed for non-admin'); };
+        }
 
         // Enhanced schedule validation
         const validateScheduleCoverage = (schedule, hoursOfOperation) => {
