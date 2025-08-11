@@ -11788,6 +11788,12 @@ Management Team`);
                     return w ? `${w.first_name} ${w.last_name}` : email;
                 });
                 
+                // ENHANCED: Recalculate work study status based on newly assigned workers
+                const hasWorkStudyWorker = checked.some(email => {
+                    const worker = workers.find(w => w.email === email);
+                    return worker && worker.work_study === true;
+                });
+                
                 // ENHANCED: Check for availability conflicts with new times
                 const newStartHour = timeToHour(newStart);
                 const newEndHour = timeToHour(newEnd);
@@ -11816,6 +11822,9 @@ Management Team`);
                 shift.all_available = workers.filter(w => checked.includes(w.email));
                 shift.start = newStart;
                 shift.end = newEnd;
+                
+                // CRITICAL: Update work study status based on assigned workers
+                shift.is_work_study = hasWorkStudyWorker;
                 showNotification('✅ Shift updated (not yet saved to database)', 'success');
                 closeModal('editShiftModal');
                 displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
