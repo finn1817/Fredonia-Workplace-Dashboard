@@ -4840,7 +4840,7 @@
         }
 
         // Function to view image in full size
-        function viewImageFullSize(imageUrl) {
+        window.viewImageFullSize = function(imageUrl) {
             // Create overlay modal for full-size image viewing
             const overlay = document.createElement('div');
             overlay.style.cssText = `
@@ -4881,29 +4881,38 @@
                 font-size: 20px;
                 cursor: pointer;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                z-index: 10001;
             `;
             
             overlay.appendChild(img);
             overlay.appendChild(closeButton);
             
             // Close on click anywhere or close button
-            overlay.onclick = () => document.body.removeChild(overlay);
+            overlay.onclick = () => {
+                if (document.body.contains(overlay)) {
+                    document.body.removeChild(overlay);
+                }
+            };
             closeButton.onclick = (e) => {
                 e.stopPropagation();
-                document.body.removeChild(overlay);
+                if (document.body.contains(overlay)) {
+                    document.body.removeChild(overlay);
+                }
             };
             
             // Close on Escape key
             const escapeHandler = (e) => {
                 if (e.key === 'Escape') {
-                    document.body.removeChild(overlay);
+                    if (document.body.contains(overlay)) {
+                        document.body.removeChild(overlay);
+                    }
                     document.removeEventListener('keydown', escapeHandler);
                 }
             };
             document.addEventListener('keydown', escapeHandler);
             
             document.body.appendChild(overlay);
-        }
+        };
 
         // --- ENHANCED ANNOUNCEMENTS SYSTEM ---
         // Load and display announcements
