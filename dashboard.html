@@ -1326,6 +1326,9 @@
     <div class="header">
         <h1>🏢 Workplace Scheduler</h1>
         <div class="user-info">
+            <div id="databaseHealthIndicator" style="display: inline-block; margin-right: 1rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold; background: #f8f9fa; color: #666;">
+                <span id="healthIcon">🔄</span> <span id="healthText">Checking...</span>
+            </div>
             <span id="userEmail"></span>
             <span id="adminBadge" class="admin-badge">ADMIN</span>
             <span id="userBadge" class="user-badge">USER</span>
@@ -1350,6 +1353,7 @@
                 <button class="btn btn-warning" id="emailChangeRequestsBtn" style="position:relative;">📧 Email Change Requests <span id="emailChangeRequestsBadge" style="display:none;position:absolute;top:-8px;right:-8px;background:#dc3545;color:white;border-radius:50%;padding:2px 7px;font-size:0.8em;">!</span></button>
                 <button class="btn btn-danger" id="removeAllWorkersBtn">🗑️ Remove All Workers</button>
                 <button class="btn btn-danger" id="cleanupSchedulesBtn">🧹 Clean Up Old Schedules</button>
+                <button class="btn btn-warning" id="databaseMaintenanceBtn">🔧 Database Maintenance</button>
             </div>
         </div>
 
@@ -2236,6 +2240,338 @@
         let schedule = {};
         const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         let currentScheduleId = null; // <-- Track the current schedule doc ID
+        
+        // Database Consistency Manager
+        const DatabaseManager = {
+            // Cleanup intervals (in milliseconds)
+            CLEANUP_INTERVALS: {
+                EXPIRED_POSTINGS: 24 * 60 * 60 * 1000, // 24 hours
+                EXPIRED_COVERAGE: 60 * 60 * 1000,      // 1 hour
+                ORPHANED_RECORDS: 7 * 24 * 60 * 60 * 1000, // 7 days
+            },
+            
+            // Initialize cleanup timers
+            initializeCleanup() {
+                // Cleanup expired shift postings daily
+                setInterval(() => this.cleanupExpiredPostings(), this.CLEANUP_INTERVALS.EXPIRED_POSTINGS);
+                
+                // Cleanup expired coverage requests hourly
+                setInterval(() => this.cleanupExpiredCoverage(), this.CLEANUP_INTERVALS.EXPIRED_COVERAGE);
+                
+                // Cleanup orphaned records weekly
+                setInterval(() => this.cleanupOrphanedRecords(), this.CLEANUP_INTERVALS.ORPHANED_RECORDS);
+                
+                // Initial cleanup on startup
+                setTimeout(() => {
+                    this.cleanupExpiredPostings();
+                    this.cleanupExpiredCoverage();
+                    this.processAutoRestores();
+                }, 5000); // Wait 5 seconds after page load
+            },
+            
+            // Standardized collection path builder
+            getCollectionPath(type, workplaceId = null) {
+                const paths = {
+                    'shift_postings': workplaceId ? `workplaces/${workplaceId}/shift_postings` : 'global_shift_postings',
+                    'coverage_requests': workplaceId ? `workplaces/${workplaceId}/coverage_requests` : 'global_coverage_requests',
+                    'active_coverage': workplaceId ? `workplaces/${workplaceId}/active_coverage` : 'global_active_coverage',
+                    'applications': (postingId, workplaceId) => `workplaces/${workplaceId}/shift_postings/${postingId}/applications`,
+                    'workers': workplaceId ? `workplaces/${workplaceId}/workers` : null,
+                    'schedules': workplaceId ? `workplaces/${workplaceId}/schedules` : null,
+                    'announcements': workplaceId ? `workplaces/${workplaceId}/announcements` : null,
+                };
+                return paths[type] || null;
+            },
+            
+            // Data validation for records
+            validateRecord(type, data) {
+                const validators = {
+                    'shift_posting': (data) => {
+                        return data.title && data.shiftDate && data.startTime && 
+                               data.endTime && data.expiresAt && data.workplaceId;
+                    },
+                    'coverage_request': (data) => {
+                        return data.shift_date && data.start_time && data.end_time && 
+                               data.workplaceId && data.requestedBy;
+                    },
+                    'active_coverage': (data) => {
+                        return data.originalShift && data.coverWorker && data.workplaceId &&
+                               data.autoRestoreAt;
+                    }
+                };
+                
+                const validator = validators[type];
+                return validator ? validator(data) : false;
+            },
+            
+            // Cleanup expired shift postings
+            async cleanupExpiredPostings() {
+                try {
+                    logger.info('🧹 Starting cleanup of expired shift postings...');
+                    const now = new Date();
+                    let cleanedCount = 0;
+                    
+                    // Process all workplaces
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        const postingsRef = collection(db, 'workplaces', workplaceId, 'shift_postings');
+                        const postingsSnapshot = await getDocs(postingsRef);
+                        
+                        for (const postingDoc of postingsSnapshot.docs) {
+                            const posting = postingDoc.data();
+                            const expiresAt = new Date(posting.expiresAt);
+                            
+                            if (expiresAt < now && posting.status !== 'expired') {
+                                await updateDoc(postingDoc.ref, {
+                                    status: 'expired',
+                                    expiredAt: now.toISOString(),
+                                    lastModified: now.toISOString()
+                                });
+                                cleanedCount++;
+                                logger.debug(`Expired posting: ${posting.title} in ${workplaceId}`);
+                            }
+                        }
+                    }
+                    
+                    if (cleanedCount > 0) {
+                        logger.info(`✅ Expired ${cleanedCount} shift postings`);
+                        showNotification(`🧹 Automatically expired ${cleanedCount} old shift postings`, 'info', { duration: 3000 });
+                    }
+                } catch (error) {
+                    logger.error('Error cleaning up expired postings:', error);
+                }
+            },
+            
+            // Cleanup expired coverage requests
+            async cleanupExpiredCoverage() {
+                try {
+                    logger.info('🧹 Starting cleanup of expired coverage requests...');
+                    const now = new Date();
+                    let cleanedCount = 0;
+                    
+                    // Process all workplaces
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        const coverageRef = collection(db, 'workplaces', workplaceId, 'coverage_requests');
+                        const coverageSnapshot = await getDocs(coverageRef);
+                        
+                        for (const coverageDoc of coverageSnapshot.docs) {
+                            const coverage = coverageDoc.data();
+                            const shiftDate = new Date(coverage.shift_date);
+                            
+                            // If shift date has passed and status is still pending, mark as expired
+                            if (shiftDate < now && coverage.status === 'pending') {
+                                await updateDoc(coverageDoc.ref, {
+                                    status: 'expired',
+                                    expiredAt: now.toISOString(),
+                                    lastModified: now.toISOString()
+                                });
+                                cleanedCount++;
+                                logger.debug(`Expired coverage request: ${coverage.shift_date} in ${workplaceId}`);
+                            }
+                        }
+                    }
+                    
+                    if (cleanedCount > 0) {
+                        logger.info(`✅ Expired ${cleanedCount} coverage requests`);
+                    }
+                } catch (error) {
+                    logger.error('Error cleaning up expired coverage:', error);
+                }
+            },
+            
+            // Process auto-restore for temporary coverage
+            async processAutoRestores() {
+                try {
+                    logger.info('🔄 Processing auto-restore for temporary coverage...');
+                    const now = new Date();
+                    let restoredCount = 0;
+                    
+                    // Process all workplaces
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        const activeCoverageRef = collection(db, 'workplaces', workplaceId, 'active_coverage');
+                        const activeCoverageSnapshot = await getDocs(activeCoverageRef);
+                        
+                        for (const coverageDoc of activeCoverageSnapshot.docs) {
+                            const coverage = coverageDoc.data();
+                            const autoRestoreAt = new Date(coverage.autoRestoreAt);
+                            
+                            if (autoRestoreAt <= now) {
+                                // Restore original shift assignment
+                                await this.restoreOriginalShift(workplaceId, coverage);
+                                await deleteDoc(coverageDoc.ref);
+                                restoredCount++;
+                                logger.debug(`Auto-restored shift: ${coverage.originalShift.day} in ${workplaceId}`);
+                            }
+                        }
+                    }
+                    
+                    if (restoredCount > 0) {
+                        logger.info(`✅ Auto-restored ${restoredCount} temporary coverage assignments`);
+                        showNotification(`🔄 Auto-restored ${restoredCount} temporary shift assignments`, 'success', { duration: 3000 });
+                    }
+                } catch (error) {
+                    logger.error('Error processing auto-restores:', error);
+                }
+            },
+            
+            // Restore original shift assignment
+            async restoreOriginalShift(workplaceId, coverage) {
+                try {
+                    const scheduleRef = doc(db, 'workplaces', workplaceId, 'schedules', coverage.scheduleId);
+                    const scheduleDoc = await getDoc(scheduleRef);
+                    
+                    if (scheduleDoc.exists()) {
+                        const scheduleData = scheduleDoc.data();
+                        const schedule = scheduleData.schedule;
+                        
+                        // Find and restore the shift
+                        if (schedule[coverage.originalShift.day]) {
+                            const dayShifts = schedule[coverage.originalShift.day];
+                            const shiftIndex = dayShifts.findIndex(shift => 
+                                shift.start === coverage.originalShift.start && 
+                                shift.end === coverage.originalShift.end
+                            );
+                            
+                            if (shiftIndex !== -1) {
+                                dayShifts[shiftIndex].assigned = coverage.originalShift.originalWorkers;
+                                
+                                await updateDoc(scheduleRef, {
+                                    schedule: schedule,
+                                    lastModified: new Date().toISOString()
+                                });
+                                
+                                logger.debug(`Restored shift: ${coverage.originalShift.day} ${coverage.originalShift.start}-${coverage.originalShift.end}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    logger.error('Error restoring original shift:', error);
+                }
+            },
+            
+            // Cleanup orphaned records
+            async cleanupOrphanedRecords() {
+                try {
+                    logger.info('🧹 Starting cleanup of orphaned records...');
+                    let cleanedCount = 0;
+                    
+                    // Clean up applications without parent postings
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        
+                        // Get all shift postings
+                        const postingsSnapshot = await getDocs(collection(db, 'workplaces', workplaceId, 'shift_postings'));
+                        const validPostingIds = new Set(postingsSnapshot.docs.map(doc => doc.id));
+                        
+                        // Check each posting for orphaned applications
+                        for (const postingDoc of postingsSnapshot.docs) {
+                            const applicationsRef = collection(db, 'workplaces', workplaceId, 'shift_postings', postingDoc.id, 'applications');
+                            const applicationsSnapshot = await getDocs(applicationsRef);
+                            
+                            for (const appDoc of applicationsSnapshot.docs) {
+                                const app = appDoc.data();
+                                // Clean up applications older than 30 days for expired postings
+                                if (app.appliedAt) {
+                                    const appliedDate = new Date(app.appliedAt);
+                                    const thirtyDaysAgo = new Date();
+                                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                                    
+                                    if (appliedDate < thirtyDaysAgo) {
+                                        const parentPosting = postingDoc.data();
+                                        if (parentPosting.status === 'expired' || parentPosting.status === 'closed') {
+                                            await deleteDoc(appDoc.ref);
+                                            cleanedCount++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (cleanedCount > 0) {
+                        logger.info(`✅ Cleaned up ${cleanedCount} orphaned records`);
+                    }
+                } catch (error) {
+                    logger.error('Error cleaning up orphaned records:', error);
+                }
+            },
+            
+            // Add data validation wrapper for all database operations
+            async safeWrite(operation, type, data) {
+                if (!this.validateRecord(type, data)) {
+                    throw new Error(`Invalid ${type} data: missing required fields`);
+                }
+                
+                // Add metadata
+                const enhancedData = {
+                    ...data,
+                    createdAt: data.createdAt || new Date().toISOString(),
+                    lastModified: new Date().toISOString(),
+                    version: data.version || 1
+                };
+                
+                return await operation(enhancedData);
+            },
+            
+            // Database health check
+            async performHealthCheck() {
+                try {
+                    const healthReport = {
+                        timestamp: new Date().toISOString(),
+                        workplaces: 0,
+                        activePostings: 0,
+                        expiredPostings: 0,
+                        activeCoverage: 0,
+                        orphanedRecords: 0,
+                        inconsistentRecords: 0,
+                        issues: []
+                    };
+                    
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    healthReport.workplaces = workplacesSnapshot.size;
+                    
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        
+                        // Check shift postings
+                        const postingsSnapshot = await getDocs(collection(db, 'workplaces', workplaceId, 'shift_postings'));
+                        postingsSnapshot.forEach(doc => {
+                            const posting = doc.data();
+                            if (posting.status === 'active') {
+                                healthReport.activePostings++;
+                            } else if (posting.status === 'expired') {
+                                healthReport.expiredPostings++;
+                            }
+                            
+                            // Check for missing workplaceId
+                            if (!posting.workplaceId) {
+                                healthReport.inconsistentRecords++;
+                                healthReport.issues.push(`Missing workplaceId in posting ${doc.id}`);
+                            }
+                        });
+                        
+                        // Check active coverage
+                        const coverageSnapshot = await getDocs(collection(db, 'workplaces', workplaceId, 'active_coverage'));
+                        healthReport.activeCoverage += coverageSnapshot.size;
+                    }
+                    
+                    return healthReport;
+                } catch (error) {
+                    logger.error('Database health check failed:', error);
+                    return null;
+                }
+            }
+        };
 
         // Enhanced utility functions
         const timeToHour = (timeStr) => {
@@ -4590,6 +4926,68 @@
         }
 
         initializeDefaultWorkplaces();
+        
+        // Initialize Database Consistency Manager
+        DatabaseManager.initializeCleanup();
+        
+        // Initialize database health monitoring
+        async function initializeDatabaseHealth() {
+            const healthIndicator = document.getElementById('databaseHealthIndicator');
+            const healthIcon = document.getElementById('healthIcon');
+            const healthText = document.getElementById('healthText');
+            
+            if (user.isAdmin) {
+                healthIndicator.style.display = 'inline-block';
+                
+                // Initial health check
+                const health = await DatabaseManager.performHealthCheck();
+                if (health) {
+                    const hasIssues = health.inconsistentRecords > 0 || health.issues.length > 0;
+                    
+                    if (hasIssues) {
+                        healthIcon.textContent = '⚠️';
+                        healthText.textContent = `DB Issues: ${health.inconsistentRecords}`;
+                        healthIndicator.style.background = '#fff3cd';
+                        healthIndicator.style.color = '#856404';
+                        healthIndicator.title = `${health.issues.length} database issues detected. Click Database Maintenance to fix.`;
+                    } else {
+                        healthIcon.textContent = '✅';
+                        healthText.textContent = 'DB Healthy';
+                        healthIndicator.style.background = '#d4edda';
+                        healthIndicator.style.color = '#155724';
+                        healthIndicator.title = `Database healthy. ${health.workplaces} workplaces, ${health.activePostings} active postings, ${health.activeCoverage} active coverage.`;
+                    }
+                } else {
+                    healthIcon.textContent = '❌';
+                    healthText.textContent = 'DB Error';
+                    healthIndicator.style.background = '#f8d7da';
+                    healthIndicator.style.color = '#721c24';
+                    healthIndicator.title = 'Failed to check database health';
+                }
+                
+                // Periodic health checks every 5 minutes
+                setInterval(async () => {
+                    const health = await DatabaseManager.performHealthCheck();
+                    if (health) {
+                        const hasIssues = health.inconsistentRecords > 0 || health.issues.length > 0;
+                        
+                        if (hasIssues && !healthIcon.textContent.includes('⚠️')) {
+                            healthIcon.textContent = '⚠️';
+                            healthText.textContent = `DB Issues: ${health.inconsistentRecords}`;
+                            healthIndicator.style.background = '#fff3cd';
+                            healthIndicator.style.color = '#856404';
+                            showNotification('⚠️ Database consistency issues detected. Run Database Maintenance to resolve.', 'warning', { duration: 8000 });
+                        }
+                    }
+                }, 5 * 60 * 1000); // 5 minutes
+                
+            } else {
+                healthIndicator.style.display = 'none';
+            }
+        }
+        
+        // Initialize health monitoring after a short delay
+        setTimeout(initializeDatabaseHealth, 2000);
 
         // Enhanced workplace selection
         window.selectWorkplace = async function(id) {
@@ -7032,19 +7430,34 @@
                     endTime,
                     expiresAt: expiresAt,
                     postedBy: user.email,
-                    workplace: selectedWorkplace,
+                    workplaceId: selectedWorkplace, // Standardized field name
                     status: 'active',
                     updatedAt: new Date().toISOString()
                 };
                 
                 if (editId) {
-                    // Update existing posting
-                    await updateDoc(doc(db, 'workplaces', selectedWorkplace, 'shift_postings', editId), postingData);
+                    // Update existing posting with validation
+                    const validatedUpdateData = await DatabaseManager.safeWrite(
+                        async (data) => data,
+                        'shift_posting',
+                        { ...postingData, createdAt: null } // Skip createdAt validation for updates
+                    );
+                    
+                    await updateDoc(doc(db, DatabaseManager.getCollectionPath('shift_postings', selectedWorkplace).replace('workplaces/', '').split('/')[1], 'shift_postings', editId), validatedUpdateData);
                     showNotification('✅ Shift posting updated successfully!', 'success');
                 } else {
-                    // Create new posting
+                    // Create new posting with validation
                     postingData.postedAt = new Date().toISOString();
-                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shift_postings'), postingData);
+                    postingData.createdAt = new Date().toISOString();
+                    
+                    const validatedPostingData = await DatabaseManager.safeWrite(
+                        async (data) => data,
+                        'shift_posting',
+                        postingData
+                    );
+                    
+                    const collectionPath = DatabaseManager.getCollectionPath('shift_postings', selectedWorkplace);
+                    await addDoc(collection(db, collectionPath), validatedPostingData);
                     showNotification('✅ Shift posting created successfully!', 'success');
                 }
                 
@@ -12184,9 +12597,9 @@ Management Team`);
                 shift.original_assignment = originalData;
                 shift.auto_restore_at = autoRestoreDateTime.toISOString();
 
-                // Create coverage record for dashboard tracking
-                const coverageRecord = {
-                    workplace: selectedWorkplace,
+                // Create validated coverage record for dashboard tracking
+                const coverageData = {
+                    workplaceId: selectedWorkplace,
                     day: day,
                     shiftIndex: shiftIndex,
                     coverageType: coverageType,
@@ -12198,11 +12611,47 @@ Management Team`);
                     shiftDate: shift.date || new Date().toISOString().split('T')[0],
                     shiftDateTime: shiftDateTime.toISOString(),
                     autoRestoreAt: autoRestoreDateTime.toISOString(),
-                    status: 'active'
+                    status: 'active',
+                    scheduleId: currentScheduleId,
+                    type: 'shift_coverage'
                 };
 
-                // Save coverage record to Firestore
-                await addDoc(collection(db, 'shift_coverage'), coverageRecord);
+                // Use DatabaseManager for validated write
+                const validatedCoverageData = await DatabaseManager.safeWrite(
+                    async (data) => data,
+                    'coverage_request',
+                    coverageData
+                );
+
+                // Save to standardized collection path
+                const coverageCollectionPath = DatabaseManager.getCollectionPath('coverage_requests', selectedWorkplace);
+                await addDoc(collection(db, coverageCollectionPath), validatedCoverageData);
+
+                // Create active coverage record for auto-restore
+                const activeCoverageData = {
+                    workplaceId: selectedWorkplace,
+                    originalShift: {
+                        day: day,
+                        start: shift.start,
+                        end: shift.end,
+                        originalWorkers: originalData.assigned
+                    },
+                    coverWorker: selectedWorkerEmail,
+                    autoRestoreAt: autoRestoreDateTime.toISOString(),
+                    scheduleId: currentScheduleId,
+                    shiftIndex: shiftIndex,
+                    coverageType: coverageType,
+                    createdAt: new Date().toISOString()
+                };
+
+                const validatedActiveCoverage = await DatabaseManager.safeWrite(
+                    async (data) => data,
+                    'active_coverage',
+                    activeCoverageData
+                );
+
+                const activeCoverageCollectionPath = DatabaseManager.getCollectionPath('active_coverage', selectedWorkplace);
+                await addDoc(collection(db, activeCoverageCollectionPath), validatedActiveCoverage);
 
                 // Update the schedule in Firestore with tracking fields
                 if (currentScheduleId) {
@@ -12210,7 +12659,8 @@ Management Team`);
                     await updateDoc(scheduleRef, {
                         days: schedule,
                         updated_at: new Date().toISOString(),
-                        updated_by: user.email
+                        updated_by: user.email,
+                        lastModified: new Date().toISOString()
                     });
                 }
 
@@ -12231,11 +12681,11 @@ Management Team`);
                     message: `You have been assigned to ${coverageType === 'replace' ? 'replace workers for' : 'assist with'} a shift. This assignment will auto-restore after the shift ends.`
                 });
 
-                console.log('Coverage applied with tracking:', coverageRecord);
+                console.log('Coverage applied with validated tracking:', validatedCoverageData);
 
             } catch (error) {
                 console.error('Error applying coverage:', error);
-                showNotification('❌ Failed to apply coverage', 'error');
+                showNotification(`❌ Failed to apply coverage: ${error.message}`, 'error');
             }
         };
 
@@ -15652,6 +16102,76 @@ Thank you!`;
                     viewHistory();
                 } catch (error) {
                     showNotification('❌ Failed to clean up old schedules', 'error');
+                }
+            };
+            
+            // Database Maintenance button logic (admin only)
+            document.getElementById('databaseMaintenanceBtn').onclick = async function() {
+                if (!confirm('This will run comprehensive database maintenance including:\n\n• Cleanup expired postings\n• Cleanup expired coverage requests\n• Process auto-restore operations\n• Remove orphaned records\n• Validate data consistency\n\nThis operation is safe but may take a few minutes. Continue?')) {
+                    return;
+                }
+                
+                try {
+                    const maintenanceStartTime = Date.now();
+                    showNotification('🔧 Starting database maintenance...', 'info', { duration: 0 });
+                    
+                    // Run all maintenance operations
+                    await Promise.all([
+                        DatabaseManager.cleanupExpiredPostings(),
+                        DatabaseManager.cleanupExpiredCoverage(),
+                        DatabaseManager.processAutoRestores(),
+                        DatabaseManager.cleanupOrphanedRecords()
+                    ]);
+                    
+                    // Additional consistency checks
+                    let totalIssuesFixed = 0;
+                    
+                    // Check for missing workplaceId fields and fix them
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        
+                        // Fix shift postings without workplaceId
+                        const postingsSnapshot = await getDocs(collection(db, 'workplaces', workplaceId, 'shift_postings'));
+                        for (const postingDoc of postingsSnapshot.docs) {
+                            const posting = postingDoc.data();
+                            if (!posting.workplaceId && posting.workplace) {
+                                await updateDoc(postingDoc.ref, {
+                                    workplaceId: posting.workplace,
+                                    lastModified: new Date().toISOString()
+                                });
+                                totalIssuesFixed++;
+                            }
+                        }
+                        
+                        // Fix coverage requests without proper fields
+                        const coverageSnapshot = await getDocs(collection(db, 'workplaces', workplaceId, 'coverage_requests'));
+                        for (const coverageDoc of coverageSnapshot.docs) {
+                            const coverage = coverageDoc.data();
+                            if (!coverage.workplaceId) {
+                                await updateDoc(coverageDoc.ref, {
+                                    workplaceId: workplaceId,
+                                    lastModified: new Date().toISOString()
+                                });
+                                totalIssuesFixed++;
+                            }
+                        }
+                    }
+                    
+                    const maintenanceTime = ((Date.now() - maintenanceStartTime) / 1000).toFixed(1);
+                    
+                    showNotification(`✅ Database maintenance completed in ${maintenanceTime}s! Fixed ${totalIssuesFixed} consistency issues.`, 'success', { duration: 8000 });
+                    
+                    // Log maintenance completion
+                    console.log('🔧 Database maintenance completed:', {
+                        duration: maintenanceTime + 's',
+                        issuesFixed: totalIssuesFixed,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                } catch (error) {
+                    console.error('Database maintenance error:', error);
+                    showNotification(`❌ Database maintenance failed: ${error.message}`, 'error');
                 }
             };
         }
