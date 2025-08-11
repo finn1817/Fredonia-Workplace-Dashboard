@@ -675,6 +675,12 @@
             background: #fff8e1;
         }
 
+        .shift.special {
+            border-color: #28a745;
+            background: #e8f5e8;
+            border-left: 4px solid #28a745;
+        }
+
         .shift.unfilled {
             border-color: #dc3545;
             background: #ffebee;
@@ -10477,12 +10483,14 @@ Management Team`);
                     const unfilled = shift.assigned.includes('Unfilled');
                     const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
                     const workStudy = shift.is_work_study || false;
+                    const isSpecial = shift.is_special || false;
                     const isForced = shift.forced === true;
                     const isCovered = shift.covered === true;
                     
                     let shiftClass = 'shift';
                     if (isGap) shiftClass += ' coverage-gap';
                     else if (unfilled) shiftClass += ' unfilled';
+                    else if (isSpecial) shiftClass += ' special';
                     else if (workStudy) shiftClass += ' work-study';
                     else if (isCovered) shiftClass += ' covered-shift';
                     if (isForced) shiftClass += ' forced-shift';
@@ -10515,6 +10523,7 @@ Management Team`);
                             <div>
                                 <strong>${formatTime(shift.start)} - ${formatTime(shift.end)}</strong>
                                 ${workStudy ? '<span style="color: #ffc107; margin-left: 0.5rem;">(Work Study)</span>' : ''}
+                                ${isSpecial ? '<span style="color: #28a745; margin-left: 0.5rem; font-weight: bold;">(SPECIAL)</span>' : ''}
                                 ${isGap ? '<span style="color: #ff5722; margin-left: 0.5rem;">(CRITICAL GAP)</span>' : ''}
                                 ${isForced ? '<span style="color: #e53935; margin-left: 0.5rem; font-weight: bold;">(FORCED)</span>' : ''}
                                 ${isCovered ? '<span style="color: #17a2b8; margin-left: 0.5rem; font-weight: bold;">(COVERED)</span>' : ''}
@@ -10532,6 +10541,7 @@ Management Team`);
                                 <button class="btn btn-warning" onclick="editShift('${day}', ${index})">✏️ Edit</button>
                                 <button class="btn btn-danger" onclick="removeShift('${day}', ${index})">🗑️ Remove</button>
                                 <button class="btn btn-info" onclick="coverShift('${day}', ${index})" style="background: #17a2b8; color: white;">🔄 Cover Shift</button>
+                                <button class="btn ${isSpecial ? 'btn-success' : 'btn-secondary'}" onclick="toggleSpecialShift('${day}', ${index})" style="background: ${isSpecial ? '#28a745' : '#6c757d'}; color: white;">${isSpecial ? '⭐ Special' : '⭐ Special'}</button>
                                 ${(unfilled || isGap) ? '<button class="btn btn-info" onclick="suggestAlternatives(\'' + day + '\', ' + index + ')">💡 Fix</button>' : ''}
                             </div>
                             ` : ''}
@@ -11849,6 +11859,50 @@ Management Team`);
                     showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
                 }
             };
+        };
+
+        // Toggle Special Shift Status
+        window.toggleSpecialShift = function(day, shiftIndex) {
+            if (!user.isAdmin) {
+                showNotification('❌ Admin access required', 'error');
+                return;
+            }
+            
+            // Find the shift
+            const shift = (schedule[day] || [])[shiftIndex];
+            if (!shift) {
+                showNotification('❌ Shift not found', 'error');
+                return;
+            }
+            
+            // Toggle special status
+            const wasSpecial = shift.is_special || false;
+            shift.is_special = !wasSpecial;
+            
+            const statusText = shift.is_special ? 'marked as SPECIAL' : 'unmarked as special';
+            const workerNames = shift.assigned.join(', ');
+            
+            showNotification(`⭐ Shift ${formatTime(shift.start)}-${formatTime(shift.end)} (${workerNames}) ${statusText}`, 'success');
+            
+            // Update display
+            displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+            
+            // Save to database
+            if (currentScheduleId) {
+                const scheduleRef = doc(db, 'workplaces', selectedWorkplace, 'schedules', currentScheduleId);
+                updateDoc(scheduleRef, {
+                    days: schedule,
+                    updated_at: new Date().toISOString(),
+                    updated_by: user.email
+                }).then(() => {
+                    showNotification(`✅ Special shift status saved to database!`, 'success');
+                }).catch((err) => {
+                    showNotification('❌ Failed to save special shift status to database', 'error');
+                    console.error('Error saving special shift status:', err);
+                });
+            } else {
+                showNotification('⚠️ Could not save to database: schedule ID not found', 'warning');
+            }
         };
 
         window.suggestAlternatives = function(day, shiftIndex) {
