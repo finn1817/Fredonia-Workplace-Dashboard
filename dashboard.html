@@ -4927,8 +4927,10 @@
 
         initializeDefaultWorkplaces();
         
-        // Initialize Database Consistency Manager
-        DatabaseManager.initializeCleanup();
+        // Initialize Database Consistency Manager (admin only)
+        if (user.isAdmin) {
+            DatabaseManager.initializeCleanup();
+        }
         
         // Initialize database health monitoring
         async function initializeDatabaseHealth() {
