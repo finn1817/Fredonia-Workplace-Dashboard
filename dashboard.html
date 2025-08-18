@@ -5832,7 +5832,7 @@
 
         // Handle file selection
         async function handleFileSelection(files) {
-            const maxFileSize = 10 * 1024 * 1024; // 10MB
+            const maxFileSize = 5 * 1024 * 1024; // 5MB (reduced for Data URL efficiency)
             const allowedTypes = [
                 'image/jpeg', 'image/png', 'image/gif', 'image/webp',
                 'application/pdf',
@@ -5844,7 +5844,7 @@
             for (let file of files) {
                 // Validate file size
                 if (file.size > maxFileSize) {
-                    showNotification(`❌ File "${file.name}" is too large. Maximum size is 10MB.`, 'error');
+                    showNotification(`❌ File "${file.name}" is too large. Maximum size is 5MB for universal compatibility.`, 'error');
                     continue;
                 }
 
@@ -5881,27 +5881,33 @@
                 const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const filePath = `announcements/${selectedWorkplace}/${timestamp}_${sanitizedFileName}`;
                 
-                // For now, let's simulate the upload and use a local preview
-                // This is a workaround for CORS issues
-                uploadProgressBar.style.width = '50%';
-                uploadStatus.textContent = `Processing ${file.name}... 50%`;
+                uploadProgressBar.style.width = '30%';
+                uploadStatus.textContent = `Processing ${file.name}... 30%`;
                 
-                // Create a local file URL for preview
-                const localURL = URL.createObjectURL(file);
+                // Convert file to Data URL (Base64) for universal access
+                const dataURL = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                
+                uploadProgressBar.style.width = '80%';
+                uploadStatus.textContent = `Processing ${file.name}... 80%`;
                 
                 uploadProgressBar.style.width = '100%';
                 uploadStatus.textContent = `${file.name} processed successfully!`;
                 uploadStatus.className = 'upload-status success';
                 
-                // Add to current files list with local URL
+                // Add to current files list with Data URL (accessible by all users)
                 const fileData = {
                     name: file.name,
                     size: file.size,
                     type: file.type,
-                    url: localURL,
+                    url: dataURL, // Using Data URL instead of blob URL
                     path: filePath,
                     uploadedAt: new Date().toISOString(),
-                    isLocal: true // Flag to indicate this is a local file
+                    isLocal: false // Not local anymore - it's a data URL
                 };
                 
                 currentAnnouncementFiles.push(fileData);
@@ -5915,8 +5921,8 @@
                     uploadProgress.style.display = 'none';
                 }, 2000);
                 
-                // TODO: Implement actual Firebase Storage upload after CORS is configured
-                // For production, you'll need to configure Firebase Storage CORS rules
+                // Note: Using Data URLs for now - works across all users
+                // For production with large files, configure Firebase Storage CORS rules
                 
             } catch (error) {
                 console.error('Upload error:', error);
@@ -5992,14 +5998,11 @@
             const file = currentAnnouncementFiles[index];
             
             try {
-                // If it's a local file, just revoke the object URL
-                if (file.isLocal && file.url.startsWith('blob:')) {
+                // If it's a blob URL, revoke it to free memory
+                if (file.url && file.url.startsWith('blob:')) {
                     URL.revokeObjectURL(file.url);
-                } else {
-                    // Delete from Firebase Storage (when CORS is configured)
-                    const storageRef = ref(storage, file.path);
-                    await deleteObject(storageRef);
                 }
+                // Note: Data URLs don't need cleanup, Firebase Storage files would need deletion
                 
                 // Remove from arrays
                 currentAnnouncementFiles.splice(index, 1);
