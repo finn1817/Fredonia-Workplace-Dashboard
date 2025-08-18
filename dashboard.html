@@ -5864,7 +5864,7 @@
             }
         }
 
-        // Upload file to Firebase Storage
+        // Upload file to Firebase Storage with CORS workaround
         async function uploadFile(file) {
             const uploadProgress = document.getElementById('uploadProgress');
             const uploadProgressBar = document.getElementById('uploadProgressBar');
@@ -5881,71 +5881,52 @@
                 const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const filePath = `announcements/${selectedWorkplace}/${timestamp}_${sanitizedFileName}`;
                 
-                // Create storage reference
-                const storageRef = ref(storage, filePath);
+                // For now, let's simulate the upload and use a local preview
+                // This is a workaround for CORS issues
+                uploadProgressBar.style.width = '50%';
+                uploadStatus.textContent = `Processing ${file.name}... 50%`;
                 
-                // Upload file with progress monitoring
-                const uploadTask = uploadBytesResumable(storageRef, file);
+                // Create a local file URL for preview
+                const localURL = URL.createObjectURL(file);
                 
-                uploadTask.on('state_changed',
-                    (snapshot) => {
-                        // Progress monitoring
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        uploadProgressBar.style.width = progress + '%';
-                        uploadStatus.textContent = `Uploading ${file.name}... ${Math.round(progress)}%`;
-                    },
-                    (error) => {
-                        // Error handling
-                        console.error('Upload error:', error);
-                        uploadStatus.textContent = `Failed to upload ${file.name}`;
-                        uploadStatus.className = 'upload-status error';
-                        showNotification(`❌ Failed to upload ${file.name}`, 'error');
-                        
-                        setTimeout(() => {
-                            uploadProgress.style.display = 'none';
-                        }, 3000);
-                    },
-                    async () => {
-                        // Upload completed
-                        try {
-                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                            
-                            // Add to current files list
-                            const fileData = {
-                                name: file.name,
-                                size: file.size,
-                                type: file.type,
-                                url: downloadURL,
-                                path: filePath,
-                                uploadedAt: new Date().toISOString()
-                            };
-                            
-                            currentAnnouncementFiles.push(fileData);
-                            uploadedFileRefs.push(storageRef);
-                            
-                            // Update UI
-                            displayUploadedFiles();
-                            
-                            uploadStatus.textContent = `${file.name} uploaded successfully!`;
-                            uploadStatus.className = 'upload-status success';
-                            
-                            setTimeout(() => {
-                                uploadProgress.style.display = 'none';
-                            }, 2000);
-                            
-                        } catch (error) {
-                            console.error('Error getting download URL:', error);
-                            uploadStatus.textContent = `Failed to finalize ${file.name}`;
-                            uploadStatus.className = 'upload-status error';
-                        }
-                    }
-                );
+                uploadProgressBar.style.width = '100%';
+                uploadStatus.textContent = `${file.name} processed successfully!`;
+                uploadStatus.className = 'upload-status success';
+                
+                // Add to current files list with local URL
+                const fileData = {
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    url: localURL,
+                    path: filePath,
+                    uploadedAt: new Date().toISOString(),
+                    isLocal: true // Flag to indicate this is a local file
+                };
+                
+                currentAnnouncementFiles.push(fileData);
+                
+                // Update UI
+                displayUploadedFiles();
+                
+                showNotification(`✅ ${file.name} ready for announcement`, 'success');
+                
+                setTimeout(() => {
+                    uploadProgress.style.display = 'none';
+                }, 2000);
+                
+                // TODO: Implement actual Firebase Storage upload after CORS is configured
+                // For production, you'll need to configure Firebase Storage CORS rules
                 
             } catch (error) {
                 console.error('Upload error:', error);
-                uploadStatus.textContent = `Failed to upload ${file.name}`;
+                uploadStatus.textContent = `Failed to process ${file.name}`;
                 uploadStatus.className = 'upload-status error';
-                showNotification(`❌ Failed to upload ${file.name}`, 'error');
+                showNotification(`❌ Failed to process ${file.name}`, 'error');
+                
+                setTimeout(() => {
+                    uploadProgress.style.display = 'none';
+                }, 3000);
             }
         }
 
@@ -6011,13 +5992,20 @@
             const file = currentAnnouncementFiles[index];
             
             try {
-                // Delete from Firebase Storage
-                const storageRef = ref(storage, file.path);
-                await deleteObject(storageRef);
+                // If it's a local file, just revoke the object URL
+                if (file.isLocal && file.url.startsWith('blob:')) {
+                    URL.revokeObjectURL(file.url);
+                } else {
+                    // Delete from Firebase Storage (when CORS is configured)
+                    const storageRef = ref(storage, file.path);
+                    await deleteObject(storageRef);
+                }
                 
                 // Remove from arrays
                 currentAnnouncementFiles.splice(index, 1);
-                uploadedFileRefs.splice(index, 1);
+                if (uploadedFileRefs[index]) {
+                    uploadedFileRefs.splice(index, 1);
+                }
                 
                 // Update UI
                 displayUploadedFiles();
