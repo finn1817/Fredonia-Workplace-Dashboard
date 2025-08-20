@@ -10385,11 +10385,132 @@ Management Team`);
                         </div>
                     </div>
                     
+                    <!-- NEW INSIGHTS ROW -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #17a2b8;">
+                            <div style="font-weight: 600; color: #17a2b8;">Peak Usage Time</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                ${getPeakUsageTime(successfulLogins)}
+                            </div>
+                        </div>
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #6f42c1;">
+                            <div style="font-weight: 600; color: #6f42c1;">User Retention</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                ${calculateUserRetention(successfulLogins)}% returning users
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- WORKPLACE DISTRIBUTION (if global view) -->
+                    ${!selectedWorkplace ? `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #fd7e14;">
+                            <div style="font-weight: 600; color: #fd7e14;">Most Active Workplace</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                ${await getMostActiveWorkplace()} workers
+                            </div>
+                        </div>
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #20c997;">
+                            <div style="font-weight: 600; color: #20c997;">Total Workplaces</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                3 locations active
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
                     <div style="font-size: 0.8rem; color: #666; text-align: center;">
                         🔄 Data refreshed: ${new Date().toLocaleTimeString()}
                     </div>
                 </div>
             `;
+        }
+        
+        // Helper functions for enhanced insights
+        function getPeakUsageTime(logins) {
+            if (!logins || logins.length === 0) return 'No data';
+            
+            // Count logins by hour
+            const hourCounts = {};
+            logins.forEach(login => {
+                const hour = new Date(login.timestamp).getHours();
+                hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+            });
+            
+            // Find peak hour
+            let peakHour = 0;
+            let maxCount = 0;
+            Object.entries(hourCounts).forEach(([hour, count]) => {
+                if (count > maxCount) {
+                    maxCount = count;
+                    peakHour = parseInt(hour);
+                }
+            });
+            
+            // Format time
+            const ampm = peakHour >= 12 ? 'PM' : 'AM';
+            const displayHour = peakHour === 0 ? 12 : peakHour > 12 ? peakHour - 12 : peakHour;
+            return `${displayHour}:00 ${ampm}`;
+        }
+        
+        function calculateUserRetention(logins) {
+            if (!logins || logins.length < 2) return 0;
+            
+            // Get unique users and their login dates
+            const userLogins = {};
+            logins.forEach(login => {
+                if (!userLogins[login.email]) {
+                    userLogins[login.email] = [];
+                }
+                userLogins[login.email].push(new Date(login.timestamp));
+            });
+            
+            // Count users with multiple login days
+            let returningUsers = 0;
+            const totalUsers = Object.keys(userLogins).length;
+            
+            Object.values(userLogins).forEach(dates => {
+                // Check if user logged in on different days
+                const uniqueDays = new Set(dates.map(date => date.toDateString()));
+                if (uniqueDays.size > 1) {
+                    returningUsers++;
+                }
+            });
+            
+            return totalUsers > 0 ? Math.round((returningUsers / totalUsers) * 100) : 0;
+        }
+        
+        async function getMostActiveWorkplace() {
+            try {
+                const workplaces = [
+                    { id: 'esports_lounge', name: 'eSports Lounge' },
+                    { id: 'esports_arena', name: 'eSports Arena' },
+                    { id: 'it_service_center', name: 'IT Service Center' }
+                ];
+                
+                let maxWorkers = 0;
+                let mostActive = 'Unknown';
+                
+                for (const workplace of workplaces) {
+                    try {
+                        const workersRef = collection(db, 'workplaces', workplace.id, 'workers');
+                        const workersSnapshot = await getDocs(workersRef);
+                        const count = workersSnapshot.size;
+                        
+                        if (count > maxWorkers) {
+                            maxWorkers = count;
+                            mostActive = `${workplace.name}: ${count}`;
+                        }
+                    } catch (error) {
+                        console.warn(`Could not check ${workplace.id}:`, error);
+                    }
+                }
+                
+                return mostActive;
+            } catch (error) {
+                console.error('Error getting most active workplace:', error);
+                return 'Error loading';
+            }
         }
         
         // Helper function to get total activity logs count
