@@ -1669,7 +1669,10 @@
                     <div class="analytics-content">
                         <div class="analytics-header">
                             <h3>📊 Global Analytics Dashboard</h3>
-                            <div style="display: flex; gap: 0.5rem;">
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <button onclick="toggleAnalyticsScope()" class="btn btn-warning" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;" id="analyticsScopeToggle">
+                                    🌍 Global View
+                                </button>
                                 <button onclick="refreshGlobalAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">
                                     🔄 Refresh
                                 </button>
@@ -5572,6 +5575,20 @@
                 await loadWorkplaceData();
                 await loadCurrentScheduleData(); // Load schedule data for "Who's Working Now" functionality
                 await loadAnnouncements(); // Load announcements
+                
+                // 🔄 Refresh analytics for the selected workplace
+                if (user && user.isAdmin) {
+                    await refreshGlobalAnalytics();
+                    
+                    // Update analytics scope button
+                    const scopeButton = document.getElementById('analyticsScopeToggle');
+                    if (scopeButton) {
+                        scopeButton.innerHTML = '🌍 Global View';
+                        scopeButton.style.background = '#ffc107';
+                        scopeButton.style.color = '#212529';
+                    }
+                }
+                
                 if (scheduleDisplay) scheduleDisplay.innerHTML = '<div class="loading">✅ Ready! Select an option above to get started.</div>';
                 hideAllForms();
                 if (announcementsSection) announcementsSection.style.display = 'block'; // Show announcements section
@@ -10031,6 +10048,46 @@ Management Team`);
             }
         };
         
+        // Toggle between workplace-specific and global analytics
+        window.toggleAnalyticsScope = async function() {
+            const scopeButton = document.getElementById('analyticsScopeToggle');
+            
+            if (selectedWorkplace) {
+                // Switch to global view
+                selectedWorkplace = null;
+                
+                // Clear workplace selection visually
+                document.querySelectorAll('.workplace-card').forEach(card => {
+                    card.classList.remove('selected');
+                });
+                
+                // Update button
+                scopeButton.innerHTML = '🏢 Workplace View';
+                scopeButton.style.background = '#28a745';
+                scopeButton.style.color = 'white';
+                
+                // Hide workplace-specific content
+                const scheduleContent = document.getElementById('scheduleContent');
+                const announcementsSection = document.getElementById('announcementsSection');
+                if (scheduleContent) scheduleContent.style.display = 'none';
+                if (announcementsSection) announcementsSection.style.display = 'none';
+                
+                showNotification('📊 Switched to Global Analytics view', 'info');
+            } else {
+                // Show instruction to select a workplace
+                scopeButton.innerHTML = '🌍 Global View';
+                scopeButton.style.background = '#ffc107';
+                scopeButton.style.color = '#212529';
+                
+                showNotification('🏢 Click on a workplace below to see workplace-specific analytics', 'info');
+                closeAnalyticsDropdown();
+                return;
+            }
+            
+            // Refresh analytics with new scope
+            await refreshGlobalAnalytics();
+        };
+        
         window.switchGlobalAnalyticsTab = function(tabName) {
             // Update tab buttons
             document.querySelectorAll('.analytics-tab-btn').forEach(btn => {
@@ -10057,12 +10114,11 @@ Management Team`);
                 let totalWorkers = 0;
                 let workStudyCount = 0;
                 
-                // Get all workplace data
-                const workplaces = ['esports_lounge', 'esports_arena', 'it_service_center'];
-                
-                for (const workplace of workplaces) {
+                // Check if a workplace is selected
+                if (selectedWorkplace) {
+                    // Show workplace-specific data
                     try {
-                        const workersRef = collection(db, workplace, 'workers', 'list');
+                        const workersRef = collection(db, 'workplaces', selectedWorkplace, 'workers');
                         const workersSnapshot = await getDocs(workersRef);
                         
                         workersSnapshot.forEach(doc => {
@@ -10072,8 +10128,41 @@ Management Team`);
                                 workStudyCount++;
                             }
                         });
+                        
+                        // Update title to show workplace-specific
+                        const analyticsTitle = document.querySelector('#global-analytics-dashboard h3');
+                        if (analyticsTitle) {
+                            const workplaceName = getWorkplaceName(selectedWorkplace);
+                            analyticsTitle.innerHTML = `📊 ${workplaceName} Analytics`;
+                        }
                     } catch (error) {
-                        console.warn(`Could not load workers from ${workplace}:`, error);
+                        console.warn(`Could not load workers from ${selectedWorkplace}:`, error);
+                    }
+                } else {
+                    // Show global data from all workplaces
+                    const workplaces = ['esports_lounge', 'esports_arena', 'it_service_center'];
+                    
+                    for (const workplace of workplaces) {
+                        try {
+                            const workersRef = collection(db, 'workplaces', workplace, 'workers');
+                            const workersSnapshot = await getDocs(workersRef);
+                            
+                            workersSnapshot.forEach(doc => {
+                                const worker = doc.data();
+                                totalWorkers++;
+                                if (worker.work_study) {
+                                    workStudyCount++;
+                                }
+                            });
+                        } catch (error) {
+                            console.warn(`Could not load workers from ${workplace}:`, error);
+                        }
+                    }
+                    
+                    // Update title to show global
+                    const analyticsTitle = document.querySelector('#global-analytics-dashboard h3');
+                    if (analyticsTitle) {
+                        analyticsTitle.innerHTML = `📊 Global Analytics Dashboard`;
                     }
                 }
                 
