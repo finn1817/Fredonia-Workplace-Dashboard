@@ -68,6 +68,136 @@
             background: rgba(255,255,255,0.3);
         }
 
+        /* Global Analytics Component Styles */
+        .analytics-toggle {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 0.5rem;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .analytics-toggle:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-1px);
+        }
+
+        .analytics-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 0;
+            margin-top: 0.5rem;
+            width: 800px;
+            max-height: 600px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .analytics-dropdown.show {
+            display: block;
+            animation: fadeInDown 0.3s ease;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .analytics-content {
+            padding: 1.5rem;
+        }
+
+        .analytics-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f1f3f4;
+        }
+
+        .analytics-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 1.2rem;
+        }
+
+        .analytics-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            color: white;
+        }
+
+        .metric-card .number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-card .label {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .analytics-tabs {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 1rem;
+        }
+
+        .analytics-tab-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #666;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .analytics-tab-btn.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .analytics-tab-content {
+            display: none;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .analytics-tab-content.active {
+            display: block;
+        }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -1526,6 +1656,84 @@
             <div id="databaseHealthIndicator" style="display: none; margin-right: 1rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold; background: #f8f9fa; color: #666;">
                 <span id="healthIcon">🔄</span> <span id="healthText">Checking...</span>
             </div>
+            
+            <!-- Global Analytics Toggle (Admin Only) -->
+            <div id="globalAnalyticsContainer" style="position: relative; display: none;">
+                <button id="analyticsToggle" class="analytics-toggle">
+                    <span>📊</span>
+                    <span>Analytics</span>
+                </button>
+                
+                <!-- Analytics Dropdown -->
+                <div id="analyticsDropdown" class="analytics-dropdown">
+                    <div class="analytics-content">
+                        <div class="analytics-header">
+                            <h3>📊 Global Analytics Dashboard</h3>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button onclick="refreshGlobalAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">
+                                    🔄 Refresh
+                                </button>
+                                <button onclick="closeAnalyticsDropdown()" class="btn btn-secondary" style="background: #6c757d; color: white; border: none; padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">
+                                    ✕ Close
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Metrics Cards -->
+                        <div class="analytics-metrics">
+                            <div class="metric-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                <div class="number" id="totalWorkersMetric">0</div>
+                                <div class="label">Total Workers</div>
+                            </div>
+                            <div class="metric-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                                <div class="number" id="totalUsersMetric">0</div>
+                                <div class="label">Total Users</div>
+                            </div>
+                            <div class="metric-card" style="background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);">
+                                <div class="number" id="workStudyMetric">0</div>
+                                <div class="label">Work Study</div>
+                            </div>
+                            <div class="metric-card" style="background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);">
+                                <div class="number" id="totalLogsMetric">0</div>
+                                <div class="label">Activity Logs</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Tabs -->
+                        <div class="analytics-tabs">
+                            <button class="analytics-tab-btn active" data-tab="activity" onclick="switchGlobalAnalyticsTab('activity')">
+                                📈 Activity
+                            </button>
+                            <button class="analytics-tab-btn" data-tab="security" onclick="switchGlobalAnalyticsTab('security')">
+                                🔒 Security
+                            </button>
+                            <button class="analytics-tab-btn" data-tab="insights" onclick="switchGlobalAnalyticsTab('insights')">
+                                💡 Insights
+                            </button>
+                        </div>
+                        
+                        <!-- Tab Content -->
+                        <div id="global-analytics-activity" class="analytics-tab-content active">
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center; color: #666;">
+                                Loading activity data...
+                            </div>
+                        </div>
+                        
+                        <div id="global-analytics-security" class="analytics-tab-content">
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center; color: #666;">
+                                Loading security data...
+                            </div>
+                        </div>
+                        
+                        <div id="global-analytics-insights" class="analytics-tab-content">
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center; color: #666;">
+                                Loading insights...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <span id="userEmail"></span>
             <span id="adminBadge" class="admin-badge">ADMIN</span>
             <span id="userBadge" class="user-badge">USER</span>
@@ -6578,9 +6786,6 @@
                                 <button class="tab-btn" data-tab="import" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
                                     Import/Export
                                 </button>
-                                <button class="tab-btn" data-tab="analytics" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                                    Analytics
-                                </button>
                                 <button class="tab-btn" data-tab="shift_postings" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
                                     🎯 Shift Postings
                                 </button>
@@ -6871,9 +7076,6 @@
                                 <button class="tab-btn" data-tab="import" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
                                     Import/Export
                                 </button>
-                                <button class="tab-btn" data-tab="analytics" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                                    Analytics
-                                </button>
                             </div>
                         </div>
                         <div class="tab-content">
@@ -6964,9 +7166,6 @@
                     break;
                 case 'import':
                     displayImportExportTab(contentContainer);
-                    break;
-                case 'analytics':
-                    displayAnalyticsTab(contentContainer);
                     break;
                 case 'shift_postings':
                     await displayShiftPostingsTab(contentContainer);
@@ -7558,164 +7757,15 @@
             }
         }
 
+        // NOTE: displayAnalyticsTab function removed - Analytics moved to global header component
+        // The analytics functionality is now handled by the global analytics system above
+        
+        /*
         function displayAnalyticsTab(contentContainer) {
-            const content = `
-                <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                        <h3 style="margin: 0;">📊 Advanced Analytics & Logging Dashboard</h3>
-                                            <div style="display: flex; gap: 0.5rem;">
-                        <button onclick="refreshAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
-                            🔄 Refresh Data
-                        </button>
-                        <button onclick="clearAllLogs()" class="btn btn-danger" style="background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
-                            🗑️ Clear Logs
-                        </button>
-                    </div>
-                    </div>
-                    
-                    <!-- Key Metrics Section -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 2rem; font-weight: bold;">${workers.length}</div>
-                            <div style="font-size: 0.9rem; opacity: 0.9;">Total Workers</div>
-                        </div>
-                        <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 2rem; font-weight: bold;">${workers.filter(w => w.work_study).length}</div>
-                            <div style="font-size: 0.9rem; opacity: 0.9;">Work Study Students</div>
-                        </div>
-                        <div style="background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 2rem; font-weight: bold;">${workers.filter(w => !w.work_study).length}</div>
-                            <div style="font-size: 0.9rem; opacity: 0.9;">Regular Workers</div>
-                        </div>
-                        <div style="background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 2rem; font-weight: bold;" id="totalLogs">0</div>
-                            <div style="font-size: 0.9rem; opacity: 0.9;">Total Log Entries</div>
-                        </div>
-                    </div>
-                    
-                    <!-- Navigation Tabs for Analytics -->
-                    <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1.5rem;">
-                        <button class="analytics-tab-btn active" data-tab="activity" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; color: #667eea; font-weight: bold;">
-                            📈 Activity Logs
-                        </button>
-                        <button class="analytics-tab-btn" data-tab="security" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                            🔒 Security Logs
-                        </button>
-                        <button class="analytics-tab-btn" data-tab="insights" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                            💡 Insights
-                        </button>
-                        <button class="analytics-tab-btn" data-tab="reports" style="padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">
-                            📋 Reports
-                        </button>
-                    </div>
-                    
-                    <!-- Activity Logs Tab Content -->
-                    <div id="analytics-activity" class="analytics-content">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                            <h4 style="margin: 0;">📈 Recent Activity Logs</h4>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <select id="activityFilter" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
-                                    <option value="all">All Activities</option>
-                                    <option value="login">🔐 Logins & Authentication</option>
-                                    <option value="edit">✏️ Edits & Updates</option>
-                                    <option value="view">👁️ Views & Access</option>
-                                    <option value="suspend">⚠️ Suspensions & Account Actions</option>
-                                    <option value="delete">🗑️ Deletions & Removals</option>
-                                    <option value="admin">👑 Admin Actions Only</option>
-                                    <option value="failed">❌ Failed/Error Actions</option>
-                                    <option value="recent">⏰ Last 24 Hours</option>
-                                </select>
-                                <button onclick="exportActivityLogs()" class="btn btn-success" style="background: #28a745; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-size: 14px; cursor: pointer;">
-                                    📥 Export
-                                </button>
-                            </div>
-                        </div>
-                        <div id="activityLogsContainer" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; max-height: 400px; overflow-y: auto;">
-                            <div style="text-align: center; color: #666; padding: 2rem;">
-                                <div style="font-size: 2rem; margin-bottom: 1rem;">📊</div>
-                                <div>Loading activity logs...</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Security Logs Tab Content -->
-                    <div id="analytics-security" class="analytics-content" style="display: none;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                            <h4 style="margin: 0;">🔒 Security & Access Logs</h4>
-                            <button onclick="exportSecurityLogs()" class="btn btn-warning" style="background: #ffc107; color: #212529; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-size: 14px; cursor: pointer;">
-                                📥 Export
-                            </button>
-                        </div>
-                        <div id="securityLogsContainer" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; max-height: 400px; overflow-y: auto;">
-                            <div style="text-align: center; color: #666; padding: 2rem;">
-                                <div style="font-size: 2rem; margin-bottom: 1rem;">🔒</div>
-                                <div>Loading security logs...</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Insights Tab Content -->
-                    <div id="analytics-insights" class="analytics-content" style="display: none;">
-                        <h4 style="margin-bottom: 1rem;">💡 System Insights</h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                                <h5 style="margin: 0 0 1rem 0; color: #333;">👥 User Engagement</h5>
-                                <div id="userEngagementInsights">
-                                    <div style="text-align: center; color: #666;">Loading insights...</div>
-                                </div>
-                            </div>
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                                <h5 style="margin: 0 0 1rem 0; color: #333;">🔐 Security Alerts</h5>
-                                <div id="securityInsights">
-                                    <div style="text-align: center; color: #666;">Loading insights...</div>
-                                </div>
-                            </div>
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                                <h5 style="margin: 0 0 1rem 0; color: #333;">📊 Database Health</h5>
-                                <div id="databaseInsights">
-                                    <div style="text-align: center; color: #666;">Loading insights...</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Reports Tab Content -->
-                    <div id="analytics-reports" class="analytics-content" style="display: none;">
-                        <h4 style="margin-bottom: 1rem;">📋 Generate Reports</h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
-                            <button onclick="generateReport('user_activity')" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
-                                <div style="font-weight: bold; margin-bottom: 0.5rem;">📈 User Activity Report</div>
-                                <div style="font-size: 0.9rem; opacity: 0.9;">Login patterns and user engagement</div>
-                            </button>
-                            <button onclick="generateReport('security_audit')" class="btn btn-warning" style="background: #ffc107; color: #212529; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
-                                <div style="font-weight: bold; margin-bottom: 0.5rem;">🔒 Security Audit Report</div>
-                                <div style="font-size: 0.9rem; opacity: 0.9;">Suspicious activities and access logs</div>
-                            </button>
-                            <button onclick="generateReport('database_health')" class="btn btn-success" style="background: #28a745; color: white; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
-                                <div style="font-weight: bold; margin-bottom: 0.5rem;">💾 Database Health Report</div>
-                                <div style="font-size: 0.9rem; opacity: 0.9;">Data integrity and connection status</div>
-                            </button>
-                            <button onclick="generateReport('admin_actions')" class="btn btn-danger" style="background: #dc3545; color: white; border: none; padding: 1rem; border-radius: 8px; cursor: pointer; text-align: left;">
-                                <div style="font-weight: bold; margin-bottom: 0.5rem;">⚡ Admin Actions Report</div>
-                                <div style="font-size: 0.9rem; opacity: 0.9;">All admin modifications and changes</div>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            if (contentContainer) {
-                contentContainer.innerHTML = content;
-            }
-            
-            // Initialize analytics tabs
-            setupAnalyticsTabs();
-            
-            // Load initial data
-            loadActivityLogs();
-            loadSecurityLogs();
-            loadInsights();
+            // This function is no longer needed as analytics has been moved to the global header
+            // All analytics functionality is now handled by the Global Analytics System
         }
+        */
 
         async function displayShiftPostingsTab(contentContainer) {
             try {
@@ -9890,6 +9940,326 @@ Management Team`);
             }
         };
         
+        // ===========================================
+        // GLOBAL ANALYTICS SYSTEM (Header Component)
+        // ===========================================
+        
+        // Global Analytics Functions
+        window.toggleAnalyticsDropdown = function() {
+            const dropdown = document.getElementById('analyticsDropdown');
+            dropdown.classList.toggle('show');
+            
+            if (dropdown.classList.contains('show')) {
+                refreshGlobalAnalytics();
+            }
+        };
+        
+        window.closeAnalyticsDropdown = function() {
+            const dropdown = document.getElementById('analyticsDropdown');
+            dropdown.classList.remove('show');
+        };
+        
+        window.refreshGlobalAnalytics = async function() {
+            try {
+                await loadGlobalMetrics();
+                await loadGlobalActivityLogs();
+                await loadGlobalSecurityLogs();
+                await loadGlobalInsights();
+                showNotification('📊 Analytics refreshed!', 'success');
+            } catch (error) {
+                console.error('Error refreshing global analytics:', error);
+                showNotification('❌ Failed to refresh analytics', 'error');
+            }
+        };
+        
+        window.switchGlobalAnalyticsTab = function(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.analytics-tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.tab === tabName) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Update tab content
+            document.querySelectorAll('.analytics-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            const activeContent = document.getElementById(`global-analytics-${tabName}`);
+            if (activeContent) {
+                activeContent.classList.add('active');
+            }
+        };
+        
+        // Load global metrics from all workplaces
+        async function loadGlobalMetrics() {
+            try {
+                let totalWorkers = 0;
+                let workStudyCount = 0;
+                
+                // Get all workplace data
+                const workplaces = ['esports_lounge', 'esports_arena', 'it_service_center'];
+                
+                for (const workplace of workplaces) {
+                    try {
+                        const workersRef = collection(db, workplace, 'workers', 'list');
+                        const workersSnapshot = await getDocs(workersRef);
+                        
+                        workersSnapshot.forEach(doc => {
+                            const worker = doc.data();
+                            totalWorkers++;
+                            if (worker.work_study) {
+                                workStudyCount++;
+                            }
+                        });
+                    } catch (error) {
+                        console.warn(`Could not load workers from ${workplace}:`, error);
+                    }
+                }
+                
+                // Get total users from auth database
+                let totalUsers = 0;
+                try {
+                    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, collection, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    const authConfig = {
+                        apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                        authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                        projectId: "my-admin-dashboard-b9c89",
+                        storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                        messagingSenderId: "1001105953619",
+                        appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6",
+                        measurementId: "G-DGTX5YCKYF"
+                    };
+                    
+                    const authApp = initializeApp(authConfig, 'authApp');
+                    const authDb = getFirestore(authApp);
+                    const usersSnapshot = await getDocs(collection(authDb, 'users'));
+                    totalUsers = usersSnapshot.size;
+                } catch (error) {
+                    console.warn('Could not load user count:', error);
+                }
+                
+                // Get activity logs count
+                const totalLogs = getTotalActivityLogsCount();
+                
+                // Update metrics
+                document.getElementById('totalWorkersMetric').textContent = totalWorkers;
+                document.getElementById('totalUsersMetric').textContent = totalUsers;
+                document.getElementById('workStudyMetric').textContent = workStudyCount;
+                document.getElementById('totalLogsMetric').textContent = totalLogs;
+                
+            } catch (error) {
+                console.error('Error loading global metrics:', error);
+            }
+        }
+        
+        // Load global activity logs
+        async function loadGlobalActivityLogs() {
+            const container = document.getElementById('global-analytics-activity');
+            if (!container) return;
+            
+            // Load from localStorage (same as current system)
+            const storedLogs = localStorage.getItem('activityLogs');
+            const logs = storedLogs ? JSON.parse(storedLogs) : [];
+            
+            // Also load login data
+            const loginAttempts = JSON.parse(localStorage.getItem('loginAttempts') || '[]');
+            const successfulLogins = JSON.parse(localStorage.getItem('successfulLogins') || '[]');
+            const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
+            const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
+            
+            // Combine all activity data
+            const allActivityLogs = [
+                ...logs,
+                ...loginAttempts.map(log => ({ 
+                    ...log, 
+                    action: 'login_attempt',
+                    userId: log.email || 'Unknown',
+                    userRole: 'USER',
+                    details: `Login attempt for ${log.email || 'Unknown'}`
+                })),
+                ...successfulLogins.map(log => ({ 
+                    ...log, 
+                    action: 'login_success',
+                    userId: log.email || 'Unknown',
+                    userRole: log.isAdmin ? 'ADMIN' : 'USER',
+                    details: `Successful login for ${log.email || 'Unknown'}`
+                })),
+                ...failedLogins.map(log => ({ 
+                    ...log, 
+                    action: 'login_failed',
+                    userId: log.email || 'Unknown',
+                    userRole: 'USER',
+                    details: `Failed login for ${log.email || 'Unknown'}`
+                })),
+                ...registrations.map(log => ({ 
+                    ...log, 
+                    action: 'registration_success',
+                    userId: log.email || 'Unknown',
+                    userRole: 'USER',
+                    details: `New user registration: ${log.firstName || ''} ${log.lastName || ''}`
+                }))
+            ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            if (allActivityLogs.length === 0) {
+                container.innerHTML = `
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center; color: #666;">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📊</div>
+                        <div>No activity logs found</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Display recent logs (limit to 10 for header dropdown)
+            const recentLogs = allActivityLogs.slice(0, 10);
+            let logsHTML = '';
+            
+            recentLogs.forEach(log => {
+                const time = new Date(log.timestamp).toLocaleString();
+                const actionIcon = getActionIcon(log.action);
+                const actionColor = getActionColor(log.action);
+                
+                logsHTML += `
+                    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+                        <span style="color: ${actionColor}; font-size: 1.2rem;">${actionIcon}</span>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 500; font-size: 0.9rem; color: #333;">${log.details || log.action}</div>
+                            <div style="font-size: 0.75rem; color: #666;">${log.userId} • ${time}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = `
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #333;">Recent Activity (${allActivityLogs.length} total)</div>
+                    ${logsHTML}
+                    ${allActivityLogs.length > 10 ? `<div style="text-align: center; margin-top: 0.5rem; color: #666; font-size: 0.8rem;">Showing 10 of ${allActivityLogs.length} logs</div>` : ''}
+                </div>
+            `;
+        }
+        
+        // Load global security logs
+        async function loadGlobalSecurityLogs() {
+            const container = document.getElementById('global-analytics-security');
+            if (!container) return;
+            
+            const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
+            const securityLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]');
+            
+            const allSecurityLogs = [
+                ...securityLogs,
+                ...failedLogins.map(log => ({
+                    ...log,
+                    event: 'failed_login',
+                    severity: 'warning',
+                    details: `Failed login attempt: ${log.error}`
+                }))
+            ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            if (allSecurityLogs.length === 0) {
+                container.innerHTML = `
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; text-align: center; color: #666;">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🔒</div>
+                        <div>No security events found</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const recentLogs = allSecurityLogs.slice(0, 8);
+            let logsHTML = '';
+            
+            recentLogs.forEach(log => {
+                const time = new Date(log.timestamp).toLocaleString();
+                const severityColor = getSeverityColor(log.severity || 'info');
+                
+                logsHTML += `
+                    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+                        <span style="color: ${severityColor}; font-size: 1.2rem;">🔒</span>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 500; font-size: 0.9rem; color: #333;">${log.details || log.event}</div>
+                            <div style="font-size: 0.75rem; color: #666;">${log.email || log.userId || 'Unknown'} • ${time}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = `
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #333;">Security Events (${allSecurityLogs.length} total)</div>
+                    ${logsHTML}
+                    ${allSecurityLogs.length > 8 ? `<div style="text-align: center; margin-top: 0.5rem; color: #666; font-size: 0.8rem;">Showing 8 of ${allSecurityLogs.length} events</div>` : ''}
+                </div>
+            `;
+        }
+        
+        // Load global insights
+        async function loadGlobalInsights() {
+            const container = document.getElementById('global-analytics-insights');
+            if (!container) return;
+            
+            const successfulLogins = JSON.parse(localStorage.getItem('successfulLogins') || '[]');
+            const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
+            const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
+            
+            // Calculate insights
+            const today = new Date();
+            const last24Hours = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+            
+            const recentLogins = successfulLogins.filter(log => new Date(log.timestamp) > last24Hours);
+            const recentFailures = failedLogins.filter(log => new Date(log.timestamp) > last24Hours);
+            const recentRegistrations = registrations.filter(log => new Date(log.timestamp) > last24Hours);
+            
+            const failureRate = successfulLogins.length > 0 ? 
+                Math.round((failedLogins.length / (successfulLogins.length + failedLogins.length)) * 100) : 0;
+            
+            container.innerHTML = `
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                    <div style="font-weight: 600; margin-bottom: 1rem; color: #333;">System Insights</div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #28a745;">
+                            <div style="font-weight: 600; color: #28a745;">Last 24 Hours</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                ${recentLogins.length} logins, ${recentRegistrations.length} registrations
+                            </div>
+                        </div>
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid ${failureRate > 20 ? '#dc3545' : '#ffc107'};">
+                            <div style="font-weight: 600; color: ${failureRate > 20 ? '#dc3545' : '#ffc107'};">Login Success Rate</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                ${100 - failureRate}% (${failedLogins.length} failures)
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="font-size: 0.8rem; color: #666; text-align: center;">
+                        🔄 Data refreshed: ${new Date().toLocaleTimeString()}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Helper function to get total activity logs count
+        function getTotalActivityLogsCount() {
+            const storedLogs = localStorage.getItem('activityLogs');
+            const logs = storedLogs ? JSON.parse(storedLogs) : [];
+            const loginAttempts = JSON.parse(localStorage.getItem('loginAttempts') || '[]');
+            const successfulLogins = JSON.parse(localStorage.getItem('successfulLogins') || '[]');
+            const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
+            const registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
+            
+            return logs.length + loginAttempts.length + successfulLogins.length + failedLogins.length + registrations.length;
+        }
+        
+        // ===========================================
+        // END GLOBAL ANALYTICS SYSTEM
+        // ===========================================
+        
         // Initialize session tracking when dashboard loads (admin only)
         document.addEventListener('DOMContentLoaded', async function() {
             if (user.isAdmin) {
@@ -9897,6 +10267,35 @@ Management Team`);
                 
                 // Generate some sample data if no logs exist (for testing)
                 generateSampleData();
+                
+                // Initialize Global Analytics Component
+                const analyticsContainer = document.getElementById('globalAnalyticsContainer');
+                const analyticsToggle = document.getElementById('analyticsToggle');
+                
+                if (analyticsContainer && analyticsToggle) {
+                    // Show the analytics component for admins
+                    analyticsContainer.style.display = 'block';
+                    
+                    // Add click event listener
+                    analyticsToggle.addEventListener('click', toggleAnalyticsDropdown);
+                    
+                    // Close dropdown when clicking outside
+                    document.addEventListener('click', function(event) {
+                        const dropdown = document.getElementById('analyticsDropdown');
+                        const toggle = document.getElementById('analyticsToggle');
+                        
+                        if (dropdown && toggle && 
+                            !dropdown.contains(event.target) && 
+                            !toggle.contains(event.target)) {
+                            dropdown.classList.remove('show');
+                        }
+                    });
+                    
+                    // Load initial data
+                    setTimeout(() => {
+                        loadGlobalMetrics();
+                    }, 1000);
+                }
             }
         });
         
