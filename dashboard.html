@@ -2531,6 +2531,24 @@
             window.location.href = 'index.html';
         }
         
+        // Debug user info
+        console.log('User loaded:', user);
+        console.log('Is Admin:', user.isAdmin);
+        
+        // IMMEDIATE Analytics Setup for Admins (don't wait for DOMContentLoaded)
+        if (user.isAdmin) {
+            // Add a delay to ensure DOM is ready, then force show analytics
+            setTimeout(() => {
+                const analyticsContainer = document.getElementById('globalAnalyticsContainer');
+                if (analyticsContainer) {
+                    analyticsContainer.style.display = 'block';
+                    console.log('🎯 FORCE ENABLED Analytics for admin!');
+                } else {
+                    console.error('🚨 Analytics container not found!');
+                }
+            }, 500);
+        }
+        
         // CRITICAL: For non-admin users, suppress ALL error popups and alerts
         if (!user.isAdmin) {
             // Override window.alert to prevent any popups
@@ -2581,6 +2599,28 @@
             if (adminBadge) adminBadge.style.display = 'inline';
             if (adminSection) adminSection.style.display = 'block';
             if (userBadge) userBadge.style.display = 'none';
+            
+            // 🎯 ENABLE ANALYTICS FOR ADMIN
+            const analyticsContainer = document.getElementById('globalAnalyticsContainer');
+            if (analyticsContainer) {
+                analyticsContainer.style.display = 'block';
+                console.log('✅ Analytics enabled for admin user');
+                
+                // Set up click handler immediately
+                const analyticsToggle = document.getElementById('analyticsToggle');
+                if (analyticsToggle) {
+                    analyticsToggle.addEventListener('click', function() {
+                        console.log('Analytics button clicked!');
+                        toggleAnalyticsDropdown();
+                    });
+                    console.log('✅ Analytics click handler set up');
+                } else {
+                    console.error('❌ Analytics toggle button not found');
+                }
+            } else {
+                console.error('❌ Analytics container not found');
+            }
+            
             // Show admin-only buttons
             if (generateBtn) generateBtn.style.display = 'inline-block';
             if (historyBtn) historyBtn.style.display = 'inline-block';
@@ -9959,6 +9999,25 @@ Management Team`);
             dropdown.classList.remove('show');
         };
         
+        // 🐛 DEBUG FUNCTION - Force show analytics (callable from console)
+        window.forceShowAnalytics = function() {
+            const analyticsContainer = document.getElementById('globalAnalyticsContainer');
+            if (analyticsContainer) {
+                analyticsContainer.style.display = 'block';
+                console.log('🎯 FORCE ENABLED Analytics!');
+                
+                const analyticsToggle = document.getElementById('analyticsToggle');
+                if (analyticsToggle) {
+                    analyticsToggle.onclick = toggleAnalyticsDropdown;
+                    console.log('✅ Click handler attached');
+                }
+                return '✅ Analytics force enabled';
+            } else {
+                console.error('❌ Analytics container not found');
+                return '❌ Failed';
+            }
+        };
+        
         window.refreshGlobalAnalytics = async function() {
             try {
                 await loadGlobalMetrics();
@@ -10272,9 +10331,14 @@ Management Team`);
                 const analyticsContainer = document.getElementById('globalAnalyticsContainer');
                 const analyticsToggle = document.getElementById('analyticsToggle');
                 
+                console.log('Admin check:', user.isAdmin);
+                console.log('Analytics container found:', !!analyticsContainer);
+                console.log('Analytics toggle found:', !!analyticsToggle);
+                
                 if (analyticsContainer && analyticsToggle) {
                     // Show the analytics component for admins
                     analyticsContainer.style.display = 'block';
+                    console.log('Analytics component shown for admin');
                     
                     // Add click event listener
                     analyticsToggle.addEventListener('click', toggleAnalyticsDropdown);
@@ -10295,6 +10359,11 @@ Management Team`);
                     setTimeout(() => {
                         loadGlobalMetrics();
                     }, 1000);
+                } else {
+                    console.error('Analytics elements not found:', {
+                        container: !!analyticsContainer,
+                        toggle: !!analyticsToggle
+                    });
                 }
             }
         });
