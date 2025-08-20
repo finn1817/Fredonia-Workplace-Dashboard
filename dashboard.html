@@ -1673,6 +1673,9 @@
                                 <button onclick="toggleAnalyticsScope()" class="btn btn-warning" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;" id="analyticsScopeToggle">
                                     🌍 Global View
                                 </button>
+                                <button onclick="exportAnalyticsReport()" class="btn btn-success" style="background: #28a745; color: white; border: none; padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">
+                                    📊 Export
+                                </button>
                                 <button onclick="refreshGlobalAnalytics()" class="btn btn-info" style="background: #17a2b8; color: white; border: none; padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">
                                     🔄 Refresh
                                 </button>
@@ -1767,7 +1770,12 @@
 
         <!-- Workplace Selection -->
         <div class="workplace-section">
-            <h2 class="section-title">Select Workplace</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 class="section-title" style="margin: 0;">Select Workplace</h2>
+                <button onclick="clearWorkplaceSelection()" class="btn" style="background: #6c757d; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" id="clearWorkplaceBtn">
+                    ✕ Clear Selection
+                </button>
+            </div>
             <div class="workplace-grid" id="workplaceGrid">
                 <div class="workplace-card" onclick="selectWorkplace('esports_lounge')">
                     <h4>🎮 eSports Lounge</h4>
@@ -5601,6 +5609,43 @@
             if (!user.isAdmin) {
                 await loadUserDashboard();
             }
+        };
+
+        // Clear workplace selection function
+        window.clearWorkplaceSelection = function() {
+            selectedWorkplace = null;
+            
+            // Clear visual selection
+            document.querySelectorAll('.workplace-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            // Hide workplace-specific content
+            const scheduleContent = document.getElementById('scheduleContent');
+            const announcementsSection = document.getElementById('announcementsSection');
+            if (scheduleContent) scheduleContent.style.display = 'none';
+            if (announcementsSection) announcementsSection.style.display = 'none';
+            
+            // Reset schedule display
+            const scheduleDisplay = document.getElementById('scheduleDisplay');
+            if (scheduleDisplay) {
+                scheduleDisplay.innerHTML = '<div class="info">💡 Select a workplace above to get started with scheduling and management.</div>';
+            }
+            
+            // Update analytics to global view if admin
+            if (user && user.isAdmin) {
+                refreshGlobalAnalytics();
+                
+                // Update analytics scope button
+                const scopeButton = document.getElementById('analyticsScopeToggle');
+                if (scopeButton) {
+                    scopeButton.innerHTML = '🏢 Workplace View';
+                    scopeButton.style.background = '#28a745';
+                    scopeButton.style.color = 'white';
+                }
+            }
+            
+            showNotification('✅ Workplace selection cleared - showing global view', 'info');
         };
 
         // Cross-Workplace Availability Check System
@@ -10276,7 +10321,9 @@ Management Team`);
                         <span style="color: ${actionColor}; font-size: 1.2rem;">${actionIcon}</span>
                         <div style="flex: 1; min-width: 0;">
                             <div style="font-weight: 500; font-size: 0.9rem; color: #333;">${log.details || log.action}</div>
-                            <div style="font-size: 0.75rem; color: #666;">${log.userId} • ${time}</div>
+                            <div style="font-size: 0.75rem; color: #666;">
+                                ${log.userId} • ${time}${log.ipAddress ? ` • IP: ${log.ipAddress}` : ''}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -10394,9 +10441,25 @@ Management Team`);
                             </div>
                         </div>
                         <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #6f42c1;">
-                            <div style="font-weight: 600; color: #6f42c1;">User Retention</div>
+                            <div style="font-weight: 600; color: #6f42c1;">System Performance</div>
                             <div style="font-size: 0.9rem; color: #666;">
-                                ${calculateUserRetention(successfulLogins)}% returning users
+                                ${getSystemPerformance()} avg response
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PERFORMANCE METRICS ROW -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #dc3545;">
+                            <div style="font-weight: 600; color: #dc3545;">Error Rate</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                ${getErrorFrequency()}% of requests
+                            </div>
+                        </div>
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border-left: 4px solid #fd7e14;">
+                            <div style="font-weight: 600; color: #fd7e14;">Busy Periods</div>
+                            <div style="font-size: 0.9rem; color: #666;">
+                                ${getBusyPeriods(successfulLogins)} peak hours today
                             </div>
                         </div>
                     </div>
@@ -10453,33 +10516,163 @@ Management Team`);
             return `${displayHour}:00 ${ampm}`;
         }
         
-        function calculateUserRetention(logins) {
-            if (!logins || logins.length < 2) return 0;
-            
-            // Get unique users and their login dates
-            const userLogins = {};
-            logins.forEach(login => {
-                if (!userLogins[login.email]) {
-                    userLogins[login.email] = [];
-                }
-                userLogins[login.email].push(new Date(login.timestamp));
-            });
-            
-            // Count users with multiple login days
-            let returningUsers = 0;
-            const totalUsers = Object.keys(userLogins).length;
-            
-            Object.values(userLogins).forEach(dates => {
-                // Check if user logged in on different days
-                const uniqueDays = new Set(dates.map(date => date.toDateString()));
-                if (uniqueDays.size > 1) {
-                    returningUsers++;
-                }
-            });
-            
-            return totalUsers > 0 ? Math.round((returningUsers / totalUsers) * 100) : 0;
+        // System performance tracking
+        function getSystemPerformance() {
+            const performanceEntries = performance.getEntriesByType('navigation');
+            if (performanceEntries.length > 0) {
+                const loadTime = performanceEntries[0].loadEventEnd - performanceEntries[0].loadEventStart;
+                return loadTime < 1000 ? `${Math.round(loadTime)}ms` : `${(loadTime/1000).toFixed(1)}s`;
+            }
+            return 'Measuring...';
         }
         
+        // Error frequency tracking
+        function getErrorFrequency() {
+            // Track errors from localStorage or create basic error rate
+            const totalRequests = JSON.parse(localStorage.getItem('totalRequests') || '0');
+            const errorCount = JSON.parse(localStorage.getItem('errorCount') || '0');
+            
+            if (totalRequests === 0) return '0';
+            return ((errorCount / totalRequests) * 100).toFixed(1);
+        }
+        
+        // Busy periods detection (3+ users within an hour)
+        function getBusyPeriods(logins) {
+            if (!logins || logins.length === 0) return 0;
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const todayLogins = logins.filter(login => {
+                const loginDate = new Date(login.timestamp);
+                return loginDate >= today;
+            });
+            
+            // Group by hour and count unique users
+            const hourlyUsers = {};
+            todayLogins.forEach(login => {
+                const hour = new Date(login.timestamp).getHours();
+                if (!hourlyUsers[hour]) {
+                    hourlyUsers[hour] = new Set();
+                }
+                hourlyUsers[hour].add(login.email);
+            });
+            
+            // Count hours with 3+ unique users
+            let busyPeriods = 0;
+            Object.values(hourlyUsers).forEach(userSet => {
+                if (userSet.size >= 3) {
+                    busyPeriods++;
+                }
+            });
+            
+            return busyPeriods;
+        }
+        
+        // Track database response times
+        window.trackDatabaseResponse = function(operation, startTime) {
+            const endTime = performance.now();
+            const responseTime = endTime - startTime;
+            
+            const dbResponses = JSON.parse(localStorage.getItem('dbResponses') || '[]');
+            dbResponses.unshift({
+                operation,
+                responseTime,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Keep only last 50 responses
+            if (dbResponses.length > 50) dbResponses.pop();
+            localStorage.setItem('dbResponses', JSON.stringify(dbResponses));
+        };
+        
+        // Track errors
+        window.trackError = function(feature, error) {
+            const errors = JSON.parse(localStorage.getItem('systemErrors') || '[]');
+            errors.unshift({
+                feature,
+                error: error.message,
+                timestamp: new Date().toISOString(),
+                stack: error.stack
+            });
+            
+            // Keep only last 100 errors
+            if (errors.length > 100) errors.pop();
+            localStorage.setItem('systemErrors', JSON.stringify(errors));
+            
+            // Update error count
+            const errorCount = JSON.parse(localStorage.getItem('errorCount') || '0');
+            localStorage.setItem('errorCount', errorCount + 1);
+        };
+        
+        // Export analytics reports
+        window.exportAnalyticsReport = function() {
+            try {
+                const report = {
+                    generatedAt: new Date().toISOString(),
+                    workplace: selectedWorkplace ? getWorkplaceName(selectedWorkplace) : 'Global',
+                    metrics: {
+                        totalLogins: JSON.parse(localStorage.getItem('successfulLogins') || '[]').length,
+                        totalUsers: JSON.parse(localStorage.getItem('successfulLogins') || '[]').map(l => l.email).filter((v, i, a) => a.indexOf(v) === i).length,
+                        peakUsageTime: getPeakUsageTime(JSON.parse(localStorage.getItem('successfulLogins') || '[]')),
+                        busyPeriods: getBusyPeriods(JSON.parse(localStorage.getItem('successfulLogins') || '[]')),
+                        errorRate: getErrorFrequency(),
+                        systemPerformance: getSystemPerformance()
+                    },
+                    rawData: {
+                        loginAttempts: JSON.parse(localStorage.getItem('loginAttempts') || '[]'),
+                        successfulLogins: JSON.parse(localStorage.getItem('successfulLogins') || '[]'),
+                        failedLogins: JSON.parse(localStorage.getItem('failedLogins') || '[]'),
+                        systemErrors: JSON.parse(localStorage.getItem('systemErrors') || '[]'),
+                        dbResponses: JSON.parse(localStorage.getItem('dbResponses') || '[]')
+                    }
+                };
+                
+                const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `analytics-report-${selectedWorkplace || 'global'}-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showNotification('📊 Analytics report exported successfully!', 'success');
+            } catch (error) {
+                console.error('Error exporting analytics report:', error);
+                showNotification('❌ Failed to export analytics report', 'error');
+            }
+        };
+        
+        // Initialize error tracking
+        window.addEventListener('error', function(e) {
+            trackError('JavaScript', e.error);
+        });
+
+        // Track requests
+        window.trackRequest = function() {
+            const totalRequests = JSON.parse(localStorage.getItem('totalRequests') || '0');
+            localStorage.setItem('totalRequests', totalRequests + 1);
+        };
+
+        // Override fetch to track requests and responses
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            trackRequest();
+            const startTime = performance.now();
+            
+            return originalFetch.apply(this, args)
+                .then(response => {
+                    trackDatabaseResponse('fetch', startTime);
+                    return response;
+                })
+                .catch(error => {
+                    trackError('Network', error);
+                    throw error;
+                });
+        };
+
         async function getMostActiveWorkplace() {
             try {
                 const workplaces = [
