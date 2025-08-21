@@ -9412,7 +9412,28 @@ Management Team`);
                 // Log the suspension action
                 const suspendAction = userData.suspended ? 'unsuspend' : 'suspend';
                 await logActivity('suspend', `Successfully ${suspendAction}ed user ${email}`, user.email);
-                await logSecurityEvent(`user_${suspendAction}ed`, `Admin ${suspendAction}ed user ${email}`, 'warning');
+                
+                // Enhanced security logging with IP address
+                const clientIP = await getClientIP();
+                await logSecurityEvent(`user_${suspendAction}ed`, `Admin ${suspendAction}ed user ${email}`, 'warning', clientIP);
+                
+                // Add to security logs with full context
+                const securityLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]');
+                securityLogs.unshift({
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    event: `user_${suspendAction}ed`,
+                    details: `Admin action: User ${email} was ${suspendAction}ed`,
+                    severity: 'warning',
+                    userId: user.email,
+                    email: user.email,
+                    userRole: 'ADMIN',
+                    ipAddress: clientIP,
+                    userAgent: navigator.userAgent,
+                    targetUser: email,
+                    actionType: 'admin_action'
+                });
+                localStorage.setItem('securityLogs', JSON.stringify(securityLogs));
                 
                 const successMessage = userData.suspended ? 
                     `✅ ${userData.firstName} ${userData.lastName} has been unsuspended` :
@@ -9956,10 +9977,28 @@ Management Team`);
             const colors = {
                 'info': '#17a2b8',
                 'warning': '#ffc107',
+                'high': '#fd7e14',
                 'error': '#dc3545',
                 'critical': '#dc3545'
             };
             return colors[severity] || '#17a2b8';
+        }
+        
+        // Get security event icons
+        function getSecurityEventIcon(eventType) {
+            const icons = {
+                'login_failed': '⚠️',
+                'suspicious_activity': '🔍',
+                'admin_login': '👤',
+                'session_start': '🔓',
+                'session_end': '🔒',
+                'system_error': '❌',
+                'privilege_escalation': '🚨',
+                'unauthorized_access': '🚫',
+                'data_breach': '💥',
+                'security_scan': '🔍'
+            };
+            return icons[eventType] || '🔒';
         }
         
         // Export functions
@@ -10345,16 +10384,53 @@ Management Team`);
             
             const failedLogins = JSON.parse(localStorage.getItem('failedLogins') || '[]');
             const securityLogs = JSON.parse(localStorage.getItem('securityLogs') || '[]');
+            const successfulLogins = JSON.parse(localStorage.getItem('successfulLogins') || '[]');
             
+            // Enhanced security event detection with comprehensive categorization
             const allSecurityLogs = [
                 ...securityLogs,
                 ...failedLogins.map(log => ({
                     ...log,
-                    event: 'failed_login',
+                    event: 'login_failed',
                     severity: 'warning',
-                    details: `Failed login attempt: ${log.error}`
+                    details: `Failed login attempt: ${log.error || 'Invalid credentials'}`,
+                    icon: '⚠️'
+                })),
+                // Add successful admin logins as security events
+                ...successfulLogins.filter(log => log.isAdmin).map(log => ({
+                    ...log,
+                    event: 'admin_login',
+                    severity: 'info',
+                    details: 'Administrator login successful',
+                    icon: '👤'
                 }))
             ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            // Detect suspicious activity (3+ failed logins from same IP)
+            const failedLoginsByIP = {};
+            failedLogins.forEach(log => {
+                const ip = log.ipAddress || 'Unknown';
+                if (!failedLoginsByIP[ip]) failedLoginsByIP[ip] = [];
+                failedLoginsByIP[ip].push(log);
+            });
+            
+            Object.entries(failedLoginsByIP).forEach(([ip, logs]) => {
+                if (logs.length >= 3) {
+                    allSecurityLogs.push({
+                        timestamp: logs[0].timestamp,
+                        event: 'suspicious_activity',
+                        severity: 'high',
+                        details: `Suspicious activity: ${logs.length} failed login attempts from IP ${ip}`,
+                        ipAddress: ip,
+                        userId: 'system',
+                        email: 'system',
+                        icon: '🔍'
+                    });
+                }
+            });
+            
+            // Re-sort after adding suspicious activity
+            allSecurityLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
             if (allSecurityLogs.length === 0) {
                 container.innerHTML = `
@@ -10372,13 +10448,27 @@ Management Team`);
             recentLogs.forEach(log => {
                 const time = new Date(log.timestamp).toLocaleString();
                 const severityColor = getSeverityColor(log.severity || 'info');
+                const userEmail = log.email || log.userId || 'Unknown';
+                const ipAddress = log.ipAddress || 'Unknown IP';
+                const eventIcon = log.icon || getSecurityEventIcon(log.event);
                 
+                // Enhanced display with all requested information
                 logsHTML += `
-                    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
-                        <span style="color: ${severityColor}; font-size: 1.2rem;">🔒</span>
+                    <div style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid #eee;">
+                        <span style="color: ${severityColor}; font-size: 1.2rem;">${eventIcon}</span>
                         <div style="flex: 1; min-width: 0;">
-                            <div style="font-weight: 500; font-size: 0.9rem; color: #333;">${log.details || log.event}</div>
-                            <div style="font-size: 0.75rem; color: #666;">${log.email || log.userId || 'Unknown'} • ${time}</div>
+                            <div style="font-weight: 500; font-size: 0.9rem; color: #333; margin-bottom: 0.25rem;">
+                                ${log.details || log.event}
+                            </div>
+                            <div style="font-size: 0.75rem; color: #666; margin-bottom: 0.25rem;">
+                                <strong>User:</strong> ${userEmail} • <strong>Time:</strong> ${time}
+                            </div>
+                            <div style="font-size: 0.75rem; color: #666;">
+                                <strong>IP:</strong> ${ipAddress} • 
+                                <span style="color: ${severityColor}; font-weight: 600; text-transform: uppercase;">
+                                    ${log.severity || 'info'}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -10386,9 +10476,11 @@ Management Team`);
             
             container.innerHTML = `
                 <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #333;">Security Events (${allSecurityLogs.length} total)</div>
+                    <div style="font-weight: 600; margin-bottom: 0.75rem; color: #333; display: flex; align-items: center; gap: 0.5rem;">
+                        🛡️ Security Events (${allSecurityLogs.length} total)
+                    </div>
                     ${logsHTML}
-                    ${allSecurityLogs.length > 8 ? `<div style="text-align: center; margin-top: 0.5rem; color: #666; font-size: 0.8rem;">Showing 8 of ${allSecurityLogs.length} events</div>` : ''}
+                    ${allSecurityLogs.length > 8 ? `<div style="text-align: center; margin-top: 0.75rem; color: #666; font-size: 0.8rem;">Showing 8 of ${allSecurityLogs.length} events</div>` : ''}
                 </div>
             `;
         }
@@ -10818,14 +10910,104 @@ Management Team`);
                     details: 'User session initiated',
                     severity: 'info',
                     userId: currentUser.email || 'admin@test.com',
+                    email: currentUser.email || 'admin@test.com',
                     userRole: 'ADMIN',
                     ipAddress: '192.168.1.100',
                     userAgent: navigator.userAgent,
                     sessionId: sessionStorage.getItem('sessionId') || 'Unknown'
+                },
+                {
+                    id: Date.now() + 4,
+                    timestamp: new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString(), // 2.5 hours ago
+                    event: 'admin_login',
+                    details: 'Administrator login successful',
+                    severity: 'info',
+                    userId: currentUser.email || 'admin@test.com',
+                    email: currentUser.email || 'admin@test.com',
+                    userRole: 'ADMIN',
+                    ipAddress: '192.168.1.50',
+                    userAgent: navigator.userAgent,
+                    sessionId: 'admin-' + Math.random().toString(36).substr(2, 9)
+                },
+                {
+                    id: Date.now() + 5,
+                    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+                    event: 'system_error',
+                    details: 'Database connection timeout detected',
+                    severity: 'error',
+                    userId: 'system',
+                    email: 'system',
+                    userRole: 'SYSTEM',
+                    ipAddress: '127.0.0.1',
+                    userAgent: 'System Process',
+                    sessionId: 'system-error-' + Math.random().toString(36).substr(2, 9)
+                },
+                {
+                    id: Date.now() + 6,
+                    timestamp: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(), // 1.5 hours ago
+                    event: 'privilege_escalation',
+                    details: 'User role changed to ADMIN',
+                    severity: 'critical',
+                    userId: 'user@test.com',
+                    email: 'user@test.com',
+                    userRole: 'USER',
+                    ipAddress: '192.168.1.75',
+                    userAgent: navigator.userAgent,
+                    sessionId: 'escalation-' + Math.random().toString(36).substr(2, 9)
+                },
+                {
+                    id: Date.now() + 7,
+                    timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), // 1 hour ago
+                    event: 'security_scan',
+                    details: 'Automated security scan completed',
+                    severity: 'info',
+                    userId: 'security-scanner',
+                    email: 'security@system.com',
+                    userRole: 'SYSTEM',
+                    ipAddress: '10.0.0.1',
+                    userAgent: 'Security Scanner v2.1',
+                    sessionId: 'scan-' + Math.random().toString(36).substr(2, 9)
+                }
+            ];
+            
+            // Generate sample failed login attempts for suspicious activity detection
+            const sampleFailedLogins = [
+                {
+                    timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+                    email: 'hacker@suspicious.com',
+                    error: 'Invalid credentials',
+                    ipAddress: '198.51.100.42',
+                    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                    action: 'login_failed'
+                },
+                {
+                    timestamp: new Date(Date.now() - 3.8 * 60 * 60 * 1000).toISOString(),
+                    email: 'admin@guess.com',
+                    error: 'User not found',
+                    ipAddress: '198.51.100.42',
+                    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                    action: 'login_failed'
+                },
+                {
+                    timestamp: new Date(Date.now() - 3.5 * 60 * 60 * 1000).toISOString(),
+                    email: 'root@test.com',
+                    error: 'Invalid password',
+                    ipAddress: '198.51.100.42',
+                    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                    action: 'login_failed'
+                },
+                {
+                    timestamp: new Date(Date.now() - 1.2 * 60 * 60 * 1000).toISOString(),
+                    email: 'test@example.com',
+                    error: 'Account locked',
+                    ipAddress: '203.0.113.15',
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    action: 'login_failed'
                 }
             ];
             
             localStorage.setItem('securityLogs', JSON.stringify(sampleSecurityLogs));
+            localStorage.setItem('failedLogins', JSON.stringify(sampleFailedLogins));
             
             console.log('📊 Sample data generated for testing');
         }
