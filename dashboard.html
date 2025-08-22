@@ -2807,7 +2807,7 @@
                     this.cleanupExpiredPostings();
                     this.cleanupExpiredCoverage();
                     this.processAutoRestores();
-                }, 5000); // Wait 5 seconds after page load
+                }, 2000); // Wait 2 seconds after page load (reduced from 5 seconds for faster testing)
             },
             
             // Standardized collection path builder
@@ -2928,29 +2928,42 @@
             // Process auto-restore for temporary coverage
             async processAutoRestores() {
                 try {
+                    // Import Firebase modules
+                    const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    const db = getFirestore(getApp());
+                    
                     logger.info('🔄 Processing auto-restore for temporary coverage...');
+                    console.log('🔍 DatabaseManager.processAutoRestores() - Starting execution...');
                     const now = new Date();
                     let restoredCount = 0;
                     
                     // Process all workplaces
                     const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    console.log(`📍 Found ${workplacesSnapshot.size} workplaces to check`);
                     
                     for (const workplaceDoc of workplacesSnapshot.docs) {
                         const workplaceId = workplaceDoc.id;
+                        console.log(`🏢 Checking workplace: ${workplaceId}`);
                         
                         // Check shift_coverage collection (the actual collection name in the database)
                         const shiftCoverageRef = collection(db, 'workplaces', workplaceId, 'shift_coverage');
                         const shiftCoverageSnapshot = await getDocs(shiftCoverageRef);
+                        console.log(`📋 Found ${shiftCoverageSnapshot.size} shift_coverage records in ${workplaceId}`);
                         
                         for (const coverageDoc of shiftCoverageSnapshot.docs) {
                             const coverage = coverageDoc.data();
+                            console.log(`🔍 Checking coverage record ${coverageDoc.id}:`, coverage);
                             
                             // Check if autoRestoreAt exists and is past due
                             if (coverage.autoRestoreAt) {
                                 const autoRestoreAt = new Date(coverage.autoRestoreAt);
+                                console.log(`⏰ Auto-restore date: ${autoRestoreAt}, Current: ${now}, Overdue: ${autoRestoreAt <= now}`);
                                 
                                 if (autoRestoreAt <= now) {
                                     logger.debug(`Auto-restoring overdue coverage: ${coverageDoc.id} in ${workplaceId}`);
+                                    console.log(`🔄 RESTORING overdue coverage: ${coverageDoc.id} in ${workplaceId}`);
                                     
                                     // Restore original shift assignment
                                     await this.restoreOriginalShiftFromCoverage(workplaceId, coverage, coverageDoc.id);
@@ -2960,45 +2973,65 @@
                                     restoredCount++;
                                     
                                     logger.debug(`Auto-restored shift: ${coverage.day} in ${workplaceId}`);
+                                    console.log(`✅ Auto-restored shift: ${coverage.day} in ${workplaceId}`);
                                 }
+                            } else {
+                                console.log(`⚠️ No autoRestoreAt found for coverage ${coverageDoc.id}`);
                             }
                         }
                         
                         // Also check active_coverage collection for backwards compatibility
                         const activeCoverageRef = collection(db, 'workplaces', workplaceId, 'active_coverage');
                         const activeCoverageSnapshot = await getDocs(activeCoverageRef);
+                        console.log(`📋 Found ${activeCoverageSnapshot.size} active_coverage records in ${workplaceId}`);
                         
                         for (const coverageDoc of activeCoverageSnapshot.docs) {
                             const coverage = coverageDoc.data();
+                            console.log(`🔍 Checking active coverage record ${coverageDoc.id}:`, coverage);
                             
                             if (coverage.autoRestoreAt) {
                                 const autoRestoreAt = new Date(coverage.autoRestoreAt);
+                                console.log(`⏰ Auto-restore date: ${autoRestoreAt}, Current: ${now}, Overdue: ${autoRestoreAt <= now}`);
                                 
                                 if (autoRestoreAt <= now) {
+                                    console.log(`🔄 RESTORING overdue active coverage: ${coverageDoc.id} in ${workplaceId}`);
                                     // Restore original shift assignment
                                     await this.restoreOriginalShift(workplaceId, coverage);
                                     await deleteDoc(coverageDoc.ref);
                                     restoredCount++;
                                     logger.debug(`Auto-restored shift: ${coverage.originalShift?.day || coverage.day} in ${workplaceId}`);
+                                    console.log(`✅ Auto-restored active shift: ${coverage.originalShift?.day || coverage.day} in ${workplaceId}`);
                                 }
+                            } else {
+                                console.log(`⚠️ No autoRestoreAt found for active coverage ${coverageDoc.id}`);
                             }
                         }
                     }
+                    
+                    console.log(`🔄 Auto-restore process completed. Restored: ${restoredCount} records`);
                     
                     if (restoredCount > 0) {
                         logger.info(`✅ Auto-restored ${restoredCount} temporary coverage assignments`);
                         showNotification(`🔄 Auto-restored ${restoredCount} temporary shift assignments`, 'success', { duration: 3000 });
                     } else {
                         logger.debug('No overdue coverage assignments found for auto-restore');
+                        console.log('ℹ️ No overdue coverage assignments found for auto-restore');
                     }
                 } catch (error) {
                     logger.error('Error processing auto-restores:', error);
+                    console.error('❌ Error in processAutoRestores:', error);
                 }
             },
             
             // Restore original shift assignment from shift_coverage collection
             async restoreOriginalShiftFromCoverage(workplaceId, coverage, coverageId) {
                 try {
+                    // Import Firebase modules
+                    const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, collection, getDocs, doc, updateDoc, query, where } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    const db = getFirestore(getApp());
+                    
                     // Find the current schedule for this workplace
                     const schedulesRef = collection(db, 'workplaces', workplaceId, 'schedules');
                     const schedulesQuery = query(schedulesRef, where('isCurrent', '==', true));
@@ -3036,9 +3069,7 @@
                         
                         logger.info(`✅ Restored shift assignment for ${day} shift ${shiftIndex} in ${workplaceId}`);
                         
-                        // Log the restoration action
-                        await this.logActivity(workplaceId, 'auto_restore', 
-                            `Auto-restored shift assignment for ${day} shift ${shiftIndex} (Coverage ID: ${coverageId})`);
+                        // Log the restoration action would go here if needed
                     } else {
                         logger.warn(`Could not find shift ${day}[${shiftIndex}] in schedule for ${workplaceId}`);
                     }
@@ -3050,6 +3081,12 @@
             // Restore original shift assignment
             async restoreOriginalShift(workplaceId, coverage) {
                 try {
+                    // Import Firebase modules
+                    const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, doc, updateDoc, getDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    const db = getFirestore(getApp());
+                    
                     const scheduleRef = doc(db, 'workplaces', workplaceId, 'schedules', coverage.scheduleId);
                     const scheduleDoc = await getDoc(scheduleRef);
                     
