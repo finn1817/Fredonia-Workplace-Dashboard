@@ -5803,7 +5803,8 @@
    forceProcessAutoRestores()      - Manually trigger auto-restore
    quickCoverageCheck()            - QUICK CHECK for overdue coverage
 
-🎯 TARGETED DEBUG FUNCTIONS:
+🚨 EMERGENCY FUNCTIONS:
+   emergencyScheduleFix()          - DIRECTLY REMOVE "Test Cover" from schedule data
    debugSpecificRecord()           - Target the exact "Test Cover" record we see in Firebase
    diagnosticUIvsDatabase()        - Compare UI display vs database state
    forceRefreshScheduleDisplay()   - Force refresh the schedule display
@@ -5814,11 +5815,13 @@
    quickCoverageCheck()            - INSTANT overdue check
 
 🚨 Problem Solving:
+   emergencyScheduleFix()          - EMERGENCY - Remove Test Cover from actual schedule
    debugAndRestoreOverdueShifts()  - MAIN FUNCTION to find and fix overdue shifts
    debugSpecificRecord()           - TARGET the exact record from Firebase console
    diagnosticUIvsDatabase()        - DIAGNOSTIC to compare UI vs database
 
 Examples:
+   emergencyScheduleFix()          // EMERGENCY - Directly fix the schedule NOW
    debugSpecificRecord()           // TARGET the exact "Test Cover" record
    quickCoverageCheck()            // QUICK CHECK - see overdue coverage now
    debugAndRestoreOverdueShifts()  // This is the BIG ONE - finds and restores overdue shifts
@@ -5829,7 +5832,144 @@ Examples:
                 `);
             };
             
-            // 🔍 SUPER TARGETED DEBUG - Query the exact record we see in Firebase console
+            // � EMERGENCY SCHEDULE FIX - Direct schedule restoration
+            window.emergencyScheduleFix = async function() {
+                try {
+                    console.log('🚨 EMERGENCY FIX - Examining and fixing current schedule data...');
+                    
+                    // Import Firebase modules
+                    const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, collection, getDocs, doc, getDoc, updateDoc, query, where } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    // Get Firebase instance
+                    let db;
+                    try {
+                        db = getFirestore(getApp());
+                    } catch (e) {
+                        const workspaceConfig = {
+                            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                            projectId: "my-admin-dashboard-b9c89",
+                            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                            messagingSenderId: "1001105953619",
+                            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                        };
+                        const app = initializeApp(workspaceConfig, 'emergency-fix-' + Date.now());
+                        db = getFirestore(app);
+                    }
+                    
+                    const workplaceId = selectedWorkplace || 'eSports Lounge';
+                    console.log(`🚨 EMERGENCY FIX - Checking ${workplaceId} schedules...`);
+                    
+                    // Get current schedule
+                    const schedulesRef = collection(db, 'workplaces', workplaceId, 'schedules');
+                    const currentScheduleQuery = query(schedulesRef, where('isCurrent', '==', true));
+                    const currentScheduleSnapshot = await getDocs(currentScheduleQuery);
+                    
+                    if (currentScheduleSnapshot.empty) {
+                        console.log('❌ No current schedule found');
+                        return;
+                    }
+                    
+                    const scheduleDoc = currentScheduleSnapshot.docs[0];
+                    const scheduleData = scheduleDoc.data();
+                    const schedule = scheduleData.schedule;
+                    
+                    console.log('🚨 EMERGENCY FIX - Current schedule ID:', scheduleDoc.id);
+                    console.log('🚨 EMERGENCY FIX - Schedule data structure:', Object.keys(schedule || {}));
+                    
+                    let fixesApplied = 0;
+                    
+                    // Check all days for "Test Cover" assignments
+                    Object.keys(schedule || {}).forEach(day => {
+                        if (schedule[day] && Array.isArray(schedule[day])) {
+                            console.log(`🚨 EMERGENCY FIX - Checking ${day} (${schedule[day].length} shifts)`);
+                            
+                            schedule[day].forEach((shift, index) => {
+                                if (shift.assigned && Array.isArray(shift.assigned)) {
+                                    // Check if Test Cover is assigned
+                                    if (shift.assigned.includes('Test Cover')) {
+                                        console.log(`🎯 FOUND TEST COVER in ${day} shift ${index}:`, shift);
+                                        
+                                        // Remove Test Cover
+                                        const originalAssigned = [...shift.assigned];
+                                        shift.assigned = shift.assigned.filter(worker => worker !== 'Test Cover');
+                                        
+                                        console.log(`🔄 FIXED: ${day}[${index}] assigned from:`, originalAssigned);
+                                        console.log(`🔄 FIXED: ${day}[${index}] assigned to:`, shift.assigned);
+                                        
+                                        fixesApplied++;
+                                    }
+                                    
+                                    // Also check raw_assigned
+                                    if (shift.raw_assigned && Array.isArray(shift.raw_assigned) && shift.raw_assigned.includes('Test Cover')) {
+                                        const originalRawAssigned = [...shift.raw_assigned];
+                                        shift.raw_assigned = shift.raw_assigned.filter(worker => worker !== 'Test Cover');
+                                        
+                                        console.log(`🔄 FIXED: ${day}[${index}] raw_assigned from:`, originalRawAssigned);
+                                        console.log(`🔄 FIXED: ${day}[${index}] raw_assigned to:`, shift.raw_assigned);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    
+                    if (fixesApplied > 0) {
+                        // Update the schedule in the database
+                        console.log(`💾 EMERGENCY FIX - Applying ${fixesApplied} fixes to database...`);
+                        await updateDoc(scheduleDoc.ref, {
+                            schedule: schedule,
+                            lastModified: new Date().toISOString(),
+                            emergencyFixApplied: new Date().toISOString(),
+                            fixesApplied: fixesApplied
+                        });
+                        
+                        console.log('✅ EMERGENCY FIX - Schedule updated successfully!');
+                        showNotification(`✅ Emergency fix applied! Removed Test Cover from ${fixesApplied} shifts.`, 'success', { duration: 5000 });
+                    } else {
+                        console.log('ℹ️ EMERGENCY FIX - No Test Cover assignments found in schedule');
+                        showNotification('ℹ️ No Test Cover assignments found in current schedule', 'info', { duration: 3000 });
+                    }
+                    
+                    // Now flag all coverage records
+                    console.log('🚨 EMERGENCY FIX - Checking and flagging all coverage records...');
+                    const coverageRef = collection(db, 'workplaces', workplaceId, 'shift_coverage');
+                    const coverageSnapshot = await getDocs(coverageRef);
+                    
+                    console.log(`🚨 EMERGENCY FIX - Found ${coverageSnapshot.size} coverage records`);
+                    
+                    let coverageFlagged = 0;
+                    for (const coverageDoc of coverageSnapshot.docs) {
+                        const coverage = coverageDoc.data();
+                        
+                        if (!coverage.datePassed) {
+                            console.log(`🔄 EMERGENCY FIX - Flagging coverage record ${coverageDoc.id} as datePassed=true`);
+                            
+                            await updateDoc(coverageDoc.ref, {
+                                datePassed: true,
+                                processedAt: new Date().toISOString(),
+                                status: 'emergency_fix_applied',
+                                fixedBy: 'emergencyScheduleFix'
+                            });
+                            
+                            coverageFlagged++;
+                        }
+                    }
+                    
+                    console.log(`🎉 EMERGENCY FIX COMPLETE! Applied ${fixesApplied} schedule fixes and flagged ${coverageFlagged} coverage records.`);
+                    
+                    // Force refresh the schedule display
+                    if (typeof forceRefreshScheduleDisplay === 'function') {
+                        await forceRefreshScheduleDisplay();
+                    }
+                    
+                } catch (error) {
+                    console.error('🚨 EMERGENCY FIX - Error:', error);
+                    showNotification('❌ Emergency fix failed: ' + error.message, 'error', { duration: 5000 });
+                }
+            };
+
+            // �🔍 SUPER TARGETED DEBUG - Query the exact record we see in Firebase console
             window.debugSpecificRecord = async function() {
                 try {
                     console.log('🎯 TARGETED DEBUG - Looking for the specific "Test Cover" record...');
