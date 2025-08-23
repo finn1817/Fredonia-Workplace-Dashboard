@@ -5803,7 +5803,8 @@
    forceProcessAutoRestores()      - Manually trigger auto-restore
    quickCoverageCheck()            - QUICK CHECK for overdue coverage
 
-🔍 NEW DIAGNOSTIC FUNCTIONS:
+🎯 TARGETED DEBUG FUNCTIONS:
+   debugSpecificRecord()           - Target the exact "Test Cover" record we see in Firebase
    diagnosticUIvsDatabase()        - Compare UI display vs database state
    forceRefreshScheduleDisplay()   - Force refresh the schedule display
 
@@ -5814,9 +5815,11 @@
 
 🚨 Problem Solving:
    debugAndRestoreOverdueShifts()  - MAIN FUNCTION to find and fix overdue shifts
+   debugSpecificRecord()           - TARGET the exact record from Firebase console
    diagnosticUIvsDatabase()        - DIAGNOSTIC to compare UI vs database
 
 Examples:
+   debugSpecificRecord()           // TARGET the exact "Test Cover" record
    quickCoverageCheck()            // QUICK CHECK - see overdue coverage now
    debugAndRestoreOverdueShifts()  // This is the BIG ONE - finds and restores overdue shifts
    diagnosticUIvsDatabase()        // NEW - compare what UI shows vs what's in database
@@ -5826,6 +5829,130 @@ Examples:
                 `);
             };
             
+            // 🔍 SUPER TARGETED DEBUG - Query the exact record we see in Firebase console
+            window.debugSpecificRecord = async function() {
+                try {
+                    console.log('🎯 TARGETED DEBUG - Looking for the specific "Test Cover" record...');
+                    
+                    // Import Firebase modules
+                    const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, collection, getDocs, doc, getDoc, updateDoc, deleteDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    // Get the correct database instance
+                    let db;
+                    try {
+                        db = getFirestore(getApp());
+                        console.log('🎯 Using existing Firebase app');
+                    } catch (e) {
+                        console.log('🎯 Initializing new Firebase app');
+                        const workspaceConfig = {
+                            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                            projectId: "my-admin-dashboard-b9c89",
+                            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                            messagingSenderId: "1001105953619",
+                            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                        };
+                        const app = initializeApp(workspaceConfig, 'debug-specific-' + Date.now());
+                        db = getFirestore(app);
+                    }
+                    
+                    // Look specifically for the record we saw in Firebase console
+                    const recordId = 'zLylGCVVYnLnEKputcI'; // The ID from the Firebase screenshot
+                    const workplaceId = 'eSports Lounge'; // The workplace from the record
+                    
+                    console.log(`🎯 Looking for record: ${recordId} in workplace: ${workplaceId}`);
+                    
+                    // Try to get the specific document
+                    const docRef = doc(db, 'workplaces', workplaceId, 'shift_coverage', recordId);
+                    const docSnap = await getDoc(docRef);
+                    
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        console.log('🎯 FOUND THE RECORD!', data);
+                        
+                        // Check the exact fields
+                        console.log(`🎯 autoRestoreAt: ${data.autoRestoreAt}`);
+                        console.log(`🎯 coverWorkerName: ${data.coverWorkerName}`);
+                        console.log(`🎯 datePassed: ${data.datePassed}`);
+                        console.log(`🎯 day: ${data.day}`);
+                        console.log(`🎯 shiftIndex: ${data.shiftIndex}`);
+                        
+                        // Check if it's overdue
+                        const autoRestoreAt = new Date(data.autoRestoreAt);
+                        const now = new Date();
+                        const isOverdue = autoRestoreAt <= now;
+                        const daysPastDue = Math.floor((now - autoRestoreAt) / (1000 * 60 * 60 * 24));
+                        
+                        console.log(`🎯 AutoRestore date: ${autoRestoreAt.toISOString()}`);
+                        console.log(`🎯 Current date: ${now.toISOString()}`);
+                        console.log(`🎯 Is overdue: ${isOverdue}`);
+                        console.log(`🎯 Days past due: ${daysPastDue}`);
+                        
+                        if (isOverdue && !data.datePassed) {
+                            console.log('🔄 PROCESSING THIS SPECIFIC RECORD NOW...');
+                            
+                            // Add datePassed flag
+                            await updateDoc(docRef, {
+                                datePassed: true,
+                                processedAt: new Date().toISOString(),
+                                status: 'manually_processed_debug',
+                                debuggedBy: 'debugSpecificRecord',
+                                daysPastDue: daysPastDue
+                            });
+                            
+                            console.log('✅ Successfully added datePassed=true to the record!');
+                            
+                            // Verify the update
+                            const updatedSnap = await getDoc(docRef);
+                            if (updatedSnap.exists()) {
+                                console.log('🔍 VERIFICATION - Updated record:', updatedSnap.data());
+                            }
+                            
+                            showNotification('✅ Successfully processed the Test Cover record!', 'success');
+                            
+                        } else if (data.datePassed) {
+                            console.log('ℹ️ Record already has datePassed=true');
+                        } else {
+                            console.log('ℹ️ Record not yet due for processing');
+                        }
+                        
+                    } else {
+                        console.log('❌ Record not found at expected location');
+                        
+                        // Search all workplaces for this record ID
+                        console.log('🔍 Searching all workplaces for this record...');
+                        const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                        
+                        for (const workplaceDoc of workplacesSnapshot.docs) {
+                            const workplace = workplaceDoc.id;
+                            console.log(`🔍 Checking ${workplace}...`);
+                            
+                            const coverageRef = collection(db, 'workplaces', workplace, 'shift_coverage');
+                            const coverageSnapshot = await getDocs(coverageRef);
+                            
+                            for (const coverageDoc of coverageSnapshot.docs) {
+                                if (coverageDoc.id === recordId) {
+                                    console.log(`🎯 FOUND RECORD in workplace: ${workplace}`);
+                                    console.log('🎯 Record data:', coverageDoc.data());
+                                    return;
+                                }
+                                
+                                // Also check for Test Cover by name
+                                const data = coverageDoc.data();
+                                if (data.coverWorkerName === 'Test Cover') {
+                                    console.log(`🎯 FOUND "Test Cover" record: ${coverageDoc.id} in ${workplace}`);
+                                    console.log('🎯 Record data:', data);
+                                }
+                            }
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('🎯 Error in debugSpecificRecord:', error);
+                }
+            };
+
             // 🔍 DIAGNOSTIC FUNCTION - Check UI vs Database state
             window.diagnosticUIvsDatabase = async function() {
                 try {
@@ -13778,6 +13905,17 @@ Management Team`);
                 hideAllForms();
                 currentActiveTab = 'current';
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading current schedule...</div>';
+                
+                // 🔄 AUTOMATIC COVERAGE PROCESSING - Process overdue coverage FIRST
+                console.log('🔄 AUTO-PROCESS - Starting automatic coverage processing...');
+                if (user.isAdmin) {
+                    try {
+                        await DatabaseManager.processAutoRestores();
+                        console.log('🔄 AUTO-PROCESS - Automatic coverage processing completed');
+                    } catch (error) {
+                        console.error('🔄 AUTO-PROCESS - Error in automatic coverage processing:', error);
+                    }
+                }
                 
                 // First try to find a schedule marked as current
                 const currentSnapshot = await getDocs(query(
