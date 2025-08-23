@@ -2930,9 +2930,25 @@
                 try {
                     // Import Firebase modules
                     const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                    const { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    const { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, query, where } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
                     
-                    const db = getFirestore(getApp());
+                    // Get the correct database instance
+                    let db;
+                    try {
+                        db = getFirestore(getApp());
+                    } catch (e) {
+                        // If getApp fails, initialize with workspace config
+                        const workspaceConfig = {
+                            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                            projectId: "my-admin-dashboard-b9c89",
+                            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                            messagingSenderId: "1001105953619",
+                            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                        };
+                        const app = initializeApp(workspaceConfig, 'workspace-app-' + Date.now());
+                        db = getFirestore(app);
+                    }
                     
                     logger.info('🔄 Processing auto-restore for temporary coverage...');
                     console.log('🔍 DatabaseManager.processAutoRestores() - Starting execution...');
@@ -2947,13 +2963,20 @@
                         const workplaceId = workplaceDoc.id;
                         console.log(`🏢 Checking workplace: ${workplaceId}`);
                         
-                        // Check shift_coverage collection (the actual collection name in the database)
+                        // Check shift_coverage collection - only get records without datePassed flag
                         const shiftCoverageRef = collection(db, 'workplaces', workplaceId, 'shift_coverage');
                         const shiftCoverageSnapshot = await getDocs(shiftCoverageRef);
                         console.log(`📋 Found ${shiftCoverageSnapshot.size} shift_coverage records in ${workplaceId}`);
                         
                         for (const coverageDoc of shiftCoverageSnapshot.docs) {
                             const coverage = coverageDoc.data();
+                            
+                            // Skip if already processed (datePassed is true)
+                            if (coverage.datePassed === true) {
+                                console.log(`⚠️ Skipping ${coverageDoc.id} - already processed (datePassed=true)`);
+                                continue;
+                            }
+                            
                             console.log(`🔍 Checking coverage record ${coverageDoc.id}:`, coverage);
                             
                             // Check if autoRestoreAt exists and is past due
@@ -2965,15 +2988,46 @@
                                     logger.debug(`Auto-restoring overdue coverage: ${coverageDoc.id} in ${workplaceId}`);
                                     console.log(`🔄 RESTORING overdue coverage: ${coverageDoc.id} in ${workplaceId}`);
                                     
-                                    // Restore original shift assignment
-                                    await this.restoreOriginalShiftFromCoverage(workplaceId, coverage, coverageDoc.id);
-                                    
-                                    // Delete the coverage record
-                                    await deleteDoc(coverageDoc.ref);
-                                    restoredCount++;
-                                    
-                                    logger.debug(`Auto-restored shift: ${coverage.day} in ${workplaceId}`);
-                                    console.log(`✅ Auto-restored shift: ${coverage.day} in ${workplaceId}`);
+                                    try {
+                                        // Restore original shift assignment
+                                        await this.restoreOriginalShiftFromCoverage(workplaceId, coverage, coverageDoc.id);
+                                        
+                                        // Flag as processed and delete the coverage record
+                                        await updateDoc(coverageDoc.ref, {
+                                            datePassed: true,
+                                            processedAt: new Date().toISOString(),
+                                            status: 'auto_restored'
+                                        });
+                                        
+                                        // Delete after a short delay
+                                        setTimeout(async () => {
+                                            try {
+                                                await deleteDoc(coverageDoc.ref);
+                                                console.log(`🗑️ Deleted coverage record ${coverageDoc.id}`);
+                                            } catch (delError) {
+                                                console.log(`⚠️ Could not delete ${coverageDoc.id}: ${delError.message}`);
+                                            }
+                                        }, 2000);
+                                        
+                                        restoredCount++;
+                                        
+                                        logger.debug(`Auto-restored shift: ${coverage.day} in ${workplaceId}`);
+                                        console.log(`✅ Auto-restored shift: ${coverage.day} in ${workplaceId}`);
+                                    } catch (restoreError) {
+                                        console.error(`❌ Error restoring ${coverageDoc.id}:`, restoreError);
+                                        
+                                        // Flag as error even if restore fails
+                                        try {
+                                            await updateDoc(coverageDoc.ref, {
+                                                datePassed: true,
+                                                processedAt: new Date().toISOString(),
+                                                status: 'restore_error',
+                                                error: restoreError.message
+                                            });
+                                        } catch (flagError) {
+                                            console.error(`❌ Could not flag error for ${coverageDoc.id}:`, flagError);
+                                        }
+                                    }
                                 }
                             } else {
                                 console.log(`⚠️ No autoRestoreAt found for coverage ${coverageDoc.id}`);
@@ -2987,6 +3041,13 @@
                         
                         for (const coverageDoc of activeCoverageSnapshot.docs) {
                             const coverage = coverageDoc.data();
+                            
+                            // Skip if already processed
+                            if (coverage.datePassed === true) {
+                                console.log(`⚠️ Skipping active ${coverageDoc.id} - already processed`);
+                                continue;
+                            }
+                            
                             console.log(`🔍 Checking active coverage record ${coverageDoc.id}:`, coverage);
                             
                             if (coverage.autoRestoreAt) {
@@ -2995,12 +3056,33 @@
                                 
                                 if (autoRestoreAt <= now) {
                                     console.log(`🔄 RESTORING overdue active coverage: ${coverageDoc.id} in ${workplaceId}`);
-                                    // Restore original shift assignment
-                                    await this.restoreOriginalShift(workplaceId, coverage);
-                                    await deleteDoc(coverageDoc.ref);
-                                    restoredCount++;
-                                    logger.debug(`Auto-restored shift: ${coverage.originalShift?.day || coverage.day} in ${workplaceId}`);
-                                    console.log(`✅ Auto-restored active shift: ${coverage.originalShift?.day || coverage.day} in ${workplaceId}`);
+                                    
+                                    try {
+                                        // Restore original shift assignment
+                                        await this.restoreOriginalShift(workplaceId, coverage);
+                                        
+                                        // Flag and delete
+                                        await updateDoc(coverageDoc.ref, {
+                                            datePassed: true,
+                                            processedAt: new Date().toISOString(),
+                                            status: 'auto_restored'
+                                        });
+                                        
+                                        setTimeout(async () => {
+                                            try {
+                                                await deleteDoc(coverageDoc.ref);
+                                                console.log(`🗑️ Deleted active coverage record ${coverageDoc.id}`);
+                                            } catch (delError) {
+                                                console.log(`⚠️ Could not delete active ${coverageDoc.id}: ${delError.message}`);
+                                            }
+                                        }, 2000);
+                                        
+                                        restoredCount++;
+                                        logger.debug(`Auto-restored active shift: ${coverage.originalShift?.day || coverage.day} in ${workplaceId}`);
+                                        console.log(`✅ Auto-restored active shift: ${coverage.originalShift?.day || coverage.day} in ${workplaceId}`);
+                                    } catch (restoreError) {
+                                        console.error(`❌ Error restoring active ${coverageDoc.id}:`, restoreError);
+                                    }
                                 }
                             } else {
                                 console.log(`⚠️ No autoRestoreAt found for active coverage ${coverageDoc.id}`);
@@ -5690,67 +5772,106 @@ Examples:
                 try {
                     console.log('🔍 QUICK CHECK: Looking for overdue coverage...');
                     
+                    // Import Firebase modules directly
                     const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
                     const { getFirestore, collection, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
                     
-                    const db = getFirestore(getApp());
+                    // Get the correct database instance
+                    let db;
+                    try {
+                        db = getFirestore(getApp());
+                    } catch (e) {
+                        // If getApp fails, initialize with workspace config
+                        const workspaceConfig = {
+                            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                            projectId: "my-admin-dashboard-b9c89",
+                            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                            messagingSenderId: "1001105953619",
+                            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                        };
+                        const app = initializeApp(workspaceConfig, 'workspace-app');
+                        db = getFirestore(app);
+                    }
+                    
                     const now = new Date();
                     
                     console.log(`⏰ Current time: ${now.toISOString()}`);
                     console.log(`📅 Today is: ${now.toDateString()}`);
                     
                     const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    console.log(`📍 Found ${workplacesSnapshot.size} workplaces`);
+                    
+                    let totalOverdue = 0;
                     
                     for (const workplaceDoc of workplacesSnapshot.docs) {
                         const workplaceId = workplaceDoc.id;
+                        console.log(`\n🏢 Checking workplace: ${workplaceId}`);
                         
-                        // Check shift_coverage
+                        // Check shift_coverage collection
                         const shiftCoverageRef = collection(db, 'workplaces', workplaceId, 'shift_coverage');
                         const shiftCoverageSnapshot = await getDocs(shiftCoverageRef);
                         
+                        console.log(`  📋 Found ${shiftCoverageSnapshot.size} shift_coverage records`);
+                        
                         shiftCoverageSnapshot.docs.forEach(doc => {
                             const coverage = doc.data();
+                            console.log(`    🔍 Record ${doc.id}:`, coverage);
+                            
                             if (coverage.autoRestoreAt) {
                                 const autoRestoreAt = new Date(coverage.autoRestoreAt);
                                 const daysDiff = (now - autoRestoreAt) / (1000 * 60 * 60 * 24);
                                 
-                                console.log(`🔍 ${workplaceId}/${doc.id}:`);
-                                console.log(`   Auto-restore: ${autoRestoreAt.toDateString()}`);
-                                console.log(`   Status: ${daysDiff > 0 ? '🚨 OVERDUE' : '✅ Pending'} (${daysDiff.toFixed(1)} days)`);
-                                console.log(`   Data:`, coverage);
+                                console.log(`      📅 Auto-restore date: ${autoRestoreAt.toDateString()}`);
+                                console.log(`      ⏰ Status: ${daysDiff > 0 ? '🚨 OVERDUE' : '✅ Pending'} (${daysDiff.toFixed(1)} days)`);
+                                console.log(`      👤 Cover worker: ${coverage.coverWorkerName || 'Unknown'}`);
+                                console.log(`      📆 Day: ${coverage.day || 'Unknown'}`);
                                 
                                 if (daysDiff > 0) {
-                                    console.log(`   🚨 This coverage is ${daysDiff.toFixed(1)} days overdue!`);
+                                    totalOverdue++;
+                                    console.log(`      🚨 THIS IS ${daysDiff.toFixed(1)} DAYS OVERDUE!`);
                                 }
+                            } else {
+                                console.log(`      ⚠️ No autoRestoreAt field found`);
                             }
                         });
                         
-                        // Check active_coverage
+                        // Check active_coverage collection
                         const activeCoverageRef = collection(db, 'workplaces', workplaceId, 'active_coverage');
                         const activeCoverageSnapshot = await getDocs(activeCoverageRef);
                         
+                        console.log(`  📋 Found ${activeCoverageSnapshot.size} active_coverage records`);
+                        
                         activeCoverageSnapshot.docs.forEach(doc => {
                             const coverage = doc.data();
+                            console.log(`    🔍 Active record ${doc.id}:`, coverage);
+                            
                             if (coverage.autoRestoreAt) {
                                 const autoRestoreAt = new Date(coverage.autoRestoreAt);
                                 const daysDiff = (now - autoRestoreAt) / (1000 * 60 * 60 * 24);
                                 
-                                console.log(`🔍 ${workplaceId}/${doc.id} (active):`);
-                                console.log(`   Auto-restore: ${autoRestoreAt.toDateString()}`);
-                                console.log(`   Status: ${daysDiff > 0 ? '🚨 OVERDUE' : '✅ Pending'} (${daysDiff.toFixed(1)} days)`);
-                                console.log(`   Data:`, coverage);
+                                console.log(`      📅 Auto-restore date: ${autoRestoreAt.toDateString()}`);
+                                console.log(`      ⏰ Status: ${daysDiff > 0 ? '🚨 OVERDUE' : '✅ Pending'} (${daysDiff.toFixed(1)} days)`);
                                 
                                 if (daysDiff > 0) {
-                                    console.log(`   🚨 This active coverage is ${daysDiff.toFixed(1)} days overdue!`);
+                                    totalOverdue++;
+                                    console.log(`      🚨 THIS ACTIVE COVERAGE IS ${daysDiff.toFixed(1)} DAYS OVERDUE!`);
                                 }
                             }
                         });
                     }
                     
-                    console.log('✅ Quick coverage check complete!');
+                    console.log(`\n📊 SUMMARY: Found ${totalOverdue} overdue coverage records`);
+                    
+                    if (totalOverdue > 0) {
+                        showNotification(`🚨 Found ${totalOverdue} overdue coverage records!`, 'warning', { duration: 5000 });
+                    } else {
+                        showNotification(`✅ No overdue coverage found`, 'success', { duration: 3000 });
+                    }
                     
                 } catch (error) {
                     console.error('❌ Quick coverage check failed:', error);
+                    showNotification(`❌ Coverage check failed: ${error.message}`, 'error', { duration: 5000 });
                 }
             };
             
@@ -18419,7 +18540,7 @@ Thank you!`;
             }
         };
 
-        // ENHANCED DEBUG FUNCTION - Actively search and restore overdue coverage
+        // ENHANCED DEBUG FUNCTION - Actively search and restore overdue coverage with datePassed flag
         window.debugAndRestoreOverdueShifts = async function() {
             if (!user.isAdmin) {
                 console.log('❌ Admin access required');
@@ -18428,15 +18549,34 @@ Thank you!`;
             
             try {
                 console.log('🚨 ENHANCED DEBUG: Searching for overdue coverage shifts...');
-                console.log('🕐 Current date: August 23, 2025 (we should find overdue coverage from 8/1/2025)');
+                console.log('🕐 Current date: August 23, 2025 (we should find overdue coverage from 7/31/2025)');
                 
+                // Import Firebase modules directly
                 const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
                 const { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, query, where, getDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
                 
-                const db = getFirestore(getApp());
+                // Get the correct database instance
+                let db;
+                try {
+                    db = getFirestore(getApp());
+                } catch (e) {
+                    // If getApp fails, initialize with workspace config
+                    const workspaceConfig = {
+                        apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                        authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                        projectId: "my-admin-dashboard-b9c89",
+                        storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                        messagingSenderId: "1001105953619",
+                        appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                    };
+                    const app = initializeApp(workspaceConfig, 'workspace-app');
+                    db = getFirestore(app);
+                }
+                
                 const now = new Date();
                 let foundOverdue = 0;
                 let restoredCount = 0;
+                let flaggedCount = 0;
                 let allRecords = [];
                 
                 console.log(`⏰ Current time: ${now.toISOString()}`);
@@ -18480,6 +18620,15 @@ Thank you!`;
                                     
                                     if (schedulesSnapshot.empty) {
                                         console.log(`      ⚠️ No current schedule found for ${workplaceId}`);
+                                        
+                                        // Even if no schedule, flag the coverage as passed
+                                        await updateDoc(coverageDoc.ref, {
+                                            datePassed: true,
+                                            processedAt: new Date().toISOString(),
+                                            status: 'expired'
+                                        });
+                                        flaggedCount++;
+                                        console.log(`      🏷️ Flagged coverage as datePassed=true (no schedule found)`);
                                         continue;
                                     }
                                     
@@ -18527,19 +18676,55 @@ Thank you!`;
                                         
                                         console.log(`      💾 Successfully updated schedule in database`);
                                         
-                                        // Delete coverage record
-                                        await deleteDoc(coverageDoc.ref);
-                                        console.log(`      🗑️ Successfully deleted coverage record ${coverageDoc.id}`);
+                                        // Add datePassed flag and delete coverage record
+                                        await updateDoc(coverageDoc.ref, {
+                                            datePassed: true,
+                                            processedAt: new Date().toISOString(),
+                                            status: 'restored'
+                                        });
+                                        
+                                        // Small delay before deletion
+                                        setTimeout(async () => {
+                                            try {
+                                                await deleteDoc(coverageDoc.ref);
+                                                console.log(`      🗑️ Successfully deleted coverage record ${coverageDoc.id}`);
+                                            } catch (delError) {
+                                                console.log(`      ⚠️ Could not delete coverage record: ${delError.message}`);
+                                            }
+                                        }, 1000);
                                         
                                         restoredCount++;
                                         
                                     } else {
                                         console.log(`      ❌ Could not find shift ${day}[${shiftIndex}] in schedule`);
                                         console.log(`      📋 Available shifts in ${day}:`, schedule[day] ? schedule[day].length : 'Day not found');
+                                        
+                                        // Flag as passed even if can't restore
+                                        await updateDoc(coverageDoc.ref, {
+                                            datePassed: true,
+                                            processedAt: new Date().toISOString(),
+                                            status: 'failed_restore'
+                                        });
+                                        flaggedCount++;
+                                        console.log(`      🏷️ Flagged coverage as datePassed=true (shift not found)`);
                                     }
                                     
                                 } catch (restoreError) {
                                     console.error(`      ❌ Error restoring ${coverageDoc.id}:`, restoreError);
+                                    
+                                    // Flag as passed even if restore fails
+                                    try {
+                                        await updateDoc(coverageDoc.ref, {
+                                            datePassed: true,
+                                            processedAt: new Date().toISOString(),
+                                            status: 'error',
+                                            error: restoreError.message
+                                        });
+                                        flaggedCount++;
+                                        console.log(`      🏷️ Flagged coverage as datePassed=true (error occurred)`);
+                                    } catch (flagError) {
+                                        console.error(`      ❌ Could not even flag coverage:`, flagError);
+                                    }
                                 }
                             }
                         } else {
@@ -18571,9 +18756,22 @@ Thank you!`;
                                 console.log(`      🔄 ATTEMPTING TO RESTORE overdue active coverage...`);
                                 
                                 try {
-                                    // Delete the coverage record (simplified for active_coverage)
-                                    await deleteDoc(coverageDoc.ref);
-                                    console.log(`      🗑️ Successfully deleted active coverage record ${coverageDoc.id}`);
+                                    // Flag as passed and delete the coverage record
+                                    await updateDoc(coverageDoc.ref, {
+                                        datePassed: true,
+                                        processedAt: new Date().toISOString(),
+                                        status: 'processed'
+                                    });
+                                    
+                                    setTimeout(async () => {
+                                        try {
+                                            await deleteDoc(coverageDoc.ref);
+                                            console.log(`      🗑️ Successfully deleted active coverage record ${coverageDoc.id}`);
+                                        } catch (delError) {
+                                            console.log(`      ⚠️ Could not delete active coverage record: ${delError.message}`);
+                                        }
+                                    }, 1000);
+                                    
                                     restoredCount++;
                                     
                                 } catch (restoreError) {
@@ -18593,16 +18791,17 @@ Thank you!`;
                 console.log(`   Total records scanned: ${allRecords.length}`);
                 console.log(`   Found overdue: ${foundOverdue}`);
                 console.log(`   Successfully restored: ${restoredCount}`);
+                console.log(`   Flagged with datePassed: ${flaggedCount}`);
                 
-                if (restoredCount > 0) {
-                    showNotification(`✅ Manually restored ${restoredCount} overdue shift assignments!`, 'success', { duration: 5000 });
-                    console.log(`✅ Manual restoration complete! Please refresh the page to see changes.`);
+                if (restoredCount > 0 || flaggedCount > 0) {
+                    showNotification(`✅ Processed ${restoredCount + flaggedCount} overdue shift assignments!`, 'success', { duration: 5000 });
+                    console.log(`✅ Processing complete! Please refresh the page to see changes.`);
                 } else if (foundOverdue === 0) {
                     showNotification(`ℹ️ No overdue coverage found`, 'info', { duration: 3000 });
                     console.log(`ℹ️ No overdue coverage assignments found`);
                 } else {
-                    showNotification(`⚠️ Found ${foundOverdue} overdue assignments but couldn't restore them`, 'warning', { duration: 5000 });
-                    console.log(`⚠️ Found overdue assignments but restoration failed`);
+                    showNotification(`⚠️ Found ${foundOverdue} overdue assignments but couldn't process them`, 'warning', { duration: 5000 });
+                    console.log(`⚠️ Found overdue assignments but processing failed`);
                 }
                 
             } catch (error) {
