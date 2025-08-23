@@ -3108,18 +3108,41 @@
             // Restore original shift assignment from shift_coverage collection
             async restoreOriginalShiftFromCoverage(workplaceId, coverage, coverageId) {
                 try {
+                    console.log(`🔄 RESTORE FUNCTION - Starting restoration for coverage ${coverageId} in ${workplaceId}`);
+                    console.log(`🔄 RESTORE FUNCTION - Coverage data:`, coverage);
+                    
                     // Import Firebase modules
                     const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-                    const { getFirestore, collection, getDocs, doc, updateDoc, query, where } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    const { getFirestore, collection, getDocs, doc, updateDoc, query, where, getDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
                     
-                    const db = getFirestore(getApp());
+                    // Get the correct database instance
+                    let db;
+                    try {
+                        db = getFirestore(getApp());
+                        console.log(`🔄 RESTORE FUNCTION - Using existing Firebase app`);
+                    } catch (e) {
+                        const workspaceConfig = {
+                            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                            projectId: "my-admin-dashboard-b9c89",
+                            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                            messagingSenderId: "1001105953619",
+                            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                        };
+                        const app = initializeApp(workspaceConfig, 'restore-app-' + Date.now());
+                        db = getFirestore(app);
+                        console.log(`🔄 RESTORE FUNCTION - Initialized new Firebase app for restore`);
+                    }
                     
                     // Find the current schedule for this workplace
                     const schedulesRef = collection(db, 'workplaces', workplaceId, 'schedules');
                     const schedulesQuery = query(schedulesRef, where('isCurrent', '==', true));
                     const schedulesSnapshot = await getDocs(schedulesQuery);
                     
+                    console.log(`🔄 RESTORE FUNCTION - Found ${schedulesSnapshot.size} current schedules`);
+                    
                     if (schedulesSnapshot.empty) {
+                        console.log(`❌ RESTORE FUNCTION - No current schedule found for workplace ${workplaceId}`);
                         logger.warn(`No current schedule found for workplace ${workplaceId}`);
                         return;
                     }
@@ -3128,35 +3151,69 @@
                     const scheduleData = currentScheduleDoc.data();
                     const schedule = scheduleData.schedule;
                     
+                    console.log(`🔄 RESTORE FUNCTION - Current schedule ID: ${currentScheduleDoc.id}`);
+                    console.log(`🔄 RESTORE FUNCTION - Schedule data structure:`, Object.keys(schedule || {}));
+                    
                     // Find the shift that needs to be restored
                     const day = coverage.day;
                     const shiftIndex = coverage.shiftIndex;
                     
+                    console.log(`🔄 RESTORE FUNCTION - Looking for shift at ${day}[${shiftIndex}]`);
+                    console.log(`🔄 RESTORE FUNCTION - Available days in schedule:`, Object.keys(schedule || {}));
+                    
+                    if (schedule[day]) {
+                        console.log(`🔄 RESTORE FUNCTION - Day ${day} exists, has ${schedule[day].length} shifts`);
+                        console.log(`🔄 RESTORE FUNCTION - Current shift at [${shiftIndex}]:`, schedule[day][shiftIndex]);
+                    } else {
+                        console.log(`❌ RESTORE FUNCTION - Day ${day} not found in schedule`);
+                    }
+                    
                     if (schedule[day] && schedule[day][shiftIndex]) {
                         // Restore the original assignment from the coverage record
                         if (coverage.originalData) {
+                            console.log(`🔄 RESTORE FUNCTION - Original data to restore:`, coverage.originalData);
+                            
+                            const beforeRestore = JSON.parse(JSON.stringify(schedule[day][shiftIndex]));
+                            console.log(`🔄 RESTORE FUNCTION - Shift BEFORE restore:`, beforeRestore);
+                            
                             schedule[day][shiftIndex].assigned = coverage.originalData.assigned || [];
                             
                             // Also restore raw_assigned if it exists
                             if (coverage.originalData.raw_assigned) {
                                 schedule[day][shiftIndex].raw_assigned = coverage.originalData.raw_assigned;
                             }
+                            
+                            console.log(`🔄 RESTORE FUNCTION - Shift AFTER restore:`, schedule[day][shiftIndex]);
+                        } else {
+                            console.log(`❌ RESTORE FUNCTION - No original data found in coverage record`);
                         }
                         
                         // Update the schedule in the database
+                        console.log(`🔄 RESTORE FUNCTION - Updating schedule in database...`);
                         await updateDoc(currentScheduleDoc.ref, {
                             schedule: schedule,
                             lastModified: new Date().toISOString()
                         });
                         
+                        console.log(`✅ RESTORE FUNCTION - Database update completed`);
+                        
+                        // Verify the update worked
+                        const verifyDoc = await getDoc(currentScheduleDoc.ref);
+                        const verifiedSchedule = verifyDoc.data().schedule;
+                        console.log(`🔍 RESTORE FUNCTION - Verification - Updated shift:`, verifiedSchedule[day][shiftIndex]);
+                        
                         logger.info(`✅ Restored shift assignment for ${day} shift ${shiftIndex} in ${workplaceId}`);
+                        console.log(`✅ RESTORE FUNCTION - Successfully restored shift assignment for ${day} shift ${shiftIndex} in ${workplaceId}`);
                         
                         // Log the restoration action would go here if needed
                     } else {
+                        console.log(`❌ RESTORE FUNCTION - Could not find shift ${day}[${shiftIndex}] in schedule for ${workplaceId}`);
                         logger.warn(`Could not find shift ${day}[${shiftIndex}] in schedule for ${workplaceId}`);
                     }
                 } catch (error) {
+                    console.error(`❌ RESTORE FUNCTION - Error restoring original shift from coverage:`, error);
                     logger.error('Error restoring original shift from coverage:', error);
+                    throw error;
                 }
             },
             
@@ -5746,6 +5803,10 @@
    forceProcessAutoRestores()      - Manually trigger auto-restore
    quickCoverageCheck()            - QUICK CHECK for overdue coverage
 
+🔍 NEW DIAGNOSTIC FUNCTIONS:
+   diagnosticUIvsDatabase()        - Compare UI display vs database state
+   forceRefreshScheduleDisplay()   - Force refresh the schedule display
+
 🎯 Quick Tests:
    testAutoRestore()               - Quick auto-restore test
    debugCoverageRecords()          - See all coverage data
@@ -5753,13 +5814,153 @@
 
 🚨 Problem Solving:
    debugAndRestoreOverdueShifts()  - MAIN FUNCTION to find and fix overdue shifts
+   diagnosticUIvsDatabase()        - DIAGNOSTIC to compare UI vs database
 
 Examples:
    quickCoverageCheck()            // QUICK CHECK - see overdue coverage now
    debugAndRestoreOverdueShifts()  // This is the BIG ONE - finds and restores overdue shifts
+   diagnosticUIvsDatabase()        // NEW - compare what UI shows vs what's in database
+   forceRefreshScheduleDisplay()   // NEW - force refresh the display
    debugCoverageRecords()          // See what coverage exists
    testAutoRestore()               // Quick test
                 `);
+            };
+            
+            // 🔍 DIAGNOSTIC FUNCTION - Check UI vs Database state
+            window.diagnosticUIvsDatabase = async function() {
+                try {
+                    console.log('🔍 DIAGNOSTIC - Starting UI vs Database comparison...');
+                    
+                    // Import Firebase modules
+                    const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, collection, getDocs, doc, getDoc, query, where } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    // Get the correct database instance
+                    let db;
+                    try {
+                        db = getFirestore(getApp());
+                    } catch (e) {
+                        const workspaceConfig = {
+                            apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                            authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                            projectId: "my-admin-dashboard-b9c89",
+                            storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                            messagingSenderId: "1001105953619",
+                            appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                        };
+                        const app = initializeApp(workspaceConfig, 'diagnostic-app-' + Date.now());
+                        db = getFirestore(app);
+                    }
+                    
+                    const currentWorkplace = selectedWorkplace || 'eSports Lounge';
+                    console.log(`🔍 DIAGNOSTIC - Checking workplace: ${currentWorkplace}`);
+                    
+                    // 1. Check what the UI is currently showing
+                    console.log('🔍 DIAGNOSTIC - PART 1: UI State Analysis');
+                    const scheduleContainer = document.querySelector('.schedule-container');
+                    if (scheduleContainer) {
+                        const coveredShifts = scheduleContainer.querySelectorAll('.shift-covered, [style*="covered"], [style*="background: #e1f5fe"]');
+                        console.log(`🔍 DIAGNOSTIC - UI shows ${coveredShifts.length} covered shifts`);
+                        
+                        coveredShifts.forEach((shift, index) => {
+                            const shiftText = shift.textContent;
+                            console.log(`🔍 DIAGNOSTIC - UI Covered Shift ${index + 1}: ${shiftText}`);
+                            console.log(`🔍 DIAGNOSTIC - UI Covered Shift ${index + 1} HTML:`, shift.outerHTML.substring(0, 200) + '...');
+                        });
+                    } else {
+                        console.log('🔍 DIAGNOSTIC - No schedule container found in UI');
+                    }
+                    
+                    // 2. Check database coverage records
+                    console.log('🔍 DIAGNOSTIC - PART 2: Database Coverage Records');
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        console.log(`🔍 DIAGNOSTIC - Checking database for workplace: ${workplaceId}`);
+                        
+                        // Check shift_coverage collection
+                        const shiftCoverageRef = collection(db, 'workplaces', workplaceId, 'shift_coverage');
+                        const shiftCoverageSnapshot = await getDocs(shiftCoverageRef);
+                        
+                        console.log(`🔍 DIAGNOSTIC - Database has ${shiftCoverageSnapshot.size} shift_coverage records in ${workplaceId}`);
+                        
+                        shiftCoverageSnapshot.forEach(coverageDoc => {
+                            const coverage = coverageDoc.data();
+                            console.log(`🔍 DIAGNOSTIC - DB Coverage Record ${coverageDoc.id}:`, coverage);
+                            
+                            const autoRestoreAt = coverage.autoRestoreAt ? new Date(coverage.autoRestoreAt) : null;
+                            const now = new Date();
+                            const isOverdue = autoRestoreAt && autoRestoreAt <= now;
+                            
+                            console.log(`🔍 DIAGNOSTIC - Record ${coverageDoc.id}: AutoRestore=${autoRestoreAt}, Now=${now}, Overdue=${isOverdue}, DatePassed=${coverage.datePassed}`);
+                        });
+                    }
+                    
+                    // 3. Check current schedule in database
+                    console.log('🔍 DIAGNOSTIC - PART 3: Current Schedule in Database');
+                    const schedulesRef = collection(db, 'workplaces', currentWorkplace, 'schedules');
+                    const currentScheduleQuery = query(schedulesRef, where('isCurrent', '==', true));
+                    const currentScheduleSnapshot = await getDocs(currentScheduleQuery);
+                    
+                    if (!currentScheduleSnapshot.empty) {
+                        const scheduleDoc = currentScheduleSnapshot.docs[0];
+                        const scheduleData = scheduleDoc.data();
+                        const schedule = scheduleData.schedule;
+                        
+                        console.log(`🔍 DIAGNOSTIC - Current schedule ID: ${scheduleDoc.id}`);
+                        console.log(`🔍 DIAGNOSTIC - Schedule last modified: ${scheduleData.lastModified}`);
+                        
+                        // Look for Thursday 8:00 PM shift specifically
+                        if (schedule.Thursday) {
+                            console.log(`🔍 DIAGNOSTIC - Thursday shifts in database:`, schedule.Thursday);
+                            schedule.Thursday.forEach((shift, index) => {
+                                if (shift.startTime === '20:00' || shift.startTime === '8:00 PM') {
+                                    console.log(`🔍 DIAGNOSTIC - Thursday 8PM shift [${index}]:`, shift);
+                                }
+                            });
+                        } else {
+                            console.log(`🔍 DIAGNOSTIC - No Thursday shifts found in database`);
+                        }
+                    } else {
+                        console.log(`🔍 DIAGNOSTIC - No current schedule found in database for ${currentWorkplace}`);
+                    }
+                    
+                    // 4. Force refresh the UI to see if that fixes the display
+                    console.log('🔍 DIAGNOSTIC - PART 4: Forcing UI Refresh');
+                    if (typeof refreshCurrentSchedule === 'function') {
+                        await refreshCurrentSchedule();
+                        console.log('🔍 DIAGNOSTIC - UI refresh completed');
+                    } else {
+                        console.log('🔍 DIAGNOSTIC - refreshCurrentSchedule function not available');
+                    }
+                    
+                    console.log('🔍 DIAGNOSTIC - Analysis complete. Check the logs above for discrepancies.');
+                    
+                } catch (error) {
+                    console.error('🔍 DIAGNOSTIC - Error during analysis:', error);
+                }
+            };
+
+            // 🛠️ ENHANCED DEBUG FUNCTION - Force refresh schedule display
+            window.forceRefreshScheduleDisplay = async function() {
+                try {
+                    console.log('🔄 FORCE REFRESH - Starting schedule display refresh...');
+                    
+                    // Clear the current display
+                    const scheduleContainer = document.querySelector('.schedule-container');
+                    if (scheduleContainer) {
+                        scheduleContainer.innerHTML = '<p>🔄 Refreshing schedule...</p>';
+                    }
+                    
+                    // Reload the current schedule
+                    await window.viewCurrentSchedule();
+                    
+                    console.log('🔄 FORCE REFRESH - Schedule display refreshed');
+                    
+                } catch (error) {
+                    console.error('🔄 FORCE REFRESH - Error refreshing display:', error);
+                }
             };
             
             // QUICK COVERAGE CHECK - Immediate overdue detection
