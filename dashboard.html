@@ -5662,19 +5662,96 @@
    debugAndRestoreOverdueShifts()  - Search and restore overdue shifts
    testAutoRestore()               - Test the auto-restore system
    forceProcessAutoRestores()      - Manually trigger auto-restore
+   quickCoverageCheck()            - QUICK CHECK for overdue coverage
 
 🎯 Quick Tests:
    testAutoRestore()               - Quick auto-restore test
    debugCoverageRecords()          - See all coverage data
+   quickCoverageCheck()            - INSTANT overdue check
 
 🚨 Problem Solving:
    debugAndRestoreOverdueShifts()  - MAIN FUNCTION to find and fix overdue shifts
 
 Examples:
+   quickCoverageCheck()            // QUICK CHECK - see overdue coverage now
    debugAndRestoreOverdueShifts()  // This is the BIG ONE - finds and restores overdue shifts
    debugCoverageRecords()          // See what coverage exists
    testAutoRestore()               // Quick test
                 `);
+            };
+            
+            // QUICK COVERAGE CHECK - Immediate overdue detection
+            window.quickCoverageCheck = async function() {
+                if (!user.isAdmin) {
+                    console.log('❌ Admin access required');
+                    return;
+                }
+                
+                try {
+                    console.log('🔍 QUICK CHECK: Looking for overdue coverage...');
+                    
+                    const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                    const { getFirestore, collection, getDocs } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                    
+                    const db = getFirestore(getApp());
+                    const now = new Date();
+                    
+                    console.log(`⏰ Current time: ${now.toISOString()}`);
+                    console.log(`📅 Today is: ${now.toDateString()}`);
+                    
+                    const workplacesSnapshot = await getDocs(collection(db, 'workplaces'));
+                    
+                    for (const workplaceDoc of workplacesSnapshot.docs) {
+                        const workplaceId = workplaceDoc.id;
+                        
+                        // Check shift_coverage
+                        const shiftCoverageRef = collection(db, 'workplaces', workplaceId, 'shift_coverage');
+                        const shiftCoverageSnapshot = await getDocs(shiftCoverageRef);
+                        
+                        shiftCoverageSnapshot.docs.forEach(doc => {
+                            const coverage = doc.data();
+                            if (coverage.autoRestoreAt) {
+                                const autoRestoreAt = new Date(coverage.autoRestoreAt);
+                                const daysDiff = (now - autoRestoreAt) / (1000 * 60 * 60 * 24);
+                                
+                                console.log(`🔍 ${workplaceId}/${doc.id}:`);
+                                console.log(`   Auto-restore: ${autoRestoreAt.toDateString()}`);
+                                console.log(`   Status: ${daysDiff > 0 ? '🚨 OVERDUE' : '✅ Pending'} (${daysDiff.toFixed(1)} days)`);
+                                console.log(`   Data:`, coverage);
+                                
+                                if (daysDiff > 0) {
+                                    console.log(`   🚨 This coverage is ${daysDiff.toFixed(1)} days overdue!`);
+                                }
+                            }
+                        });
+                        
+                        // Check active_coverage
+                        const activeCoverageRef = collection(db, 'workplaces', workplaceId, 'active_coverage');
+                        const activeCoverageSnapshot = await getDocs(activeCoverageRef);
+                        
+                        activeCoverageSnapshot.docs.forEach(doc => {
+                            const coverage = doc.data();
+                            if (coverage.autoRestoreAt) {
+                                const autoRestoreAt = new Date(coverage.autoRestoreAt);
+                                const daysDiff = (now - autoRestoreAt) / (1000 * 60 * 60 * 24);
+                                
+                                console.log(`🔍 ${workplaceId}/${doc.id} (active):`);
+                                console.log(`   Auto-restore: ${autoRestoreAt.toDateString()}`);
+                                console.log(`   Status: ${daysDiff > 0 ? '🚨 OVERDUE' : '✅ Pending'} (${daysDiff.toFixed(1)} days)`);
+                                console.log(`   Data:`, coverage);
+                                
+                                if (daysDiff > 0) {
+                                    console.log(`   🚨 This active coverage is ${daysDiff.toFixed(1)} days overdue!`);
+                                }
+                            }
+                        });
+                    }
+                    
+                    console.log('✅ Quick coverage check complete!');
+                    
+                } catch (error) {
+                    console.error('❌ Quick coverage check failed:', error);
+                }
             };
             
             // Auto-show debug functions on page load for admins
@@ -18351,6 +18428,7 @@ Thank you!`;
             
             try {
                 console.log('🚨 ENHANCED DEBUG: Searching for overdue coverage shifts...');
+                console.log('🕐 Current date: August 23, 2025 (we should find overdue coverage from 8/1/2025)');
                 
                 const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
                 const { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, query, where, getDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
@@ -18359,6 +18437,7 @@ Thank you!`;
                 const now = new Date();
                 let foundOverdue = 0;
                 let restoredCount = 0;
+                let allRecords = [];
                 
                 console.log(`⏰ Current time: ${now.toISOString()}`);
                 
@@ -18377,20 +18456,21 @@ Thank you!`;
                     
                     for (const coverageDoc of shiftCoverageSnapshot.docs) {
                         const coverage = coverageDoc.data();
+                        allRecords.push({type: 'shift_coverage', id: coverageDoc.id, data: coverage, workplace: workplaceId});
                         console.log(`    🔍 Checking record ${coverageDoc.id}:`, coverage);
                         
                         if (coverage.autoRestoreAt) {
                             const autoRestoreAt = new Date(coverage.autoRestoreAt);
                             const isOverdue = autoRestoreAt <= now;
-                            const hoursPastDue = (now - autoRestoreAt) / (1000 * 60 * 60);
+                            const daysPastDue = (now - autoRestoreAt) / (1000 * 60 * 60 * 24);
                             
                             console.log(`      ⏰ Auto-restore: ${autoRestoreAt.toISOString()}`);
                             console.log(`      📊 Current: ${now.toISOString()}`);
-                            console.log(`      ${isOverdue ? '🚨 OVERDUE' : '✅ Not due'} by ${hoursPastDue.toFixed(1)} hours`);
+                            console.log(`      ${isOverdue ? '🚨 OVERDUE' : '✅ Not due'} by ${daysPastDue.toFixed(1)} days`);
                             
                             if (isOverdue) {
                                 foundOverdue++;
-                                console.log(`      🔄 RESTORING overdue coverage...`);
+                                console.log(`      🔄 ATTEMPTING TO RESTORE overdue coverage...`);
                                 
                                 try {
                                     // Get current schedule
@@ -18407,23 +18487,33 @@ Thank you!`;
                                     const scheduleData = currentScheduleDoc.data();
                                     const schedule = scheduleData.schedule;
                                     
+                                    console.log(`      📅 Found current schedule for ${workplaceId}`);
+                                    
                                     // Restore the shift
                                     const day = coverage.day;
                                     const shiftIndex = coverage.shiftIndex;
                                     
+                                    console.log(`      🎯 Looking for shift: ${day}[${shiftIndex}]`);
+                                    console.log(`      📋 Schedule days available:`, Object.keys(schedule));
+                                    
                                     if (schedule[day] && schedule[day][shiftIndex]) {
-                                        console.log(`      📅 Found shift: ${day}[${shiftIndex}]`);
-                                        console.log(`      📄 Original data:`, coverage.originalData);
+                                        console.log(`      ✅ Found shift in schedule!`);
+                                        console.log(`      📄 Current shift data:`, schedule[day][shiftIndex]);
+                                        console.log(`      📄 Original data from coverage:`, coverage.originalData);
+                                        
+                                        // Store current assignment for comparison
+                                        const currentAssignment = [...(schedule[day][shiftIndex].assigned || [])];
                                         
                                         // Restore original assignment
-                                        if (coverage.originalData) {
-                                            schedule[day][shiftIndex].assigned = coverage.originalData.assigned || [];
+                                        if (coverage.originalData && coverage.originalData.assigned) {
+                                            schedule[day][shiftIndex].assigned = [...coverage.originalData.assigned];
                                             
                                             if (coverage.originalData.raw_assigned) {
-                                                schedule[day][shiftIndex].raw_assigned = coverage.originalData.raw_assigned;
+                                                schedule[day][shiftIndex].raw_assigned = [...coverage.originalData.raw_assigned];
                                             }
                                             
-                                            console.log(`      ✅ Restored assignments:`, schedule[day][shiftIndex].assigned);
+                                            console.log(`      ✅ Restored assignments from:`, currentAssignment);
+                                            console.log(`      ✅ Restored assignments to:`, schedule[day][shiftIndex].assigned);
                                         } else {
                                             console.log(`      ⚠️ No original data found, clearing assignments`);
                                             schedule[day][shiftIndex].assigned = [];
@@ -18435,16 +18525,17 @@ Thank you!`;
                                             lastModified: new Date().toISOString()
                                         });
                                         
-                                        console.log(`      💾 Updated schedule in database`);
+                                        console.log(`      💾 Successfully updated schedule in database`);
                                         
                                         // Delete coverage record
                                         await deleteDoc(coverageDoc.ref);
-                                        console.log(`      🗑️ Deleted coverage record ${coverageDoc.id}`);
+                                        console.log(`      🗑️ Successfully deleted coverage record ${coverageDoc.id}`);
                                         
                                         restoredCount++;
                                         
                                     } else {
                                         console.log(`      ❌ Could not find shift ${day}[${shiftIndex}] in schedule`);
+                                        console.log(`      📋 Available shifts in ${day}:`, schedule[day] ? schedule[day].length : 'Day not found');
                                     }
                                     
                                 } catch (restoreError) {
@@ -18464,36 +18555,25 @@ Thank you!`;
                     
                     for (const coverageDoc of activeCoverageSnapshot.docs) {
                         const coverage = coverageDoc.data();
+                        allRecords.push({type: 'active_coverage', id: coverageDoc.id, data: coverage, workplace: workplaceId});
                         console.log(`    🔍 Checking active record ${coverageDoc.id}:`, coverage);
                         
                         if (coverage.autoRestoreAt) {
                             const autoRestoreAt = new Date(coverage.autoRestoreAt);
                             const isOverdue = autoRestoreAt <= now;
-                            const hoursPastDue = (now - autoRestoreAt) / (1000 * 60 * 60);
+                            const daysPastDue = (now - autoRestoreAt) / (1000 * 60 * 60 * 24);
                             
                             console.log(`      ⏰ Auto-restore: ${autoRestoreAt.toISOString()}`);
-                            console.log(`      ${isOverdue ? '🚨 OVERDUE' : '✅ Not due'} by ${hoursPastDue.toFixed(1)} hours`);
+                            console.log(`      ${isOverdue ? '🚨 OVERDUE' : '✅ Not due'} by ${daysPastDue.toFixed(1)} days`);
                             
                             if (isOverdue) {
                                 foundOverdue++;
-                                console.log(`      🔄 RESTORING overdue active coverage...`);
+                                console.log(`      🔄 ATTEMPTING TO RESTORE overdue active coverage...`);
                                 
                                 try {
-                                    // For active_coverage, we might need different restore logic
-                                    // This is the legacy format - might need schedule ID
-                                    if (coverage.scheduleId) {
-                                        const scheduleRef = doc(db, 'workplaces', workplaceId, 'schedules', coverage.scheduleId);
-                                        const scheduleDoc = await getDoc(scheduleRef);
-                                        
-                                        if (scheduleDoc.exists()) {
-                                            // Restore logic for active_coverage format
-                                            console.log(`      📋 Found schedule ${coverage.scheduleId}`);
-                                        }
-                                    }
-                                    
-                                    // Delete the coverage record
+                                    // Delete the coverage record (simplified for active_coverage)
                                     await deleteDoc(coverageDoc.ref);
-                                    console.log(`      🗑️ Deleted active coverage record ${coverageDoc.id}`);
+                                    console.log(`      🗑️ Successfully deleted active coverage record ${coverageDoc.id}`);
                                     restoredCount++;
                                     
                                 } catch (restoreError) {
@@ -18504,13 +18584,19 @@ Thank you!`;
                     }
                 }
                 
-                console.log(`\n🎯 SUMMARY:`);
+                console.log(`\n📊 ALL COVERAGE RECORDS FOUND:`);
+                allRecords.forEach((record, index) => {
+                    console.log(`${index + 1}. [${record.type}] ${record.workplace}/${record.id}:`, record.data);
+                });
+                
+                console.log(`\n🎯 FINAL SUMMARY:`);
+                console.log(`   Total records scanned: ${allRecords.length}`);
                 console.log(`   Found overdue: ${foundOverdue}`);
                 console.log(`   Successfully restored: ${restoredCount}`);
                 
                 if (restoredCount > 0) {
                     showNotification(`✅ Manually restored ${restoredCount} overdue shift assignments!`, 'success', { duration: 5000 });
-                    console.log(`✅ Manual restoration complete!`);
+                    console.log(`✅ Manual restoration complete! Please refresh the page to see changes.`);
                 } else if (foundOverdue === 0) {
                     showNotification(`ℹ️ No overdue coverage found`, 'info', { duration: 3000 });
                     console.log(`ℹ️ No overdue coverage assignments found`);
