@@ -18937,6 +18937,108 @@ Thank you!`;
             }
         };
 
+        // 🔍 DEEP DATABASE SEARCH - Find coverage records EVERYWHERE
+        window.findCoverageEverywhere = async function() {
+            try {
+                console.log('🔍 DEEP SEARCH - Searching EVERYWHERE for coverage records...');
+                
+                // Import Firebase modules
+                const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+                const { getFirestore, collection, getDocs, doc, getDoc } = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+                
+                // Get Firebase instance
+                let db;
+                try {
+                    db = getFirestore(getApp());
+                } catch (e) {
+                    const workspaceConfig = {
+                        apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
+                        authDomain: "my-admin-dashboard-b9c89.firebaseapp.com",
+                        projectId: "my-admin-dashboard-b9c89",
+                        storageBucket: "my-admin-dashboard-b9c89.firebasestorage.app",
+                        messagingSenderId: "1001105953619",
+                        appId: "1:1001105953619:web:1e2cf52a9ff37aeb5207a6"
+                    };
+                    const app = initializeApp(workspaceConfig, 'deep-search-' + Date.now());
+                    db = getFirestore(app);
+                }
+                
+                console.log('🔍 DEEP SEARCH - Starting comprehensive database search...');
+                
+                // 1. Search in root shift_coverage collection (like in your Firebase screenshot)
+                console.log('🔍 DEEP SEARCH - Checking ROOT shift_coverage collection...');
+                try {
+                    const rootCoverageSnapshot = await getDocs(collection(db, 'shift_coverage'));
+                    console.log(`🔍 DEEP SEARCH - Found ${rootCoverageSnapshot.size} records in ROOT shift_coverage`);
+                    
+                    rootCoverageSnapshot.forEach(doc => {
+                        const data = doc.data();
+                        console.log(`🔍 ROOT COVERAGE - ${doc.id}:`, data);
+                        
+                        if (data.coverWorkerName === 'Test Cover') {
+                            console.log('🎯 FOUND TEST COVER in ROOT shift_coverage!');
+                        }
+                    });
+                } catch (rootError) {
+                    console.log('🔍 DEEP SEARCH - No ROOT shift_coverage collection or error:', rootError.message);
+                }
+                
+                // 2. Search the specific record ID from your screenshot
+                const knownRecordIds = [
+                    'Lt0iGlbMZqFIZRtruXGt',
+                    'YzgQ4y3JssXlsdXDMtDE', 
+                    'zLylGCVVYnLnEKputcI'
+                ];
+                
+                for (const recordId of knownRecordIds) {
+                    console.log(`🔍 DEEP SEARCH - Looking for specific record: ${recordId}`);
+                    
+                    // Try root shift_coverage
+                    try {
+                        const docSnap = await getDoc(doc(db, 'shift_coverage', recordId));
+                        if (docSnap.exists()) {
+                            console.log(`🎯 FOUND ${recordId} in ROOT shift_coverage:`, docSnap.data());
+                        }
+                    } catch (e) {
+                        console.log(`🔍 Not found in root: ${recordId}`);
+                    }
+                }
+                
+                // 3. Check actual schedule data for Test Cover
+                console.log('🔍 DEEP SEARCH - Checking ACTUAL schedule data for Test Cover...');
+                const workplaceId = selectedWorkplace || 'eSports Lounge';
+                
+                try {
+                    const schedulesSnapshot = await getDocs(collection(db, 'workplaces', workplaceId, 'schedules'));
+                    console.log(`🔍 DEEP SEARCH - Found ${schedulesSnapshot.size} schedules in ${workplaceId}`);
+                    
+                    schedulesSnapshot.forEach(scheduleDoc => {
+                        const scheduleData = scheduleDoc.data();
+                        console.log(`🔍 SCHEDULE ${scheduleDoc.id} - isCurrent: ${scheduleData.isCurrent}`);
+                        
+                        if (scheduleData.schedule) {
+                            Object.keys(scheduleData.schedule).forEach(day => {
+                                if (scheduleData.schedule[day] && Array.isArray(scheduleData.schedule[day])) {
+                                    scheduleData.schedule[day].forEach((shift, index) => {
+                                        if (shift.assigned && shift.assigned.includes && shift.assigned.includes('Test Cover')) {
+                                            console.log(`🎯 FOUND TEST COVER in schedule ${scheduleDoc.id}, ${day} shift ${index}:`, shift);
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    });
+                } catch (scheduleError) {
+                    console.log('🔍 DEEP SEARCH - Error checking schedules:', scheduleError);
+                }
+                
+                console.log('🔍 DEEP SEARCH - Search complete. Check the logs above for any Test Cover findings.');
+                
+            } catch (error) {
+                console.error('🔍 DEEP SEARCH - Error:', error);
+            }
+        };
+
         // Debug function to check coverage records (admin only - use in console)
         window.debugCoverageRecords = async function() {
             if (!user.isAdmin) {
