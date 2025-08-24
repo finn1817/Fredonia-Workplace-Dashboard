@@ -14159,7 +14159,7 @@ Management Team`);
                         appliedFixes
                     });
                 }
-                displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, false, coverageGaps);
+                displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, false, coverageGaps, processedWorkers);
                 hideAllForms();
                 showNotification('✅ Schedule generated successfully! Use "Schedule History" to set it as current for workers.', 'success', { duration: 8000, replaceAll: true });
             } catch (error) {
@@ -14330,7 +14330,10 @@ Management Team`);
         }
 
         // Enhanced schedule display with coverage analysis and real-time updates
-        function displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, isCurrent = false, coverageGaps = []) {
+        function displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, isCurrent = false, coverageGaps = [], workersData = null) {
+            // Use provided workers data or fall back to global workers variable
+            const workersToUse = workersData || workers;
+            
             // Update the global schedule variable for real-time analysis
             window.currentSchedule = schedule;
             window.currentAssignedHours = assignedHours;
@@ -14492,14 +14495,14 @@ Management Team`);
                 
                 const sortedWorkers = Object.entries(assignedHours).sort((a, b) => b[1] - a[1]);
                 
-                workers.forEach(w => {
+                workersToUse.forEach(w => {
                     if (!(w['Email'] in assignedHours)) {
                         sortedWorkers.push([w['Email'], 0]);
                     }
                 });
                 
                 sortedWorkers.forEach(([email, hours]) => {
-                    const worker = workers.find(w => w['Email'] === email);
+                    const worker = workersToUse.find(w => w['Email'] === email);
                     if (!worker) return;
                     
                     const name = `${worker['First Name']} ${worker['Last Name']}`;
@@ -14864,7 +14867,7 @@ Management Team`);
                         .map(w => `${w['First Name']} ${w['Last Name']}`);
                     
                     const { coverageGaps } = validateScheduleCoverage(schedule, hours);
-                    displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, true, coverageGaps);
+                    displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, true, coverageGaps, workersData);
                 } else {
                     document.getElementById('scheduleDisplay').innerHTML = `
                         <div class="schedule-display">
@@ -15075,22 +15078,32 @@ Management Team`);
         // View schedule by ID
         window.viewScheduleById = async function(scheduleId) {
             try {
+                // Load workers data for proper field names
+                let workersData = [];
+                try {
+                    const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                    workersData = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log('📋 Loaded workers data for schedule view:', workersData.length, 'workers');
+                } catch (error) {
+                    console.error('❌ Error loading workers data:', error);
+                }
+                
                 const docSnap = await getDoc(doc(db, 'workplaces', selectedWorkplace, 'schedules', scheduleId));
                 if (docSnap.exists()) {
                     currentScheduleId = docSnap.id; // <-- Track the ID
                     const scheduleData = docSnap.data();
                     schedule = scheduleData.days;
                     
-                    const assignedHours = calculateAssignedHours(schedule);
-                    const lowHours = workers
-                        .filter(w => !w.work_study && assignedHours[w.email] < 4)
-                        .map(w => `${w.first_name} ${w.last_name}`);
-                    const unassigned = workers
-                        .filter(w => assignedHours[w.email] === 0)
-                        .map(w => `${w.first_name} ${w.last_name}`);
+                    const assignedHours = calculateAssignedHours(schedule, workersData);
+                    const lowHours = workersData
+                        .filter(w => w['Work Study'] !== 'Yes' && assignedHours[w['Email']] < 4)
+                        .map(w => `${w['First Name']} ${w['Last Name']}`);
+                    const unassigned = workersData
+                        .filter(w => assignedHours[w['Email']] === 0)
+                        .map(w => `${w['First Name']} ${w['Last Name']}`);
                     
                     const { coverageGaps } = validateScheduleCoverage(schedule, hours);
-                    displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, scheduleData.isCurrent || false, coverageGaps);
+                    displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, scheduleData.isCurrent || false, coverageGaps, workersData);
                 }
             } catch (error) {
                 console.error('Error viewing schedule:', error);
