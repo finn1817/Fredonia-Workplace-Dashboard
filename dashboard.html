@@ -2800,20 +2800,20 @@
             // Primary categorization by type and work study status
             categorizeWorkers(workersData, wsStatus = {}, assignedHours = {}) {
                 return {
-                    workStudy: workersData.filter(w => wsStatus[w.email] && w.worker_type !== 'Cover'),
-                    regular: workersData.filter(w => !wsStatus[w.email] && w.worker_type !== 'Cover'),
-                    cover: workersData.filter(w => w.worker_type === 'Cover'),
-                    nonCover: workersData.filter(w => w.worker_type !== 'Cover')
+                    workStudy: workersData.filter(w => wsStatus[w['Email']] && w['Worker Type'] !== 'Cover'),
+                    regular: workersData.filter(w => !wsStatus[w['Email']] && w['Worker Type'] !== 'Cover'),
+                    cover: workersData.filter(w => w['Worker Type'] === 'Cover'),
+                    nonCover: workersData.filter(w => w['Worker Type'] !== 'Cover')
                 };
             },
             
             // Work study filtering with hour constraints
             filterWorkStudy(workersData, wsStatus, assignedHours = {}) {
                 return {
-                    needingHours: workersData.filter(w => wsStatus[w.email] && assignedHours[w.email] < 5 && w.worker_type !== 'Cover'),
-                    withZeroHours: workersData.filter(w => wsStatus[w.email] && assignedHours[w.email] === 0 && w.worker_type !== 'Cover'),
-                    withIssues: workersData.filter(w => wsStatus[w.email] && Math.abs(assignedHours[w.email] - 5) > 0.1 && w.worker_type !== 'Cover'),
-                    unassigned: workersData.filter(w => wsStatus[w.email] && assignedHours[w.email] === 0 && w.worker_type !== 'Cover')
+                    needingHours: workersData.filter(w => wsStatus[w['Email']] && assignedHours[w['Email']] < 5 && w['Worker Type'] !== 'Cover'),
+                    withZeroHours: workersData.filter(w => wsStatus[w['Email']] && assignedHours[w['Email']] === 0 && w['Worker Type'] !== 'Cover'),
+                    withIssues: workersData.filter(w => wsStatus[w['Email']] && Math.abs(assignedHours[w['Email']] - 5) > 0.1 && w['Worker Type'] !== 'Cover'),
+                    unassigned: workersData.filter(w => wsStatus[w['Email']] && assignedHours[w['Email']] === 0 && w['Worker Type'] !== 'Cover')
                 };
             },
             
@@ -2828,15 +2828,15 @@
             // Filter by hour constraints
             filterByHours(workersData, assignedHours, minHours = 0, maxHours = Infinity) {
                 return workersData.filter(w => {
-                    const hours = assignedHours[w.email] || 0;
+                    const hours = assignedHours[w['Email']] || 0;
                     return hours >= minHours && hours <= maxHours;
                 });
             },
             
             // Combined filtering for scheduling
             getSchedulingCategories(workersData, wsStatus, assignedHours, availableWorkers) {
-                const wsNeedingHours = availableWorkers.filter(w => wsStatus[w.email] && assignedHours[w.email] < 5);
-                const regularAvailable = availableWorkers.filter(w => !wsStatus[w.email] || assignedHours[w.email] >= 5);
+                const wsNeedingHours = availableWorkers.filter(w => wsStatus[w['Email']] && assignedHours[w['Email']] < 5);
+                const regularAvailable = availableWorkers.filter(w => !wsStatus[w['Email']] || assignedHours[w['Email']] >= 5);
                 
                 return { wsNeedingHours, regularAvailable };
             }
@@ -2926,13 +2926,13 @@
                     <div class="worker-item" style="padding: 0.75rem; border: 1px solid #dee2e6; margin-bottom: 0.5rem; border-radius: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <strong>${worker.first_name} ${worker.last_name}</strong>
-                                ${worker.work_study ? '<span style="color: #28a745; font-size: 0.8em;">🎓 WS</span>' : ''}
-                                ${showEmail ? `<br><small style="color: #666;">📧 ${worker.email}</small>` : ''}
+                                <strong>${worker['First Name']} ${worker['Last Name']}</strong>
+                                ${worker['Work Study'] === 'Yes' ? '<span style="color: #28a745; font-size: 0.8em;">🎓 WS</span>' : ''}
+                                ${showEmail ? `<br><small style="color: #666;">📧 ${worker['Email']}</small>` : ''}
                             </div>
                             ${showActions ? `
                                 <div style="display: flex; gap: 0.25rem;">
-                                    ${this.button('📧', `contactWorker('${worker.email}')`, 'btn btn-info', 'padding: 0.25rem 0.5rem; font-size: 0.75rem;')}
+                                    ${this.button('📧', `contactWorker('${worker['Email']}')`, 'btn btn-info', 'padding: 0.25rem 0.5rem; font-size: 0.75rem;')}
                                     ${isAdmin ? this.button('✏️', `editWorker('${worker.id}')`, 'btn btn-warning', 'padding: 0.25rem 0.5rem; font-size: 0.75rem;') : ''}
                                 </div>
                             ` : ''}
@@ -3849,7 +3849,7 @@
             
             const dayAvail = worker.availability[day] || [];
             if (dayAvail.length === 0) {
-                console.log(`📋 Worker ${worker.first_name} ${worker.last_name} has no availability on ${day}`);
+                console.log(`📋 Worker ${worker['First Name']} ${worker['Last Name']} has no availability on ${day}`);
                 return false;
             }
             
@@ -3860,12 +3860,12 @@
                 
                 // Basic same-day check
                 if (slotStart <= startHour && endHour <= slotEnd) {
-                    console.log(`✅ Worker ${worker.first_name} ${worker.last_name} available ${startHour}-${endHour} (slot ${slotStart}-${slotEnd})`);
+                    console.log(`✅ Worker ${worker['First Name']} ${worker['Last Name']} available ${startHour}-${endHour} (slot ${slotStart}-${slotEnd})`);
                     return true;
                 }
             }
             
-            console.log(`❌ Worker ${worker.first_name} ${worker.last_name} NOT available ${startHour}-${endHour} on ${day}`);
+            console.log(`❌ Worker ${worker['First Name']} ${worker['Last Name']} NOT available ${startHour}-${endHour} on ${day}`);
             return false;
         };
 
@@ -4241,7 +4241,7 @@
         // Enhanced function to show work study availability popup
         const showWorkStudyAvailabilityPopup = (wsIssues) => {
             const issuesList = wsIssues.map(([worker, issue]) => 
-                `• ${worker.first_name} ${worker.last_name}: ${issue}`
+                `• ${worker['First Name']} ${worker['Last Name']}: ${issue}`
             ).join('\n');
             
             const message = `🚨 WORK STUDY AVAILABILITY ISSUE
@@ -4302,11 +4302,11 @@ Schedule generation has been stopped to prevent issues.`;
                 errors.push('Workers data must be a non-empty array');
             } else {
                 for (const worker of workersData) {
-                    if (!worker.email || !worker.first_name || !worker.last_name) {
-                        errors.push(`Worker missing required fields: ${worker.email || 'no email'}`);
+                    if (!worker['Email'] || !worker['First Name'] || !worker['Last Name']) {
+                        errors.push(`Worker missing required fields: ${worker['Email'] || 'no email'}`);
                     }
                     if (!worker.availability || typeof worker.availability !== 'object') {
-                        errors.push(`Worker ${worker.email} has invalid availability data`);
+                        errors.push(`Worker ${worker['Email']} has invalid availability data`);
                     }
                 }
             }
@@ -4355,21 +4355,21 @@ Schedule generation has been stopped to prevent issues.`;
             
             // Check worker availability
             if (!isWorkerAvailable(worker, day, startHour, endHour)) {
-                errors.push(`Worker ${worker.first_name} ${worker.last_name} not available on ${day} from ${start} to ${end}`);
+                errors.push(`Worker ${worker['First Name']} ${worker['Last Name']} not available on ${day} from ${start} to ${end}`);
                 return { valid: false, errors, warnings };
             }
             
             // Check hours limit
             const currentHours = assignedHours[worker.email] || 0;
             if (currentHours + duration > maxHoursPerWorker) {
-                errors.push(`Worker ${worker.first_name} ${worker.last_name} would exceed max hours (${currentHours + duration} > ${maxHoursPerWorker})`);
+                errors.push(`Worker ${worker['First Name']} ${worker['Last Name']} would exceed max hours (${currentHours + duration} > ${maxHoursPerWorker})`);
                 return { valid: false, errors, warnings };
             }
             
             // Check duplicate assignment
             const shiftKey = `${day}_${start}_${end}`;
             if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(worker.email)) {
-                errors.push(`Worker ${worker.first_name} ${worker.last_name} already assigned to ${day} ${start}-${end}`);
+                errors.push(`Worker ${worker['First Name']} ${worker['Last Name']} already assigned to ${day} ${start}-${end}`);
                 return { valid: false, errors, warnings };
             }
             
@@ -4472,22 +4472,22 @@ Schedule generation has been stopped to prevent issues.`;
                 
                 const existingShift = schedule[day].find(s => s.start === start && s.end === end);
                 if (existingShift) {
-                    existingShift.assigned.push(`${worker.first_name} ${worker.last_name}`);
+                    existingShift.assigned.push(`${worker['First Name']} ${worker['Last Name']}`);
                     existingShift.raw_assigned.push(worker.email);
                     existingShift.all_available.push(worker);
                 } else {
                     schedule[day].push({
                         start,
                         end,
-                        assigned: [`${worker.first_name} ${worker.last_name}`],
-                        available: [`${worker.first_name} ${worker.last_name}`],
-                        raw_assigned: [worker.email],
+                        assigned: [`${worker['First Name']} ${worker['Last Name']}`],
+                        available: [`${worker['First Name']} ${worker['Last Name']}`],
+                        raw_assigned: [worker['Email']],
                         all_available: [worker],
-                        is_work_study: worker.work_study || false
+                        is_work_study: worker['Work Study'] === 'Yes'
                     });
                 }
                 
-                console.log(`✅ Safe assignment: ${worker.first_name} ${worker.last_name} to ${day} ${start}-${end} (${duration.toFixed(1)}h)`);
+                console.log(`✅ Safe assignment: ${worker['First Name']} ${worker['Last Name']} to ${day} ${start}-${end} (${duration.toFixed(1)}h)`);
                 return { success: true, duration };
                 
             } catch (error) {
@@ -4547,13 +4547,13 @@ Schedule generation has been stopped to prevent issues.`;
             
             // 🚨 CRITICAL FIX: Initialize all workers with 0 hours, but track cover workers separately
             workersData.forEach(w => {
-                assignedHours[w.email] = 0;
-                wsStatus[w.email] = w.work_study || false;
-                availabilityHours[w.email] = calculateAvailabilityHours(w);
+                assignedHours[w['Email']] = 0;
+                wsStatus[w['Email']] = w['Work Study'] === 'Yes';
+                availabilityHours[w['Email']] = calculateAvailabilityHours(w);
                 
                 // Log cover workers for clarity
-                if (w.worker_type === 'Cover') {
-                    console.log(`📋 COVER WORKER DETECTED: ${w.first_name} ${w.last_name} - Will be excluded from automatic scheduling`);
+                if (w['Worker Type'] === 'Cover') {
+                    console.log(`📋 COVER WORKER DETECTED: ${w['First Name']} ${w['Last Name']} - Will be excluded from automatic scheduling`);
                 }
             });
             
@@ -4564,9 +4564,9 @@ Schedule generation has been stopped to prevent issues.`;
             const totalWorkStudyHours = workStudyWorkers.length * 5; // Work Study gets exactly 5 hours each
             
             console.log(`📊 Worker Distribution: ${workersData.length} total workers, ${workStudyWorkers.length} Work Study, ${nonWorkStudyWorkers.length} Regular, ${coverWorkers.length} Cover workers`);
-            console.log('✅ Cover workers excluded from automatic scheduling:', coverWorkers.map(w => `${w.first_name} ${w.last_name}`));
-            console.log('✅ Work Study workers for scheduling:', workStudyWorkers.map(w => `${w.first_name} ${w.last_name}`));
-            console.log('✅ Regular workers for scheduling:', nonWorkStudyWorkers.map(w => `${w.first_name} ${w.last_name}`));
+            console.log('✅ Cover workers excluded from automatic scheduling:', coverWorkers.map(w => `${w['First Name']} ${w['Last Name']}`));
+            console.log('✅ Work Study workers for scheduling:', workStudyWorkers.map(w => `${w['First Name']} ${w['Last Name']}`));
+            console.log('✅ Regular workers for scheduling:', nonWorkStudyWorkers.map(w => `${w['First Name']} ${w['Last Name']}`));
             
             // Calculate total operating hours to determine fair distribution
             let totalOperatingHours = 0;
@@ -8798,12 +8798,12 @@ Examples:
             
             // Sort both groups alphabetically by last name, then first name
             const sortAlphabetically = (a, b) => {
-                const lastNameA = a.last_name.toLowerCase();
-                const lastNameB = b.last_name.toLowerCase();
+                const lastNameA = (a['Last Name'] || '').toLowerCase();
+                const lastNameB = (b['Last Name'] || '').toLowerCase();
                 if (lastNameA === lastNameB) {
                     // If last names are the same, sort by first name
-                    const firstNameA = a.first_name.toLowerCase();
-                    const firstNameB = b.first_name.toLowerCase();
+                    const firstNameA = (a['First Name'] || '').toLowerCase();
+                    const firstNameB = (b['First Name'] || '').toLowerCase();
                     return firstNameA.localeCompare(firstNameB);
                 }
                 return lastNameA.localeCompare(lastNameB);
@@ -8945,6 +8945,14 @@ Examples:
                             'background: #667eea; color: white; border: 1px solid #667eea;' : 
                             'background: #f8f9fa; color: #666; border: 1px solid #dee2e6;';
                         
+                        // Safe property access with fallbacks
+                        const firstName = worker['First Name'] || 'Unknown';
+                        const lastName = worker['Last Name'] || 'Unknown';
+                        const email = worker['Email'] || 'No email';
+                        const workStudy = worker['Work Study'] === 'Yes' ? '✅ Yes' : '❌ No';
+                        const workerType = worker['Worker Type'] || 'Regular';
+                        const availability = worker['Days & Times Available'] || 'No availability set';
+                        
                         html += `
                             <tr style="border-bottom: 1px solid #dee2e6; ${rowStyle}">
                                 <td style="padding: 1rem; text-align: center;">
@@ -8955,21 +8963,21 @@ Examples:
                                 </td>
                                 <td style="padding: 1rem; font-weight: 600;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <strong>${worker.first_name}</strong>
+                                        <strong>${firstName}</strong>
                                         ${isPinned ? '<span style="color: #667eea; font-size: 0.8rem;">📌</span>' : ''}
                                     </div>
                                 </td>
                                 <td style="padding: 1rem; font-weight: 600;">
-                                    <strong>${worker.last_name}</strong>
+                                    <strong>${lastName}</strong>
                                 </td>
-                                <td style="padding: 1rem;">${worker.email}</td>
-                                <td style="padding: 1rem;">${worker.work_study ? '✅ Yes' : '❌ No'}</td>
+                                <td style="padding: 1rem;">${email}</td>
+                                <td style="padding: 1rem;">${workStudy}</td>
                                 <td style="padding: 1rem;">
-                                    <span style="background: ${worker.worker_type === 'Cover' ? '#fff3cd' : '#d1edff'}; color: ${worker.worker_type === 'Cover' ? '#856404' : '#004085'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
-                                        ${worker.worker_type === 'Cover' ? '🔄 Cover' : '⚙️ Regular'}
+                                    <span style="background: ${workerType === 'Cover' ? '#fff3cd' : '#d1edff'}; color: ${workerType === 'Cover' ? '#856404' : '#004085'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
+                                        ${workerType === 'Cover' ? '🔄 Cover' : '⚙️ Regular'}
                                     </span>
                                 </td>
-                                <td style="padding: 1rem;"><small>${worker.availability_text || 'No availability set'}</small></td>
+                                <td style="padding: 1rem;"><small>${availability}</small></td>
                                 <td style="padding: 1rem;">
                                     <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
                                         <button class="btn btn-warning" onclick="editWorker('${worker.id}')" style="background: #ffc107; color: #212529; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">✏️ Edit</button>
@@ -13004,18 +13012,18 @@ Management Team`);
                 editingWorkerId = workerId;
                 document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
                 
-                document.getElementById('workerFirstName').value = worker.first_name;
-                document.getElementById('workerLastName').value = worker.last_name;
-                document.getElementById('workerEmail').value = worker.email;
-                document.getElementById('workerFNumber').value = worker.f_number || '';
-                document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
+                document.getElementById('workerFirstName').value = worker['First Name'];
+                document.getElementById('workerLastName').value = worker['Last Name'];
+                document.getElementById('workerEmail').value = worker['Email'];
+                document.getElementById('workerFNumber').value = worker['F Number'] || '';
+                document.getElementById('workerWorkStudy').value = worker['Work Study'] || 'No';
                 
                 // Set worker type, defaulting to 'Regular' if not set
-                document.getElementById('workerType').value = worker.worker_type || 'Regular';
+                document.getElementById('workerType').value = worker['Worker Type'] || 'Regular';
                 
                 // Clear existing slots and load worker's availability
                 clearAllAvailabilitySlots();
-                loadWorkerAvailability(worker.availability_text);
+                loadWorkerAvailability(worker['Days & Times Available']);
                 
                 closeModal('workersModal');
                 document.getElementById('workerFormModal').style.display = 'block';
@@ -14862,7 +14870,7 @@ Management Team`);
             
             // Initialize all workers with 0 hours
             workers.forEach(w => {
-                assignedHours[w.email] = 0;
+                assignedHours[w['Email']] = 0;
             });
             
             // Calculate hours from schedule with proper validation
