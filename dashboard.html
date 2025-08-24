@@ -5911,7 +5911,7 @@ Schedule generation has been stopped.`;
             
             // CRITICAL FIX: Final validation to ensure no negative or excessive hours
             console.log('🔍 Performing final schedule validation...');
-            const finalValidation = calculateAssignedHours(schedule);
+            const finalValidation = calculateAssignedHours(schedule, workersData);
             
             // Check for any critical issues
             const criticalIssues = [];
@@ -14560,10 +14560,22 @@ Management Team`);
         }
 
         // Enhanced utility functions - Email, Export, Print, Analysis
-        window.emailSchedule = function() {
+        window.emailSchedule = async function() {
             const scheduleElement = document.querySelector('.schedule-display');
             if (!scheduleElement) {
                 showNotification('❌ No schedule to email', 'error');
+                return;
+            }
+
+            // Load workers data for proper field names
+            let workersData = [];
+            try {
+                const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                workersData = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log('📧 Loaded workers data for email:', workersData.length, 'workers');
+            } catch (error) {
+                console.error('❌ Error loading workers data for email:', error);
+                showNotification('❌ Error loading worker data', 'error');
                 return;
             }
 
@@ -14588,9 +14600,9 @@ Management Team`);
             
             // Add worker summary
             emailBody += 'Worker Hours Summary:\n';
-            const assignedHours = calculateAssignedHours(schedule);
+            const assignedHours = calculateAssignedHours(schedule, workersData);
             Object.entries(assignedHours).forEach(([email, hours]) => {
-                const worker = workers.find(w => w['Email'] === email);
+                const worker = workersData.find(w => w['Email'] === email);
                 if (worker) {
                     emailBody += `  ${worker['First Name']} ${worker['Last Name']}: ${hours.toFixed(1)} hours\n`;
                 }
@@ -14661,13 +14673,25 @@ Management Team`);
             }, 1000);
         };
 
-        window.analyzeSchedule = function() {
+        window.analyzeSchedule = async function() {
             if (!schedule || Object.keys(schedule).length === 0) {
                 showNotification('❌ No schedule to analyze', 'error');
                 return;
             }
 
-            const assignedHours = calculateAssignedHours(schedule);
+            // Load workers data for proper field names
+            let workersData = [];
+            try {
+                const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                workersData = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log('📊 Loaded workers data for analysis:', workersData.length, 'workers');
+            } catch (error) {
+                console.error('❌ Error loading workers data for analysis:', error);
+                showNotification('❌ Error loading worker data', 'error');
+                return;
+            }
+
+            const assignedHours = calculateAssignedHours(schedule, workersData);
             const totalShifts = Object.values(schedule).flat().length;
             const unfilledCount = Object.values(schedule).flat().filter(s => 
                 s.assigned.includes('Unfilled') || s.assigned.includes('COVERAGE GAP')
@@ -14678,19 +14702,19 @@ Management Team`);
             const avgHoursPerWorker = Object.values(assignedHours).length > 0 ? 
                 (Object.values(assignedHours).reduce((a, b) => a + b, 0) / Object.values(assignedHours).length).toFixed(1) : 0;
             
-            const wsWorkers = workers.filter(w => w.work_study);
-            const wsWithCorrectHours = wsWorkers.filter(w => Math.abs(assignedHours[w.email] - 5) < 0.1).length;
+            const wsWorkers = workersData.filter(w => w['Work Study'] === 'Yes');
+            const wsWithCorrectHours = wsWorkers.filter(w => Math.abs(assignedHours[w['Email']] - 5) < 0.1).length;
             const wsCompliance = wsWorkers.length > 0 ? (wsWithCorrectHours / wsWorkers.length * 100).toFixed(1) : 100;
 
             // Enhanced validation and error detection
             const { coverageGaps } = validateScheduleCoverage(schedule, hours);
             const wsIssues = wsWorkers
-                .filter(w => Math.abs(assignedHours[w.email] - 5) > 0.1)
-                .map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`);
+                .filter(w => Math.abs(assignedHours[w['Email']] - 5) > 0.1)
+                .map(w => `${w['First Name']} ${w['Last Name']} (${assignedHours[w['Email']].toFixed(1)}h)`);
             
-            const lowHoursWorkers = workers
-                .filter(w => !w.work_study && assignedHours[w.email] < 3)
-                .map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`);
+            const lowHoursWorkers = workersData
+                .filter(w => w['Work Study'] !== 'Yes' && assignedHours[w['Email']] < 3)
+                .map(w => `${w['First Name']} ${w['Last Name']} (${assignedHours[w['Email']].toFixed(1)}h)`);
 
             const modal = document.createElement('div');
             modal.className = 'modal';
@@ -14784,6 +14808,16 @@ Management Team`);
                 currentActiveTab = 'current';
                 document.getElementById('scheduleDisplay').innerHTML = '<div class="loading">Loading current schedule...</div>';
                 
+                // Load workers data for proper field names
+                let workersData = [];
+                try {
+                    const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                    workersData = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log('📋 Loaded workers data for schedule display:', workersData.length, 'workers');
+                } catch (error) {
+                    console.error('❌ Error loading workers data:', error);
+                }
+                
                 // 🔄 AUTOMATIC COVERAGE PROCESSING - Process overdue coverage FIRST
                 console.log('🔄 AUTO-PROCESS - Starting automatic coverage processing...');
                 if (user.isAdmin) {
@@ -14821,13 +14855,13 @@ Management Team`);
                     const scheduleData = currentDoc.data();
                     schedule = scheduleData.days;
                     
-                    const assignedHours = calculateAssignedHours(schedule);
-                    const lowHours = workers
-                        .filter(w => !w.work_study && assignedHours[w.email] < 4)
-                        .map(w => `${w.first_name} ${w.last_name}`);
-                    const unassigned = workers
-                        .filter(w => assignedHours[w.email] === 0)
-                        .map(w => `${w.first_name} ${w.last_name}`);
+                    const assignedHours = calculateAssignedHours(schedule, workersData);
+                    const lowHours = workersData
+                        .filter(w => !w['Work Study'] && assignedHours[w['Email']] < 4)
+                        .map(w => `${w['First Name']} ${w['Last Name']}`);
+                    const unassigned = workersData
+                        .filter(w => assignedHours[w['Email']] === 0)
+                        .map(w => `${w['First Name']} ${w['Last Name']}`);
                     
                     const { coverageGaps } = validateScheduleCoverage(schedule, hours);
                     displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, true, coverageGaps);
@@ -14865,16 +14899,19 @@ Management Team`);
         }
         
         // Calculate assigned hours helper - FIXED VERSION
-        function calculateAssignedHours(schedule) {
+        function calculateAssignedHours(schedule, workersData = null) {
             const assignedHours = {};
+            
+            // Use provided workersData or fallback to global workers
+            const workersToUse = workersData || workers;
             
             console.log('🔍 DEBUGGING: calculateAssignedHours called');
             console.log('📊 Schedule object:', schedule);
-            console.log('👥 Workers array length:', workers.length);
-            console.log('👥 First worker sample:', workers[0]);
+            console.log('👥 Workers array length:', workersToUse.length);
+            console.log('👥 First worker sample:', workersToUse[0]);
             
             // Initialize all workers with 0 hours
-            workers.forEach(w => {
+            workersToUse.forEach(w => {
                 assignedHours[w['Email']] = 0;
                 console.log(`📧 Initialized worker: ${w['First Name']} ${w['Last Name']} (${w['Email']})`);
             });
@@ -15607,7 +15644,7 @@ Management Team`);
                 });
                 showNotification('✅ Shift added (not yet saved to database)', 'success');
                 closeModal('addShiftModal');
-                displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                displayEnhancedSchedule(schedule, {}, [], [], false, []);
                 // Update analysis in real-time if modal is open
                 updateScheduleAnalysis();
                 // Save to Firestore
@@ -15898,7 +15935,7 @@ Management Team`);
                 shift.is_work_study = hasWorkStudyWorker;
                 showNotification('✅ Shift updated (not yet saved to database)', 'success');
                 closeModal('editShiftModal');
-                displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                displayEnhancedSchedule(schedule, {}, [], [], false, []);
                 // Update analysis in real-time if modal is open
                 updateScheduleAnalysis();
                 // Save to Firestore
@@ -15946,7 +15983,7 @@ Management Team`);
             showNotification(`⭐ Shift ${formatTime(shift.start)}-${formatTime(shift.end)} (${workerNames}) ${statusText}`, 'success');
             
             // Update display
-            displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+            displayEnhancedSchedule(schedule, {}, [], [], false, []);
             
             // Save to database
             if (currentScheduleId) {
@@ -16217,7 +16254,7 @@ Management Team`);
                 closeModal('coverShiftModal');
                 
                 // Refresh the schedule display
-                displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+                displayEnhancedSchedule(schedule, {}, [], [], false, []);
                 
                 // Send notification to the cover worker
                 await sendCoverageNotification(selectedWorkerEmail, {
@@ -17969,7 +18006,7 @@ Thank you!`;
             // Remove from in-memory schedule
             schedule[day].splice(shiftIndex, 1);
             showNotification('🗑️ Shift removed (not yet saved to database)', 'success');
-            displayEnhancedSchedule(schedule, calculateAssignedHours(schedule), [], [], false, []);
+            displayEnhancedSchedule(schedule, {}, [], [], false, []);
             // Update analysis in real-time if modal is open
             updateScheduleAnalysis();
             // Save to Firestore
