@@ -4253,6 +4253,14 @@ Schedule generation has been stopped to prevent issues.`;
 
         // Enhanced scheduling algorithm with guaranteed coverage and work study protection
         const createShiftsFromAvailability = (hoursOfOperation, workersData, maxHoursPerWorker = 20, maxWorkersPerShift = 2, minHoursPerWorker = 3, ensureFullCoverage = true) => {
+            // 🎲 MASTER RANDOMIZATION SEED - ENSURE EVERY SCHEDULE IS DIFFERENT!
+            const masterSeed = Math.random() * 1000000;
+            console.log('🎲 MASTER SCHEDULE RANDOMIZATION SEED:', masterSeed);
+            
+            // 🎯 RANDOMIZE WORKER ORDER AT THE VERY START
+            workersData = shuffleArray([...workersData]);
+            console.log('🎲 WORKER ORDER RANDOMIZED:', workersData.map(w => w.name).slice(0, 5).join(', '), '...');
+            
             console.log('🚀 PRODUCTION: Starting enhanced schedule generation with comprehensive validation');
             
             // PRODUCTION-READY: Comprehensive input validation
@@ -4777,7 +4785,9 @@ Schedule generation has been stopped.`;
             console.log('✅ WORK STUDY VALIDATION PASSED - All work study workers have exactly 5 hours');
 
             // Phase 2: Enhanced Coverage Algorithm - Fill ALL operating hours
-            const orderedDays = [...DAYS].sort();
+            // 🎲 RANDOMIZE DAY PROCESSING ORDER for schedule variation
+            const orderedDays = shuffleArray([...DAYS]);
+            console.log('🎲 DAY PROCESSING ORDER:', orderedDays.join(', '));
             
             for (const day of orderedDays) {
                 const ops = hoursOfOperation[day] || [];
@@ -5047,7 +5057,45 @@ Schedule generation has been stopped.`;
                                     return ratioA - ratioB;
                                 });
 
-                                const chosen = availableWorkers.slice(0, maxWorkersPerShift);
+                                // 🎲 CRITICAL RANDOMIZATION FIX: Don't just take first workers - randomize selection!
+                                let chosen;
+                                if (availableWorkers.length <= maxWorkersPerShift) {
+                                    // If we have exactly enough or fewer workers, take all
+                                    chosen = availableWorkers;
+                                } else {
+                                    // 🎯 KEY FIX: When we have more workers than needed, randomize selection
+                                    // while still respecting work study priority
+                                    const workStudyWorkers = availableWorkers.filter(w => wsStatus[w.email] && assignedHours[w.email] < 5);
+                                    const regularWorkers = availableWorkers.filter(w => !wsStatus[w.email] || assignedHours[w.email] >= 5);
+                                    
+                                    chosen = [];
+                                    
+                                    // First, take work study workers up to maxWorkersPerShift
+                                    const wsToTake = Math.min(workStudyWorkers.length, maxWorkersPerShift);
+                                    if (wsToTake > 0) {
+                                        // 🎲 RANDOMIZE work study selection if more available than needed
+                                        if (workStudyWorkers.length > wsToTake) {
+                                            const shuffledWS = [...workStudyWorkers].sort(() => Math.random() - 0.5);
+                                            chosen.push(...shuffledWS.slice(0, wsToTake));
+                                        } else {
+                                            chosen.push(...workStudyWorkers);
+                                        }
+                                    }
+                                    
+                                    // Then fill remaining slots with regular workers
+                                    const remainingSlots = maxWorkersPerShift - chosen.length;
+                                    if (remainingSlots > 0 && regularWorkers.length > 0) {
+                                        // 🎲 RANDOMIZE regular worker selection
+                                        if (regularWorkers.length > remainingSlots) {
+                                            const shuffledRegular = [...regularWorkers].sort(() => Math.random() - 0.5);
+                                            chosen.push(...shuffledRegular.slice(0, remainingSlots));
+                                        } else {
+                                            chosen.push(...regularWorkers);
+                                        }
+                                    }
+                                    
+                                    console.log(`🎲 RANDOMIZED SELECTION: ${chosen.length}/${availableWorkers.length} workers chosen for ${day} ${hourToTime(cur)}`);
+                                }
 
                                 // ENHANCED: Create a single consolidated shift for multiple workers
                                 if (chosen.length > 0) {
@@ -5249,8 +5297,45 @@ Schedule generation has been stopped.`;
                                 return ratioDiff;
                             });
                             
-                            // Add the best candidates up to the needed count
-                            const workersToAdd = candidateWorkers.slice(0, neededWorkers);
+                            // 🎲 CRITICAL RANDOMIZATION FIX: Don't just take first candidates - randomize selection!
+                            let workersToAdd;
+                            if (candidateWorkers.length <= neededWorkers) {
+                                // If we have exactly enough or fewer workers, take all
+                                workersToAdd = candidateWorkers;
+                            } else {
+                                // 🎯 KEY FIX: When we have more candidates than needed, randomize selection
+                                // while still respecting work study priority
+                                const workStudyCandidates = candidateWorkers.filter(w => wsStatus[w.email] && assignedHours[w.email] < 5);
+                                const regularCandidates = candidateWorkers.filter(w => !wsStatus[w.email] || assignedHours[w.email] >= 5);
+                                
+                                workersToAdd = [];
+                                
+                                // First, take work study candidates up to neededWorkers
+                                const wsToTake = Math.min(workStudyCandidates.length, neededWorkers);
+                                if (wsToTake > 0) {
+                                    // 🎲 RANDOMIZE work study selection if more available than needed
+                                    if (workStudyCandidates.length > wsToTake) {
+                                        const shuffledWS = [...workStudyCandidates].sort(() => Math.random() - 0.5);
+                                        workersToAdd.push(...shuffledWS.slice(0, wsToTake));
+                                    } else {
+                                        workersToAdd.push(...workStudyCandidates);
+                                    }
+                                }
+                                
+                                // Then fill remaining slots with regular candidates
+                                const remainingSlots = neededWorkers - workersToAdd.length;
+                                if (remainingSlots > 0 && regularCandidates.length > 0) {
+                                    // 🎲 RANDOMIZE regular candidate selection
+                                    if (regularCandidates.length > remainingSlots) {
+                                        const shuffledRegular = [...regularCandidates].sort(() => Math.random() - 0.5);
+                                        workersToAdd.push(...shuffledRegular.slice(0, remainingSlots));
+                                    } else {
+                                        workersToAdd.push(...regularCandidates);
+                                    }
+                                }
+                                
+                                console.log(`🎲 GAP FILL RANDOMIZATION: ${workersToAdd.length}/${candidateWorkers.length} candidates chosen for gap fill`);
+                            }
                             
                             for (const worker of workersToAdd) {
                                 // Add worker to shift tracking
