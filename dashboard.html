@@ -2721,7 +2721,7 @@
 
         // Logging Configuration
         const LOG_CONFIG = {
-            level: 'production', // 'development' or 'production' - CHANGE THIS FOR DEVELOPMENT
+            level: 'development', // 'development' or 'production' - TEMPORARILY ENABLED FOR DEBUGGING
             enabledLevels: {
                 development: ['debug', 'info', 'warn', 'error'],
                 production: ['error'] // Only show errors in production
@@ -6959,6 +6959,11 @@ Examples:
                             fNumberFromDB: data['F Number'],
                             allData: data
                         });
+                        
+                        // 🚨 CRITICAL DEBUG - FORCE CONSOLE OUTPUT FOR F NUMBER LOAD
+                        if (data['F Number']) {
+                            window.alert(`Loaded F Number: "${data['F Number']}" for ${data['First Name']} ${data['Last Name']}`);
+                        }
                         
                         workers.push({
                             id: doc.id,
@@ -13036,6 +13041,9 @@ Management Team`);
                 willSave: fNumber || null
             });
             
+            // 🚨 CRITICAL DEBUG - FORCE CONSOLE OUTPUT
+            window.alert(`F Number Debug: Raw="${document.getElementById('workerFNumber').value}" Trimmed="${fNumber}" Valid=${/^F\d{8}$/.test(fNumber)}`);
+            
             logger.debug('Form data:', { firstName, lastName, email, fNumber, workStudy, workerType, availability });
             logger.debug('Raw availability value from form:', availability);
             logger.debug('Current availabilitySlots state:', availabilitySlots);
@@ -13104,6 +13112,9 @@ Management Team`);
             // 🔍 DEBUG Final worker data being saved
             console.log('🔍 Worker Data Debug - Final data being saved:', workerData);
             console.log('🔍 F Number specifically:', workerData['F Number']);
+            
+            // 🚨 CRITICAL DEBUG - FORCE CONSOLE OUTPUT FOR F NUMBER SAVE
+            window.alert(`About to save F Number: "${workerData['F Number']}" for worker: ${workerData['First Name']} ${workerData['Last Name']}`);
             
             console.log('Saving worker data:', workerData);
             
@@ -15257,9 +15268,22 @@ Management Team`);
             const endVal = shift.end;
             // Get workplace operating hours for this day
             const opHours = (hours[day] && hours[day][0]) ? hours[day][0] : { start: '00:00', end: '23:59' };
-            // Build worker lists
-            const availableWorkers = workers.filter(w => isWorkerAvailable(w, day, timeToHour(startVal), timeToHour(endVal)));
-            const unavailableWorkers = workers.filter(w => !isWorkerAvailable(w, day, timeToHour(startVal), timeToHour(endVal)));
+            
+            // 🔧 FIX: Function to recalculate worker availability based on current times
+            function updateWorkerLists() {
+                const currentStart = document.getElementById('editShiftStart').value;
+                const currentEnd = document.getElementById('editShiftEnd').value;
+                const startHour = timeToHour(currentStart);
+                const endHour = timeToHour(currentEnd);
+                
+                return {
+                    available: workers.filter(w => isWorkerAvailable(w, day, startHour, endHour)),
+                    unavailable: workers.filter(w => !isWorkerAvailable(w, day, startHour, endHour))
+                };
+            }
+            
+            // Initial calculation with current shift times
+            const { available: availableWorkers, unavailable: unavailableWorkers } = updateWorkerLists();
             // Format availability in AM/PM
             function formatAvail(w) {
                 return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
@@ -15321,6 +15345,77 @@ Management Team`);
             `;
             document.getElementById('editShiftModalBody').innerHTML = html;
             document.getElementById('editShiftModal').style.display = 'block';
+            
+            // 🔧 FIX: Add event listeners to time inputs to update worker availability in real-time
+            function updateWorkerListsInModal() {
+                const startInput = document.getElementById('editShiftStart');
+                const endInput = document.getElementById('editShiftEnd');
+                
+                if (!startInput || !endInput) return;
+                
+                const currentStart = startInput.value;
+                const currentEnd = endInput.value;
+                
+                if (!currentStart || !currentEnd) return;
+                
+                const startHour = timeToHour(currentStart);
+                const endHour = timeToHour(currentEnd);
+                
+                // Recalculate worker availability
+                const newAvailable = workers.filter(w => isWorkerAvailable(w, day, startHour, endHour));
+                const newUnavailable = workers.filter(w => !isWorkerAvailable(w, day, startHour, endHour));
+                
+                // Update the worker lists in the modal
+                const availableContainer = document.querySelector('#editShiftModal .edit-shift-section:nth-of-type(3) .edit-shift-workers-list');
+                const unavailableContainer = document.querySelector('#editShiftModal .edit-shift-section:nth-of-type(4) .edit-shift-workers-list');
+                
+                if (availableContainer) {
+                    availableContainer.innerHTML = '';
+                    newAvailable.forEach(w => {
+                        const checked = assignedEmails.has(w.email) ? 'checked' : '';
+                        availableContainer.innerHTML += `
+                            <div class="edit-shift-worker-item">
+                                <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                                <div>
+                                    <strong>${w.first_name} ${w.last_name}</strong>
+                                    <br><small style="color: #666;">${formatAvail(w)}</small>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                if (unavailableContainer) {
+                    unavailableContainer.innerHTML = '';
+                    newUnavailable.forEach(w => {
+                        const checked = assignedEmails.has(w.email) ? 'checked' : '';
+                        unavailableContainer.innerHTML += `
+                            <div class="edit-shift-worker-item" style="opacity: 0.6;">
+                                <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                                <div>
+                                    <strong>${w.first_name} ${w.last_name}</strong>
+                                    <br><small style="color: #666;">${formatAvail(w)}</small>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                // Re-attach event listeners for the new checkboxes
+                document.querySelectorAll('#editShiftModal input[name="editShiftWorker"]').forEach(input => {
+                    input.addEventListener('change', updateAssignedCount);
+                });
+                updateAssignedCount();
+            }
+            
+            // Add event listeners to time inputs
+            const startInput = document.getElementById('editShiftStart');
+            const endInput = document.getElementById('editShiftEnd');
+            if (startInput && endInput) {
+                startInput.addEventListener('change', updateWorkerListsInModal);
+                endInput.addEventListener('change', updateWorkerListsInModal);
+            }
+            
             // Selection logic
             function updateAssignedCount() {
                 const checked = document.querySelectorAll('#editShiftModal input[name="editShiftWorker"]:checked');
