@@ -8278,32 +8278,63 @@ Examples:
                 return;
             }
 
-            // 🧹 REFACTORED: Using centralized modal management
-            ModalManager.showLoading('workersModal', 'Loading enhanced worker management...');
+            // First open the modal and show loading
+            const modal = document.getElementById('workersModal');
+            if (!modal) {
+                console.error('Workers modal not found');
+                showNotification('❌ Workers modal not found', 'error');
+                return;
+            }
             
-            await loadWorkplaceData();
-            await displayEnhancedWorkersModal();
+            modal.style.display = 'block';
+            
+            // Set initial loading content
+            const modalContent = document.getElementById('workersModalContent');
+            if (!modalContent) {
+                console.error('Workers modal content not found');
+                showNotification('❌ Workers modal content not found', 'error');
+                return;
+            }
+            
+            modalContent.innerHTML = '<div class="loading">Loading enhanced worker management...</div>';
+            
+            try {
+                await loadWorkplaceData();
+                await displayEnhancedWorkersModal();
+            } catch (error) {
+                console.error('Error loading workers modal:', error);
+                modalContent.innerHTML = `
+                    <div class="error" style="padding: 2rem; text-align: center; color: #dc3545;">
+                        <h4>❌ Error Loading Worker Management</h4>
+                        <p>${error.message}</p>
+                        <button onclick="showManageWorkers()" class="btn btn-primary">🔄 Try Again</button>
+                    </div>
+                `;
+            }
         };
 
         async function displayEnhancedWorkersModal() {
             try {
+                console.log('Starting displayEnhancedWorkersModal');
+                
+                // Verify modal content element exists
+                const modalContent = document.getElementById('workersModalContent');
+                if (!modalContent) {
+                    throw new Error('Workers modal content element not found');
+                }
+                
                 // First load the workers data
                 let workers = [];
                 try {
                     const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
                     workers = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log('Loaded workers:', workers.length);
                 } catch (error) {
                     console.warn('Could not load workers data:', error);
                     workers = [];
                 }
                 
                 // Set up the modal structure with Workers tab active by default
-                const modalContent = document.getElementById('workersModalContent');
-                if (!modalContent) {
-                    console.error('Workers modal content element not found');
-                    return;
-                }
-                
                 modalContent.innerHTML = `
                     <div class="enhanced-worker-management">
                         <div class="tab-navigation">
@@ -8333,11 +8364,16 @@ Examples:
                     </div>
                 `;
                 
+                console.log('Modal content set, setting up tabs');
+                
                 // Add tab switching functionality
                 setupTabSwitching();
                 
                 // Display workers tab by default
+                console.log('Switching to workers tab');
                 await switchTab('workers');
+                
+                console.log('displayEnhancedWorkersModal completed successfully');
                 
             } catch (error) {
                 console.error('Error setting up enhanced worker modal:', error);
@@ -8676,56 +8712,78 @@ Examples:
         }
 
         async function switchTab(tabName) {
-            console.log('Switching to tab:', tabName);
-            
-            // Update tab button styles
-            const tabButtons = document.querySelectorAll('.tab-btn');
-            tabButtons.forEach(btn => {
-                btn.classList.remove('active');
-                btn.style.borderBottom = '2px solid transparent';
-                btn.style.color = '#666';
-                btn.style.fontWeight = 'normal';
-            });
+            try {
+                console.log('Switching to tab:', tabName);
+                
+                // Update tab button styles
+                const tabButtons = document.querySelectorAll('.tab-btn');
+                tabButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.style.borderBottom = '2px solid transparent';
+                    btn.style.color = '#666';
+                    btn.style.fontWeight = 'normal';
+                });
 
-            const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
-            if (activeButton) {
-                activeButton.classList.add('active');
-                activeButton.style.borderBottom = '2px solid #667eea';
-                activeButton.style.color = '#667eea';
-                activeButton.style.fontWeight = 'bold';
-            }
-            
-            // Update tab counts - load workers count dynamically
-            const workersTabBtn = document.querySelector('[data-tab="workers"]');
-            if (workersTabBtn && tabName === 'workers') {
-                try {
-                    const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
-                    const workersCount = workersSnapshot.size;
-                    workersTabBtn.innerHTML = `Workers (${workersCount})`;
-                } catch (error) {
-                    console.warn('Could not update workers count:', error);
-                    workersTabBtn.innerHTML = `Workers`;
+                const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+                if (activeButton) {
+                    activeButton.classList.add('active');
+                    activeButton.style.borderBottom = '2px solid #667eea';
+                    activeButton.style.color = '#667eea';
+                    activeButton.style.fontWeight = 'bold';
                 }
-            }
+                
+                // Update tab counts - load workers count dynamically
+                const workersTabBtn = document.querySelector('[data-tab="workers"]');
+                if (workersTabBtn && tabName === 'workers') {
+                    try {
+                        const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                        const workersCount = workersSnapshot.size;
+                        workersTabBtn.innerHTML = `Workers (${workersCount})`;
+                    } catch (error) {
+                        console.warn('Could not update workers count:', error);
+                        workersTabBtn.innerHTML = `Workers`;
+                    }
+                }
 
-            // Get the content container within the enhanced worker management structure
-            const contentContainer = document.querySelector('#workersModalContent .tab-content') || 
-                                   document.querySelector('#workersModalContent');
+                // Get the content container within the enhanced worker management structure
+                const contentContainer = document.querySelector('#workersModalContent .tab-content') || 
+                                       document.querySelector('#workersModalContent');
 
-            // Handle different tab content
-            switch(tabName) {
-                case 'workers':
-                    await displayWorkersTab(contentContainer);
-                    break;
-                case 'users':
-                    await displayUsersTab(contentContainer);
-                    break;
-                case 'import':
-                    displayImportExportTab(contentContainer);
-                    break;
-                case 'shift_postings':
-                    await displayShiftPostingsTab(contentContainer);
-                    break;
+                if (!contentContainer) {
+                    throw new Error('Content container not found');
+                }
+
+                // Handle different tab content
+                switch(tabName) {
+                    case 'workers':
+                        await displayWorkersTab(contentContainer);
+                        break;
+                    case 'users':
+                        await displayUsersTab(contentContainer);
+                        break;
+                    case 'import':
+                        displayImportExportTab(contentContainer);
+                        break;
+                    case 'shift_postings':
+                        await displayShiftPostingsTab(contentContainer);
+                        break;
+                    default:
+                        console.warn('Unknown tab:', tabName);
+                        contentContainer.innerHTML = '<div class="error">Unknown tab</div>';
+                }
+            } catch (error) {
+                console.error('Error switching tab:', error);
+                const contentContainer = document.querySelector('#workersModalContent .tab-content') || 
+                                       document.querySelector('#workersModalContent');
+                if (contentContainer) {
+                    contentContainer.innerHTML = `
+                        <div class="error" style="padding: 2rem; text-align: center; color: #dc3545;">
+                            <h4>❌ Error Loading Tab</h4>
+                            <p>${error.message}</p>
+                            <button onclick="switchTab('${tabName}')" class="btn btn-primary">🔄 Try Again</button>
+                        </div>
+                    `;
+                }
             }
         }
 
