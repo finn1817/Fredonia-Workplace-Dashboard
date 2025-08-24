@@ -7207,9 +7207,9 @@ Examples:
                             allData: data
                         });
                         
-                        // 🚨 CRITICAL DEBUG - FORCE CONSOLE OUTPUT FOR F NUMBER LOAD
+                        // Debug F Number loading
                         if (data['F Number']) {
-                            window.alert(`Loaded F Number: "${data['F Number']}" for ${data['First Name']} ${data['Last Name']}`);
+                            console.log(`Loaded F Number: "${data['F Number']}" for ${data['First Name']} ${data['Last Name']}`);
                         }
                         
                         workers.push({
@@ -8287,8 +8287,23 @@ Examples:
 
         async function displayEnhancedWorkersModal() {
             try {
+                // First load the workers data
+                let workers = [];
+                try {
+                    const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                    workers = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                } catch (error) {
+                    console.warn('Could not load workers data:', error);
+                    workers = [];
+                }
+                
                 // Set up the modal structure with Workers tab active by default
                 const modalContent = document.getElementById('workersModalContent');
+                if (!modalContent) {
+                    console.error('Workers modal content element not found');
+                    return;
+                }
+                
                 modalContent.innerHTML = `
                     <div class="enhanced-worker-management">
                         <div class="tab-navigation">
@@ -8326,9 +8341,18 @@ Examples:
                 
             } catch (error) {
                 console.error('Error setting up enhanced worker modal:', error);
-                document.getElementById('workersModalContent').innerHTML = `
-                    <div class="error">Error loading worker management: ${error.message}</div>
-                `;
+                const modalContent = document.getElementById('workersModalContent');
+                if (modalContent) {
+                    modalContent.innerHTML = `
+                        <div class="error" style="padding: 2rem; text-align: center; color: #dc3545;">
+                            <h4>❌ Error Loading Worker Management</h4>
+                            <p>${error.message}</p>
+                            <button onclick="displayEnhancedWorkersModal()" class="btn btn-primary">🔄 Try Again</button>
+                        </div>
+                    `;
+                } else {
+                    console.error('Workers modal content element not found');
+                }
             }
         }
 
@@ -8348,6 +8372,10 @@ Examples:
 
         async function displayEnhancedWorkersInModal() {
             try {
+                // First load workers data from workplace database
+                const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                const workers = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
                 // Load users from authentication database
                 const authConfig = {
                     apiKey: "AIzaSyAt_HJiP_uuWC7-AqMKlfLwjQFsESjB364",
@@ -8667,10 +8695,17 @@ Examples:
                 activeButton.style.fontWeight = 'bold';
             }
             
-            // Update tab counts
+            // Update tab counts - load workers count dynamically
             const workersTabBtn = document.querySelector('[data-tab="workers"]');
             if (workersTabBtn && tabName === 'workers') {
-                workersTabBtn.innerHTML = `Workers (${workers.length})`;
+                try {
+                    const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                    const workersCount = workersSnapshot.size;
+                    workersTabBtn.innerHTML = `Workers (${workersCount})`;
+                } catch (error) {
+                    console.warn('Could not update workers count:', error);
+                    workersTabBtn.innerHTML = `Workers`;
+                }
             }
 
             // Get the content container within the enhanced worker management structure
@@ -8756,6 +8791,10 @@ Examples:
 
         async function displayWorkersTab(contentContainer) {
             try {
+                // First load workers data from database
+                const workersSnapshot = await getDocs(collection(db, 'workplaces', selectedWorkplace, 'workers'));
+                const workers = workersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
                 // Sort workers alphabetically with pinned ones at top
                 const sortedWorkers = await sortWorkers(workers);
                 const pinnedList = await getPinnedWorkers();
@@ -13280,16 +13319,13 @@ Management Team`);
             const workerType = document.getElementById('workerType').value;
             let availability = document.getElementById('workerAvailability').value.trim();
             
-            // 🔍 DEBUG F Number processing
-            console.log('🔍 F Number Debug:', {
+            // Debug F Number processing
+            console.log('F Number Debug:', {
                 rawFNumber: document.getElementById('workerFNumber').value,
                 trimmedFNumber: fNumber,
                 isValid: /^F\d{8}$/.test(fNumber),
                 willSave: fNumber || null
             });
-            
-            // 🚨 CRITICAL DEBUG - FORCE CONSOLE OUTPUT
-            window.alert(`F Number Debug: Raw="${document.getElementById('workerFNumber').value}" Trimmed="${fNumber}" Valid=${/^F\d{8}$/.test(fNumber)}`);
             
             logger.debug('Form data:', { firstName, lastName, email, fNumber, workStudy, workerType, availability });
             logger.debug('Raw availability value from form:', availability);
@@ -13360,8 +13396,7 @@ Management Team`);
             console.log('🔍 Worker Data Debug - Final data being saved:', workerData);
             console.log('🔍 F Number specifically:', workerData['F Number']);
             
-            // 🚨 CRITICAL DEBUG - FORCE CONSOLE OUTPUT FOR F NUMBER SAVE
-            window.alert(`About to save F Number: "${workerData['F Number']}" for worker: ${workerData['First Name']} ${workerData['Last Name']}`);
+            console.log('About to save F Number:', workerData['F Number'], 'for worker:', workerData['First Name'], workerData['Last Name']);
             
             console.log('Saving worker data:', workerData);
             
