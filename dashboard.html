@@ -14868,23 +14868,36 @@ Management Team`);
         function calculateAssignedHours(schedule) {
             const assignedHours = {};
             
+            console.log('🔍 DEBUGGING: calculateAssignedHours called');
+            console.log('📊 Schedule object:', schedule);
+            console.log('👥 Workers array length:', workers.length);
+            console.log('👥 First worker sample:', workers[0]);
+            
             // Initialize all workers with 0 hours
             workers.forEach(w => {
                 assignedHours[w['Email']] = 0;
+                console.log(`📧 Initialized worker: ${w['First Name']} ${w['Last Name']} (${w['Email']})`);
             });
+            
+            console.log('🎯 Initialized assignedHours:', assignedHours);
             
             // Calculate hours from schedule with proper validation
             Object.values(schedule).forEach(shifts => {
+                console.log('📅 Processing shifts:', shifts);
                 shifts.forEach(shift => {
+                    console.log('⏰ Processing shift:', shift);
+                    
                     // Skip invalid shifts
                     if (!shift.start || !shift.end || !shift.raw_assigned) {
-                        console.warn('Skipping invalid shift:', shift);
+                        console.warn('⚠️ Skipping invalid shift:', shift);
                         return;
                     }
                     
+                    console.log('📧 Shift raw_assigned:', shift.raw_assigned);
+                    
                     // Validate time strings before conversion
                     if (!validateTimeConversion(shift.start) || !validateTimeConversion(shift.end)) {
-                        console.error('Invalid time format in shift:', shift);
+                        console.error('❌ Invalid time format in shift:', shift);
                         return;
                     }
                     
@@ -14899,25 +14912,50 @@ Management Team`);
                     
                     const duration = endHour - startHour;
                     
+                    console.log(`⏱️ Calculated duration: ${duration} hours (${shift.start} to ${shift.end})`);
+                    
                     // Validate duration
                     if (duration <= 0 || duration > 24) {
-                        console.error('Invalid shift duration:', duration, 'for shift:', shift);
+                        console.error('❌ Invalid shift duration:', duration, 'for shift:', shift);
                         return;
                     }
                     
                     // Add hours to each assigned worker
                     shift.raw_assigned.forEach(email => {
+                        console.log(`📧 Trying to assign ${duration} hours to email: ${email}`);
+                        console.log(`🔍 Available emails in assignedHours:`, Object.keys(assignedHours));
+                        
                         if (assignedHours.hasOwnProperty(email)) {
                             assignedHours[email] += duration;
+                            console.log(`✅ Successfully added ${duration} hours to ${email}, total now: ${assignedHours[email]}`);
                         } else {
-                            console.warn('Worker email not found in assignedHours:', email);
+                            console.warn(`⚠️ Worker email not found in assignedHours: ${email}`);
+                            console.log('🔍 Trying case-insensitive match...');
+                            
+                            // Try case-insensitive match
+                            const foundKey = Object.keys(assignedHours).find(key => 
+                                key.toLowerCase() === email.toLowerCase()
+                            );
+                            
+                            if (foundKey) {
+                                assignedHours[foundKey] += duration;
+                                console.log(`✅ Case-insensitive match! Added ${duration} hours to ${foundKey}, total now: ${assignedHours[foundKey]}`);
+                            } else {
+                                console.error(`❌ No match found for email: ${email}`);
+                                // Add to assignedHours anyway so we can see the discrepancy
+                                assignedHours[email] = duration;
+                                console.log(`🆕 Created new entry for ${email} with ${duration} hours`);
+                            }
                         }
                     });
                 });
             });
             
+            console.log('📊 Final assignedHours before validation:', assignedHours);
+            
             // Validate final hours
             Object.entries(assignedHours).forEach(([email, hours]) => {
+                console.log(`👤 Final hours for ${email}: ${hours}`);
                 if (hours < 0) {
                     console.error('CRITICAL: Negative hours detected for', email, ':', hours);
                     assignedHours[email] = 0; // Reset to 0 to prevent negative display
@@ -14927,6 +14965,7 @@ Management Team`);
                 }
             });
             
+            console.log('✅ Final calculated assignedHours:', assignedHours);
             return assignedHours;
         }
 
