@@ -6658,6 +6658,13 @@ Examples:
                         const data = doc.data();
                         const availability = parseAvailability(data['Days & Times Available'] || '');
                         
+                        // 🔍 DEBUG F Number loading
+                        console.log(`🔍 Loading worker ${doc.id}:`, {
+                            email: data['Email'],
+                            fNumberFromDB: data['F Number'],
+                            allData: data
+                        });
+                        
                         workers.push({
                             id: doc.id,
                             first_name: data['First Name'] || 'Unknown',
@@ -12718,6 +12725,14 @@ Management Team`);
             const workerType = document.getElementById('workerType').value;
             let availability = document.getElementById('workerAvailability').value.trim();
             
+            // 🔍 DEBUG F Number processing
+            console.log('🔍 F Number Debug:', {
+                rawFNumber: document.getElementById('workerFNumber').value,
+                trimmedFNumber: fNumber,
+                isValid: /^F\d{8}$/.test(fNumber),
+                willSave: fNumber || null
+            });
+            
             logger.debug('Form data:', { firstName, lastName, email, fNumber, workStudy, workerType, availability });
             logger.debug('Raw availability value from form:', availability);
             logger.debug('Current availabilitySlots state:', availabilitySlots);
@@ -12782,6 +12797,10 @@ Management Team`);
                 'updated_at': new Date().toISOString(),
                 'updated_by': user.email
             };
+            
+            // 🔍 DEBUG Final worker data being saved
+            console.log('🔍 Worker Data Debug - Final data being saved:', workerData);
+            console.log('🔍 F Number specifically:', workerData['F Number']);
             
             console.log('Saving worker data:', workerData);
             
