@@ -12672,9 +12672,21 @@ Management Team`);
 
             try {
                 await deleteDoc(doc(db, 'workplaces', selectedWorkplace, 'workers', workerId));
+                
+                // Remove worker from pinned list if they were pinned
+                const pinnedList = await getPinnedWorkers();
+                if (pinnedList.includes(workerId)) {
+                    const updatedPinned = pinnedList.filter(id => id !== workerId);
+                    await setPinnedWorkers(updatedPinned);
+                }
+                
                 showNotification('✅ Worker deleted successfully!', 'success');
+                
+                // Refresh all worker data and UI
                 await loadWorkplaceData();
-                displayWorkersInModal();
+                displayWorkersInModal(); // Refresh the modal
+                await viewWorkers(); // Refresh the main worker display with stats and pins
+                
             } catch (error) {
                 console.error('Error deleting worker:', error);
                 showNotification('❌ Error deleting worker', 'error');
