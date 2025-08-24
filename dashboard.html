@@ -4330,7 +4330,7 @@ Schedule generation has been stopped to prevent issues.`;
             const warnings = [];
             
             // Validate worker exists
-            if (!worker || !worker.email) {
+            if (!worker || !worker['Email']) {
                 errors.push('Invalid worker data');
                 return { valid: false, errors, warnings };
             }
@@ -4360,7 +4360,7 @@ Schedule generation has been stopped to prevent issues.`;
             }
             
             // Check hours limit
-            const currentHours = assignedHours[worker.email] || 0;
+            const currentHours = assignedHours[worker['Email']] || 0;
             if (currentHours + duration > maxHoursPerWorker) {
                 errors.push(`Worker ${worker['First Name']} ${worker['Last Name']} would exceed max hours (${currentHours + duration} > ${maxHoursPerWorker})`);
                 return { valid: false, errors, warnings };
@@ -4368,7 +4368,7 @@ Schedule generation has been stopped to prevent issues.`;
             
             // Check duplicate assignment
             const shiftKey = `${day}_${start}_${end}`;
-            if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(worker.email)) {
+            if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(worker['Email'])) {
                 errors.push(`Worker ${worker['First Name']} ${worker['Last Name']} already assigned to ${day} ${start}-${end}`);
                 return { valid: false, errors, warnings };
             }
@@ -4462,10 +4462,10 @@ Schedule generation has been stopped to prevent issues.`;
                 if (!shiftAssignments.has(shiftKey)) {
                     shiftAssignments.set(shiftKey, new Set());
                 }
-                shiftAssignments.get(shiftKey).add(worker.email);
+                shiftAssignments.get(shiftKey).add(worker['Email']);
                 
                 // Update hours
-                assignedHours[worker.email] = (assignedHours[worker.email] || 0) + duration;
+                assignedHours[worker['Email']] = (assignedHours[worker['Email']] || 0) + duration;
                 
                 // Create or update shift
                 if (!schedule[day]) schedule[day] = [];
@@ -4473,7 +4473,7 @@ Schedule generation has been stopped to prevent issues.`;
                 const existingShift = schedule[day].find(s => s.start === start && s.end === end);
                 if (existingShift) {
                     existingShift.assigned.push(`${worker['First Name']} ${worker['Last Name']}`);
-                    existingShift.raw_assigned.push(worker.email);
+                    existingShift.raw_assigned.push(worker['Email']);
                     existingShift.all_available.push(worker);
                 } else {
                     schedule[day].push({
@@ -4592,7 +4592,7 @@ Schedule generation has been stopped to prevent issues.`;
 
             // 🧹 REFACTORED: Using centralized worker categorization  
             const wsWorkers = workStudyWorkers; // Already filtered above
-            wsWorkers.sort((a, b) => availabilityHours[a.email] - availabilityHours[b.email]);
+            wsWorkers.sort((a, b) => availabilityHours[a['Email']] - availabilityHours[b['Email']]);
 
             const wsAvailabilityIssues = checkWorkStudyAvailability(wsWorkers, hoursOfOperation);
             
@@ -4625,7 +4625,7 @@ Schedule generation has been stopped to prevent issues.`;
 
             // Phase 1: Work Study Allocation (exactly 5 hours each) - ENHANCED
             for (const w of wsWorkers) {
-                const email = w.email;
+                const email = w['Email'];
                 let remaining = 5.0;
 
                 // Find all available windows for this work study student
@@ -4985,7 +4985,7 @@ Schedule generation has been stopped to prevent issues.`;
             console.log('🔍 VALIDATING WORK STUDY ASSIGNMENTS...');
             const workStudyValidationErrors = [];
             for (const w of wsWorkers) {
-                const email = w.email;
+                const email = w['Email'];
                 const actualHours = assignedHours[email] || 0;
                 if (Math.abs(actualHours - 5) > 0.1) {
                     workStudyValidationErrors.push(`${w.first_name} ${w.last_name}: got ${actualHours.toFixed(1)} hours instead of 5`);
@@ -5184,7 +5184,7 @@ Schedule generation has been stopped.`;
                                         continue;
                                     }
                                     
-                                    const xEmail = x.email;
+                                    const xEmail = x['Email'];
                                     
                                     // Skip work study students who already have 5 hours
                                     if (wsStatus[xEmail] && assignedHours[xEmail] >= 5) continue;
@@ -5249,18 +5249,18 @@ Schedule generation has been stopped.`;
 
                                 // Sort by priority: work study students with 0 hours get absolute priority
                                 availableWorkers.sort((a, b) => {
-                                    const aIsWS = wsStatus[a.email];
-                                    const bIsWS = wsStatus[b.email];
-                                    const aHours = assignedHours[a.email] || 0;
-                                    const bHours = assignedHours[b.email] || 0;
+                                    const aIsWS = wsStatus[a['Email']];
+                                    const bIsWS = wsStatus[b['Email']];
+                                    const aHours = assignedHours[a['Email']] || 0;
+                                    const bHours = assignedHours[b['Email']] || 0;
                                     
                                     // Work study students with 0 hours get absolute priority
                                     if (aIsWS && aHours === 0 && !bIsWS) return -1;
                                     if (bIsWS && bHours === 0 && !aIsWS) return 1;
                                     if (aIsWS && aHours === 0 && bIsWS && bHours === 0) {
                                         // 🎲 RANDOMIZATION: Among equal work study students, randomize
-                                        const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
-                                        const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                        const ratioA = aHours / Math.max(availabilityHours[a['Email']], 1);
+                                        const ratioB = bHours / Math.max(availabilityHours[b['Email']], 1);
                                         const ratioDiff = ratioA - ratioB;
                                         if (Math.abs(ratioDiff) < 0.1) {
                                             return (Math.random() - 0.5); // Random tie-breaker
@@ -5279,8 +5279,8 @@ Schedule generation has been stopped.`;
                                     if (!aIsWS && aHours === 0 && bIsWS) return -1;
                                     if (!bIsWS && bHours === 0 && aIsWS) return 1;
                                     if (!aIsWS && aHours === 0 && !bIsWS && bHours === 0) {
-                                        const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
-                                        const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                        const ratioA = aHours / Math.max(availabilityHours[a['Email']], 1);
+                                        const ratioB = bHours / Math.max(availabilityHours[b['Email']], 1);
                                         return ratioA - ratioB;
                                     }
                                     
@@ -5297,8 +5297,8 @@ Schedule generation has been stopped.`;
                                     }
                                     
                                     // Finally, fallback to original fairness ratio for edge cases
-                                    const ratioA = assignedHours[a.email] / Math.max(availabilityHours[a.email], 1);
-                                    const ratioB = assignedHours[b.email] / Math.max(availabilityHours[b.email], 1);
+                                    const ratioA = assignedHours[a['Email']] / Math.max(availabilityHours[a['Email']], 1);
+                                    const ratioB = assignedHours[b['Email']] / Math.max(availabilityHours[b['Email']], 1);
                                     return ratioA - ratioB;
                                 });
 
@@ -5354,7 +5354,7 @@ Schedule generation has been stopped.`;
                                     
                                     for (const x of chosen) {
                                         // CRITICAL FIX: Check for duplicate assignment
-                                        if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(x.email)) {
+                                        if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(x['Email'])) {
                                             console.warn(`⚠️ Worker ${x.first_name} ${x.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping assignment`);
                                             continue;
                                         }
@@ -5363,14 +5363,14 @@ Schedule generation has been stopped.`;
                                         if (!shiftAssignments.has(shiftKey)) {
                                             shiftAssignments.set(shiftKey, new Set());
                                         }
-                                        shiftAssignments.get(shiftKey).add(x.email);
+                                        shiftAssignments.get(shiftKey).add(x['Email']);
                                         
                                         // CRITICAL FIX: Add hours only once
-                                        assignedHours[x.email] += finalDuration;
+                                        assignedHours[x['Email']] += finalDuration;
                                         console.log(`Adding ${x.first_name} ${x.last_name} to shift: ${shiftStart}-${shiftEnd}`);
                                         
                                         assignedWorkers.push(`${x.first_name} ${x.last_name}`);
-                                        rawAssigned.push(x.email);
+                                        rawAssigned.push(x['Email']);
                                     }
                                     
                                     // Create a single consolidated shift with all workers
@@ -5463,7 +5463,7 @@ Schedule generation has been stopped.`;
                                 continue;
                             }
                             
-                            const email = worker.email;
+                            const email = worker['Email'];
                             
                             // Skip if worker is already assigned to this shift
                             if (shift.raw_assigned.includes(email)) continue;
@@ -5481,18 +5481,18 @@ Schedule generation has been stopped.`;
                         if (candidateWorkers.length > 0) {
                             // Sort candidates using same priority logic as main algorithm
                             candidateWorkers.sort((a, b) => {
-                                const aIsWS = wsStatus[a.email];
-                                const bIsWS = wsStatus[b.email];
-                                const aHours = assignedHours[a.email] || 0;
-                                const bHours = assignedHours[b.email] || 0;
+                                const aIsWS = wsStatus[a['Email']];
+                                const bIsWS = wsStatus[b['Email']];
+                                const aHours = assignedHours[a['Email']] || 0;
+                                const bHours = assignedHours[b['Email']] || 0;
                                 
                                 // Work study students with 0 hours get absolute priority
                                 if (aIsWS && aHours === 0 && !bIsWS) return -1;
                                 if (bIsWS && bHours === 0 && !aIsWS) return 1;
                                 if (aIsWS && aHours === 0 && bIsWS && bHours === 0) {
                                     // 🎲 RANDOMIZATION: Among equal work study students with 0 hours
-                                    const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
-                                    const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                    const ratioA = aHours / Math.max(availabilityHours[a['Email']], 1);
+                                    const ratioB = bHours / Math.max(availabilityHours[b['Email']], 1);
                                     const ratioDiff = ratioA - ratioB;
                                     if (Math.abs(ratioDiff) < 0.1) {
                                         return (Math.random() - 0.5); // Random tie-breaker
@@ -5512,8 +5512,8 @@ Schedule generation has been stopped.`;
                                 if (!bIsWS && bHours === 0 && aIsWS) return 1;
                                 if (!aIsWS && aHours === 0 && !bIsWS && bHours === 0) {
                                     // 🎲 RANDOMIZATION: Among equal regular workers with 0 hours
-                                    const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
-                                    const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
+                                    const ratioA = aHours / Math.max(availabilityHours[a['Email']], 1);
+                                    const ratioB = bHours / Math.max(availabilityHours[b['Email']], 1);
                                     const ratioDiff = ratioA - ratioB;
                                     if (Math.abs(ratioDiff) < 0.1) {
                                         return (Math.random() - 0.5); // Random tie-breaker
@@ -5531,8 +5531,8 @@ Schedule generation has been stopped.`;
                                 }
                                 
                                 // Finally, fallback to original fairness ratio with randomization
-                                const ratioA = assignedHours[a.email] / Math.max(availabilityHours[a.email], 1);
-                                const ratioB = assignedHours[b.email] / Math.max(availabilityHours[b.email], 1);
+                                const ratioA = assignedHours[a['Email']] / Math.max(availabilityHours[a['Email']], 1);
+                                const ratioB = assignedHours[b['Email']] / Math.max(availabilityHours[b['Email']], 1);
                                 const ratioDiff = ratioA - ratioB;
                                 
                                 // 🎲 RANDOMIZATION: If workers have similar ratios, add randomness
@@ -5587,15 +5587,15 @@ Schedule generation has been stopped.`;
                                 if (!shiftAssignments.has(shiftKey)) {
                                     shiftAssignments.set(shiftKey, new Set());
                                 }
-                                shiftAssignments.get(shiftKey).add(worker.email);
+                                shiftAssignments.get(shiftKey).add(worker['Email']);
                                 
                                 // Add worker to shift
                                 shift.assigned.push(`${worker.first_name} ${worker.last_name}`);
-                                shift.raw_assigned.push(worker.email);
+                                shift.raw_assigned.push(worker['Email']);
                                 shift.all_available.push(worker);
                                 
                                 // Update worker hours
-                                assignedHours[worker.email] += shiftDuration;
+                                assignedHours[worker['Email']] += shiftDuration;
                                 
                                 console.log(`✅ Added ${worker.first_name} ${worker.last_name} to existing shift ${day} ${shift.start}-${shift.end} (${shiftDuration}h)`);
                             }
@@ -5616,22 +5616,22 @@ Schedule generation has been stopped.`;
 
             // Build summaries
             const lowHours = workersData
-                .filter(w => !wsStatus[w.email] && assignedHours[w.email] < 4)
+                .filter(w => !wsStatus[w['Email']] && assignedHours[w['Email']] < 4)
                 .map(w => `${w.first_name} ${w.last_name}`);
                 
             const unassigned = workersData
-                .filter(w => assignedHours[w.email] === 0)
+                .filter(w => assignedHours[w['Email']] === 0)
                 .map(w => `${w.first_name} ${w.last_name}`);
 
             // Enhanced work study validation and reporting
             const wsIssues = [
                 ...initialWsIssues,
                 ...workersData
-                    .filter(w => wsStatus[w.email] && Math.abs(assignedHours[w.email] - 5) > 0.1)
+                    .filter(w => wsStatus[w['Email']] && Math.abs(assignedHours[w['Email']] - 5) > 0.1)
                     .filter(w => !initialWsIssues.some(issue => 
                         issue.startsWith(`${w.first_name} ${w.last_name}:`)))
                     .map(w => {
-                        const hours = assignedHours[w.email];
+                        const hours = assignedHours[w['Email']];
                         if (hours < 5) {
                             return `${w.first_name} ${w.last_name} (${hours.toFixed(1)}h) - INSUFFICIENT HOURS - Work study students MUST have exactly 5 hours`;
                         } else {
@@ -5642,8 +5642,8 @@ Schedule generation has been stopped.`;
             
             // Log work study assignment summary
             const wsSummary = workersData
-                .filter(w => wsStatus[w.email])
-                .map(w => `${w.first_name} ${w.last_name}: ${assignedHours[w.email].toFixed(1)}h`);
+                .filter(w => wsStatus[w['Email']])
+                .map(w => `${w.first_name} ${w.last_name}: ${assignedHours[w['Email']].toFixed(1)}h`);
             
             console.log('Work Study Assignment Summary:', wsSummary);
             
@@ -5652,12 +5652,12 @@ Schedule generation has been stopped.`;
             const wsWithIssues = WorkerFilters.filterWorkStudy(workersData, wsStatus, assignedHours).withIssues;
             if (wsWithIssues.length > 0) {
                 console.error('🚨 CRITICAL: Work study students without exactly 5 hours:', 
-                    wsWithIssues.map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`));
+                    wsWithIssues.map(w => `${w.first_name} ${w.last_name} (${assignedHours[w['Email']].toFixed(1)}h)`));
             }
 
             const minHoursIssues = workersData
-                .filter(w => !wsStatus[w.email] && w.worker_type !== 'Cover' && assignedHours[w.email] < minHoursPerWorker && assignedHours[w.email] > 0)
-                .map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`);
+                .filter(w => !wsStatus[w['Email']] && w.worker_type !== 'Cover' && assignedHours[w['Email']] < minHoursPerWorker && assignedHours[w['Email']] > 0)
+                .map(w => `${w.first_name} ${w.last_name} (${assignedHours[w['Email']].toFixed(1)}h)`);
 
             // Alternative solutions
             const altSols = {};
@@ -5667,7 +5667,7 @@ Schedule generation has been stopped.`;
                     // Exclude Cover workers from automatic schedule generation
                     if (w.worker_type === 'Cover') return false;
                     return isWorkerAvailable(w, us.day, us.start_hour, us.end_hour) &&
-                           assignedHours[w.email] + (us.end_hour - us.start_hour) <= maxHoursPerWorker * 1.2;
+                           assignedHours[w['Email']] + (us.end_hour - us.start_hour) <= maxHoursPerWorker * 1.2;
                 });
                 
                 if (sols.length > 0) {
@@ -5687,10 +5687,10 @@ Schedule generation has been stopped.`;
                     if (!isWorkerAvailable(w, us.day, us.start_hour, us.end_hour)) return false;
                     
                     // Skip work study students who already have 5 hours (they should not be forced into additional shifts)
-                    if (wsStatus[w.email] && assignedHours[w.email] >= 5) return false;
+                    if (wsStatus[w['Email']] && assignedHours[w['Email']] >= 5) return false;
                     
                     // Not already assigned to an overlapping or adjacent shift
-                    const assignedShifts = Object.values(schedule).flat().filter(s => (s.raw_assigned||[]).includes(w.email));
+                    const assignedShifts = Object.values(schedule).flat().filter(s => (s.raw_assigned||[]).includes(w['Email']));
                     for (const s of assignedShifts) {
                         const sDay = s.day || Object.keys(schedule).find(d => schedule[d].includes(s));
                         if (sDay !== us.day) continue;
@@ -5701,16 +5701,16 @@ Schedule generation has been stopped.`;
                         if (Math.abs(us.start_hour - sEnd) < 0.01 || Math.abs(us.end_hour - sStart) < 0.01) return false;
                     }
                     // Not over max hours
-                    if ((assignedHours[w.email] || 0) + (us.end_hour - us.start_hour) > maxHoursPerWorker) return false;
+                    if ((assignedHours[w['Email']] || 0) + (us.end_hour - us.start_hour) > maxHoursPerWorker) return false;
                     return true;
                 });
                 
                 // Enhanced prioritization: work study students with less than 5 hours get highest priority
                 eligible.sort((a, b) => {
-                    const aHours = assignedHours[a.email] || 0;
-                    const bHours = assignedHours[b.email] || 0;
-                    const aIsWS = wsStatus[a.email];
-                    const bIsWS = wsStatus[b.email];
+                    const aHours = assignedHours[a['Email']] || 0;
+                    const bHours = assignedHours[b['Email']] || 0;
+                    const aIsWS = wsStatus[a['Email']];
+                    const bIsWS = wsStatus[b['Email']];
                     
                     // Work study students with less than 5 hours get highest priority
                     if (aIsWS && aHours < 5 && !bIsWS) return -1;
@@ -5735,7 +5735,7 @@ Schedule generation has been stopped.`;
                     
                     // CRITICAL FIX: Check for duplicate assignment using new tracking
                     const shiftKey = `${us.day}_${shiftStart}_${shiftEnd}`;
-                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(chosen.email)) {
+                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(chosen['Email'])) {
                         console.warn(`⚠️ Worker ${chosen.first_name} ${chosen.last_name} already assigned to ${shiftStart}-${shiftEnd}, skipping unfilled shift assignment`);
                         continue;
                     }
@@ -5746,7 +5746,7 @@ Schedule generation has been stopped.`;
                     if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
                         // Add worker to existing shift
                         existingShift.assigned.push(`${chosen.first_name} ${chosen.last_name}`);
-                        existingShift.raw_assigned.push(chosen.email);
+                        existingShift.raw_assigned.push(chosen['Email']);
                         existingShift.all_available.push(chosen);
                         existingShift.forced = true;
                         
@@ -5754,7 +5754,7 @@ Schedule generation has been stopped.`;
                         if (!shiftAssignments.has(shiftKey)) {
                             shiftAssignments.set(shiftKey, new Set());
                         }
-                        shiftAssignments.get(shiftKey).add(chosen.email);
+                        shiftAssignments.get(shiftKey).add(chosen['Email']);
                         
                         console.log(`Forced assignment: ${chosen.first_name} ${chosen.last_name} added to existing shift ${us.start}-${us.end}`);
                     } else {
@@ -5762,10 +5762,10 @@ Schedule generation has been stopped.`;
                         if (!shiftAssignments.has(shiftKey)) {
                             shiftAssignments.set(shiftKey, new Set());
                         }
-                        shiftAssignments.get(shiftKey).add(chosen.email);
+                        shiftAssignments.get(shiftKey).add(chosen['Email']);
                         
                         // CRITICAL FIX: Add hours only once
-                        assignedHours[chosen.email] = (assignedHours[chosen.email] || 0) + (us.end_hour - us.start_hour);
+                        assignedHours[chosen['Email']] = (assignedHours[chosen['Email']] || 0) + (us.end_hour - us.start_hour);
                         
                         if (!schedule[us.day]) schedule[us.day] = [];
                         schedule[us.day].push({
@@ -5792,9 +5792,9 @@ Schedule generation has been stopped.`;
 
             // Final validation: Ensure work study students have exactly 5 hours
             const finalWsValidation = workersData
-                .filter(w => wsStatus[w.email])
+                .filter(w => wsStatus[w['Email']])
                 .map(w => {
-                    const hours = assignedHours[w.email];
+                    const hours = assignedHours[w['Email']];
                     if (Math.abs(hours - 5) > 0.1) {
                         console.error(`🚨 FINAL VALIDATION FAILED: ${w.first_name} ${w.last_name} has ${hours.toFixed(1)} hours instead of 5`);
                         return w;
@@ -5814,23 +5814,23 @@ Schedule generation has been stopped.`;
                     
                     // Find ANY available slot and force assign
                     for (const [day, ops] of Object.entries(hoursOfOperation)) {
-                        if (assignedHours[w.email] >= 5) break;
+                        if (assignedHours[w['Email']] >= 5) break;
                         
                         for (const op of ops) {
-                            if (assignedHours[w.email] >= 5) break;
+                            if (assignedHours[w['Email']] >= 5) break;
                             
                             let opStart = timeToHour(op.start);
                             let opEnd = timeToHour(op.end);
                             if (opEnd <= opStart) opEnd += 24;
 
                             for (const a of w.availability[day] || []) {
-                                if (assignedHours[w.email] >= 5) break;
+                                if (assignedHours[w['Email']] >= 5) break;
                                 
                                 const s = Math.max(opStart, a.start_hour);
                                 const e = Math.min(opEnd, a.end_hour);
                                 if (e > s) {
                                     const availableDuration = e - s;
-                                    const remainingNeeded = 5 - assignedHours[w.email];
+                                    const remainingNeeded = 5 - assignedHours[w['Email']];
                                     const assignDuration = Math.min(availableDuration, remainingNeeded);
                                     
                                     // Force create a shift regardless of existing coverage
@@ -5839,7 +5839,7 @@ Schedule generation has been stopped.`;
                                     const shiftKey = `${day}_${slotStart}_${slotEnd}`;
                                     
                                     // Check for duplicate assignment
-                                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(w.email)) {
+                                    if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(w['Email'])) {
                                         console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping emergency assignment`);
                                         continue;
                                     }
@@ -5850,7 +5850,7 @@ Schedule generation has been stopped.`;
                                     if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
                                         // Add worker to existing shift
                                         existingShift.assigned.push(`${w.first_name} ${w.last_name}`);
-                                        existingShift.raw_assigned.push(w.email);
+                                        existingShift.raw_assigned.push(w['Email']);
                                         existingShift.all_available.push(w);
                                         existingShift.is_work_study = true;
                                         existingShift.emergency_assignment = true;
@@ -5859,7 +5859,7 @@ Schedule generation has been stopped.`;
                                         if (!shiftAssignments.has(shiftKey)) {
                                             shiftAssignments.set(shiftKey, new Set());
                                         }
-                                        shiftAssignments.get(shiftKey).add(w.email);
+                                        shiftAssignments.get(shiftKey).add(w['Email']);
                                         
                                         console.log(`EMERGENCY assignment: ${w.first_name} ${w.last_name} added to existing shift ${slotStart}-${slotEnd}`);
                                     } else {
@@ -5867,7 +5867,7 @@ Schedule generation has been stopped.`;
                                         if (!shiftAssignments.has(shiftKey)) {
                                             shiftAssignments.set(shiftKey, new Set());
                                         }
-                                        shiftAssignments.get(shiftKey).add(w.email);
+                                        shiftAssignments.get(shiftKey).add(w['Email']);
                                         
                                         if (!schedule[day]) schedule[day] = [];
                                         
@@ -5876,7 +5876,7 @@ Schedule generation has been stopped.`;
                                             end: slotEnd,
                                             assigned: [`${w.first_name} ${w.last_name}`],
                                             available: [`${w.first_name} ${w.last_name}`],
-                                            raw_assigned: [w.email],
+                                            raw_assigned: [w['Email']],
                                             all_available: [w],
                                             is_work_study: true,
                                             forced_shift: true,
@@ -5886,7 +5886,7 @@ Schedule generation has been stopped.`;
                                         console.log(`EMERGENCY assignment: ${w.first_name} ${w.last_name} created new shift ${slotStart}-${slotEnd}`);
                                     }
                                     
-                                    assignedHours[w.email] += assignDuration;
+                                    assignedHours[w['Email']] += assignDuration;
                                     console.log(`EMERGENCY assignment: ${w.first_name} ${w.last_name} force assigned ${assignDuration.toFixed(1)}h at ${slotStart}-${slotEnd}`);
                                     break;
                                 }
@@ -5894,17 +5894,17 @@ Schedule generation has been stopped.`;
                         }
                     }
                     
-                    if (assignedHours[w.email] === 0) {
+                    if (assignedHours[w['Email']] === 0) {
                         console.error(`🚨 FAILED: Could not assign ANY hours to work study student ${w.first_name} ${w.last_name} - NO AVAILABILITY MATCHES OPERATING HOURS`);
                     } else {
-                        console.log(`✅ SUCCESS: Emergency assignment gave ${w.first_name} ${w.last_name} ${assignedHours[w.email].toFixed(1)} hours`);
+                        console.log(`✅ SUCCESS: Emergency assignment gave ${w.first_name} ${w.last_name} ${assignedHours[w['Email']].toFixed(1)} hours`);
                     }
                 }
             }
             
             if (finalWsValidation.length > 0) {
                 console.error('🚨 CRITICAL: Work study validation failed. The following students do not have exactly 5 hours:', 
-                    finalWsValidation.map(w => `${w.first_name} ${w.last_name} (${assignedHours[w.email].toFixed(1)}h)`));
+                    finalWsValidation.map(w => `${w.first_name} ${w.last_name} (${assignedHours[w['Email']].toFixed(1)}h)`));
             } else {
                 console.log('✅ Work study validation passed: All work study students have exactly 5 hours');
             }
@@ -6039,7 +6039,7 @@ Schedule generation has been stopped.`;
             const totalShiftsCount = Object.values(schedule).flat().length;
             const totalWorkersCount = workersData.length;
             const assignedWorkersCount = Object.values(assignedHours).filter(h => h > 0).length;
-            const wsAssigned = wsWorkers.filter(w => (assignedHours[w.email] || 0) > 0).length;
+            const wsAssigned = wsWorkers.filter(w => (assignedHours[w['Email']] || 0) > 0).length;
             
             console.log('📊 PRODUCTION: Schedule Generation Summary:');
             console.log(`   • Total Shifts: ${totalShiftsCount}`);
@@ -6104,14 +6104,14 @@ Schedule generation has been stopped.`;
             console.log('🎯 STARTING ENHANCED HOUR BALANCING FOR REGULAR WORKERS...');
             const balanceRegularWorkerHours = () => {
                 // Get regular workers and their current hours
-                const regularWorkers = workersData.filter(w => !wsStatus[w.email] && w.worker_type !== 'Cover');
+                const regularWorkers = workersData.filter(w => !wsStatus[w['Email']] && w.worker_type !== 'Cover');
                 if (regularWorkers.length === 0) return;
 
                 const workerHours = regularWorkers.map(w => ({
                     worker: w,
-                    email: w.email,
+                    email: w['Email'],
                     name: `${w.first_name} ${w.last_name}`,
-                    currentHours: assignedHours[w.email] || 0,
+                    currentHours: assignedHours[w['Email']] || 0,
                     targetHours: fairTargetHours
                 })).sort((a, b) => a.currentHours - b.currentHours);
 
