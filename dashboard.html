@@ -1812,10 +1812,12 @@
                     <h3>Generate New Schedule</h3>
                     <div class="info">
                         <strong>💡 Schedule Generation Tips:</strong><br>
-                        • Work study students automatically get exactly 5 hours<br>
+                        • <strong style="color: #e74c3c;">🚨 Work study students MUST get exactly 5 hours (no more, no less)</strong><br>
+                        • <strong style="color: #e74c3c;">⚠️ Schedule will fail if work study workers lack 5+ hours availability</strong><br>
                         • Algorithm ensures all operating hours are covered<br>
                         • Fair distribution based on worker availability<br>
-                        • Unfilled shifts will be highlighted for attention
+                        • Unfilled shifts will be highlighted for attention<br>
+                        • Regular workers are distributed evenly after work study requirements are met
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -2543,6 +2545,10 @@
     </div>
 
     <script type="module">
+        // 🔍 IMMEDIATE DEBUG - Check if script is loading
+        console.log('🔍 SCRIPT LOADED - Dashboard script is running');
+        console.log('🔍 USER INFO:', JSON.parse(localStorage.getItem('user') || '{}'));
+        
         // Enhanced auth check and setup
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         if (!user.email) {
@@ -3987,6 +3993,31 @@
             return issues;
         };
 
+        // Enhanced function to show work study availability popup
+        const showWorkStudyAvailabilityPopup = (wsIssues) => {
+            const issuesList = wsIssues.map(([worker, issue]) => 
+                `• ${worker.first_name} ${worker.last_name}: ${issue}`
+            ).join('\n');
+            
+            const message = `🚨 WORK STUDY AVAILABILITY ISSUE
+
+The following work study workers do not have enough availability to receive their required 5 hours:
+
+${issuesList}
+
+Work study workers MUST have at least 5 hours of availability during operating hours to be scheduled.
+
+Please update their availability before generating the schedule, or consider:
+1. Editing worker availability to include more hours
+2. Changing work study status if they no longer require exactly 5 hours
+3. Adjusting operating hours if needed
+
+Schedule generation has been stopped to prevent issues.`;
+
+            alert(message);
+            return false; // Indicate schedule generation should stop
+        };
+
         // Logout function
         window.logout = function() {
             localStorage.removeItem('user');
@@ -4261,11 +4292,16 @@
             const availabilityHours = {};
             const forcedAssignments = [];
             
-            // CRITICAL FIX: Initialize all workers with 0 hours
+            // 🚨 CRITICAL FIX: Initialize all workers with 0 hours, but track cover workers separately
             workersData.forEach(w => {
                 assignedHours[w.email] = 0;
                 wsStatus[w.email] = w.work_study || false;
                 availabilityHours[w.email] = calculateAvailabilityHours(w);
+                
+                // Log cover workers for clarity
+                if (w.worker_type === 'Cover') {
+                    console.log(`📋 COVER WORKER DETECTED: ${w.first_name} ${w.last_name} - Will be excluded from automatic scheduling`);
+                }
             });
             
             // Enhanced Fair Distribution: Calculate target hours for non-Work Study workers
@@ -4276,7 +4312,9 @@
             const totalWorkStudyHours = workStudyWorkers.length * 5; // Work Study gets exactly 5 hours each
             
             console.log(`📊 Worker Distribution: ${workersData.length} total workers, ${workStudyWorkers.length} Work Study, ${nonWorkStudyWorkers.length} Regular, ${coverWorkers.length} Cover workers`);
-            console.log('Cover workers excluded from automatic scheduling:', coverWorkers.map(w => `${w.first_name} ${w.last_name}`));
+            console.log('✅ Cover workers excluded from automatic scheduling:', coverWorkers.map(w => `${w.first_name} ${w.last_name}`));
+            console.log('✅ Work Study workers for scheduling:', workStudyWorkers.map(w => `${w.first_name} ${w.last_name}`));
+            console.log('✅ Regular workers for scheduling:', nonWorkStudyWorkers.map(w => `${w.first_name} ${w.last_name}`));
             
             // Calculate total operating hours to determine fair distribution
             let totalOperatingHours = 0;
@@ -4304,6 +4342,27 @@
             wsWorkers.sort((a, b) => availabilityHours[a.email] - availabilityHours[b.email]);
 
             const wsAvailabilityIssues = checkWorkStudyAvailability(wsWorkers, hoursOfOperation);
+            
+            // 🚨 CRITICAL: Stop schedule generation if work study workers don't have enough availability
+            if (wsAvailabilityIssues.length > 0) {
+                console.error('🚨 WORK STUDY AVAILABILITY CRITICAL ERROR:', wsAvailabilityIssues);
+                const shouldContinue = showWorkStudyAvailabilityPopup(wsAvailabilityIssues);
+                if (!shouldContinue) {
+                    return { 
+                        schedule: {}, 
+                        assignedHours: {}, 
+                        lowHours: [], 
+                        unassigned: [], 
+                        altSols: {}, 
+                        unfilledShifts: [], 
+                        wsIssues: wsAvailabilityIssues.map(([w, issue]) => `${w.first_name} ${w.last_name}: ${issue}`), 
+                        minHoursIssues: [], 
+                        coverageGaps: [],
+                        criticalError: 'Work study workers do not have sufficient availability for required 5 hours'
+                    };
+                }
+            }
+            
             const initialWsIssues = wsAvailabilityIssues.map(([w, issue]) => 
                 `${w.first_name} ${w.last_name}: ${issue}`
             );
@@ -4669,6 +4728,54 @@
                 }
             }
 
+            // 🚨 CRITICAL VALIDATION: Ensure ALL work study workers got exactly 5 hours
+            console.log('🔍 VALIDATING WORK STUDY ASSIGNMENTS...');
+            const workStudyValidationErrors = [];
+            for (const w of wsWorkers) {
+                const email = w.email;
+                const actualHours = assignedHours[email] || 0;
+                if (Math.abs(actualHours - 5) > 0.1) {
+                    workStudyValidationErrors.push(`${w.first_name} ${w.last_name}: got ${actualHours.toFixed(1)} hours instead of 5`);
+                    console.error(`🚨 WORK STUDY VALIDATION FAILED: ${w.first_name} ${w.last_name} assigned ${actualHours.toFixed(1)} hours instead of exactly 5`);
+                } else {
+                    console.log(`✅ Work study validation passed: ${w.first_name} ${w.last_name} has exactly ${actualHours.toFixed(1)} hours`);
+                }
+            }
+            
+            // If any work study workers don't have exactly 5 hours, show error and stop
+            if (workStudyValidationErrors.length > 0) {
+                const errorMessage = `🚨 WORK STUDY ASSIGNMENT FAILED
+
+The following work study workers did not receive exactly 5 hours:
+
+${workStudyValidationErrors.map(err => `• ${err}`).join('\n')}
+
+This indicates a critical issue with availability or operating hours. Please:
+1. Verify work study workers have sufficient availability during operating hours
+2. Check for conflicts with operating hours
+3. Consider adjusting worker availability or operating hours
+
+Schedule generation has been stopped.`;
+                
+                console.error('🚨 WORK STUDY VALIDATION FAILED - STOPPING SCHEDULE GENERATION');
+                alert(errorMessage);
+                
+                return { 
+                    schedule: {}, 
+                    assignedHours: {}, 
+                    lowHours: [], 
+                    unassigned: [], 
+                    altSols: {}, 
+                    unfilledShifts: [], 
+                    wsIssues: workStudyValidationErrors, 
+                    minHoursIssues: [], 
+                    coverageGaps: [],
+                    criticalError: 'Work study workers did not receive exactly 5 hours'
+                };
+            }
+            
+            console.log('✅ WORK STUDY VALIDATION PASSED - All work study workers have exactly 5 hours');
+
             // Phase 2: Enhanced Coverage Algorithm - Fill ALL operating hours
             const orderedDays = [...DAYS].sort();
             
@@ -4737,6 +4844,12 @@
                             const availableWorkerNames = [];
                             
                             for (const worker of workersData) {
+                                // 🚨 CRITICAL FIX: Exclude Cover workers from automatic scheduling
+                                if (worker.worker_type === 'Cover') {
+                                    console.log(`⏭️ SKIPPING COVER WORKER: ${worker.first_name} ${worker.last_name} (Cover workers not included in automatic scheduling)`);
+                                    continue;
+                                }
+                                
                                 // More flexible availability checking - try smaller time segments
                                 let canCoverGap = false;
                                 
@@ -4810,6 +4923,12 @@
                                 const availableWorkers = [];
                                 
                                 for (const x of workersData) {
+                                    // 🚨 CRITICAL FIX: Exclude Cover workers from automatic scheduling
+                                    if (x.worker_type === 'Cover') {
+                                        console.log(`⏭️ SKIPPING COVER WORKER: ${x.first_name} ${x.last_name} (Cover workers not included in automatic scheduling)`);
+                                        continue;
+                                    }
+                                    
                                     const xEmail = x.email;
                                     
                                     // Skip work study students who already have 5 hours
@@ -5041,6 +5160,12 @@
                         const candidateWorkers = [];
                         
                         for (const worker of workersData) {
+                            // 🚨 CRITICAL FIX: Exclude Cover workers from automatic scheduling
+                            if (worker.worker_type === 'Cover') {
+                                console.log(`⏭️ SKIPPING COVER WORKER: ${worker.first_name} ${worker.last_name} (Cover workers not included in automatic scheduling)`);
+                                continue;
+                            }
+                            
                             const email = worker.email;
                             
                             // Skip if worker is already assigned to this shift
@@ -5622,6 +5747,71 @@
             console.log(`   • Assigned Workers: ${finalValidation.assignedWorkers}`);
             console.log(`   • Total Hours Assigned: ${finalValidation.totalHours}`);
             console.log(`   • Coverage Gaps: ${schedCoverageValidation.gaps.length}`);
+
+            // 🎯 ENHANCED HOUR BALANCING for Regular Workers
+            console.log('🎯 STARTING ENHANCED HOUR BALANCING FOR REGULAR WORKERS...');
+            const balanceRegularWorkerHours = () => {
+                // Get regular workers and their current hours
+                const regularWorkers = workersData.filter(w => !wsStatus[w.email] && w.worker_type !== 'Cover');
+                if (regularWorkers.length === 0) return;
+
+                const workerHours = regularWorkers.map(w => ({
+                    worker: w,
+                    email: w.email,
+                    name: `${w.first_name} ${w.last_name}`,
+                    currentHours: assignedHours[w.email] || 0,
+                    targetHours: fairTargetHours
+                })).sort((a, b) => a.currentHours - b.currentHours);
+
+                console.log('📊 Regular Worker Hour Distribution:');
+                workerHours.forEach(w => {
+                    const deficit = w.targetHours - w.currentHours;
+                    console.log(`   ${w.name}: ${w.currentHours.toFixed(1)}h (target: ${w.targetHours.toFixed(1)}h, deficit: ${deficit > 0 ? '+' : ''}${deficit.toFixed(1)}h)`);
+                });
+
+                // Calculate hour distribution statistics
+                const totalRegularHours = workerHours.reduce((sum, w) => sum + w.currentHours, 0);
+                const averageHours = totalRegularHours / regularWorkers.length;
+                const maxHours = Math.max(...workerHours.map(w => w.currentHours));
+                const minHours = Math.min(...workerHours.map(w => w.currentHours));
+                const hourSpread = maxHours - minHours;
+
+                console.log(`📈 Regular Worker Hour Statistics:`);
+                console.log(`   Total Hours: ${totalRegularHours.toFixed(1)}h`);
+                console.log(`   Average: ${averageHours.toFixed(1)}h per worker`);
+                console.log(`   Range: ${minHours.toFixed(1)}h - ${maxHours.toFixed(1)}h (spread: ${hourSpread.toFixed(1)}h)`);
+                console.log(`   Target: ${fairTargetHours.toFixed(1)}h per worker`);
+
+                // Identify workers with significant deficits
+                const underAssigned = workerHours.filter(w => w.currentHours < fairTargetHours - 0.5);
+                const overAssigned = workerHours.filter(w => w.currentHours > fairTargetHours + 0.5);
+
+                if (underAssigned.length > 0) {
+                    console.log(`⚠️ Under-assigned workers (need more hours):`);
+                    underAssigned.forEach(w => {
+                        const deficit = fairTargetHours - w.currentHours;
+                        console.log(`   ${w.name}: needs ${deficit.toFixed(1)} more hours`);
+                    });
+                }
+
+                if (overAssigned.length > 0) {
+                    console.log(`📊 Over-assigned workers (above target):`);
+                    overAssigned.forEach(w => {
+                        const excess = w.currentHours - fairTargetHours;
+                        console.log(`   ${w.name}: has ${excess.toFixed(1)} excess hours`);
+                    });
+                }
+
+                // Provide recommendations for better distribution
+                if (hourSpread > 2) {
+                    console.log(`🔧 RECOMMENDATION: Hour spread (${hourSpread.toFixed(1)}h) is significant. Consider:`);
+                    console.log(`   • Reviewing worker availability to enable more balanced assignment`);
+                    console.log(`   • Adjusting operating hours or shift structure`);
+                    console.log(`   • Adding more availability for under-assigned workers`);
+                }
+            };
+
+            balanceRegularWorkerHours();
             
             return {
                 schedule,
@@ -12018,11 +12208,15 @@ Management Team`);
                 `;
                 
                 workers.forEach(worker => {
+                    const isWorkStudy = worker.work_study;
+                    const workStudyBadge = isWorkStudy ? '<span style="background: #2ecc71; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">WS</span>' : '';
+                    const rowStyle = isWorkStudy ? 'background-color: #e8f5e8; border-left: 4px solid #2ecc71;' : '';
+                    
                     html += `
-                        <tr>
-                            <td><strong>${worker.first_name} ${worker.last_name}</strong></td>
+                        <tr style="${rowStyle}">
+                            <td><strong>${worker.first_name} ${worker.last_name}</strong> ${workStudyBadge}</td>
                             <td>${worker.email}</td>
-                            <td>${worker.work_study ? '✅ Yes' : '❌ No'}</td>
+                            <td>${worker.work_study ? '<span style="color: #2ecc71; font-weight: bold;">✅ Yes (5h required)</span>' : '<span style="color: #666;">❌ No</span>'}</td>
                             <td><small>${worker.availability_text || 'No availability set'}</small></td>
                             <td>
                                 <div class="worker-actions">
@@ -12710,6 +12904,10 @@ Management Team`);
 
         // Manual submission function for worker form
         window.submitWorkerForm = async function() {
+            // 🔍 DEBUG: Function called - USING ALERT TO ENSURE WE SEE IT
+            alert('🔍 submitWorkerForm function called - DEBUG ALERT');
+            console.log('🔍 submitWorkerForm function called');
+            
             logger.debug('Worker form submitted manually');
             
             if (!user.isAdmin) {
