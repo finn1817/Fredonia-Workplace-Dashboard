@@ -5003,10 +5003,14 @@ Schedule generation has been stopped.`;
                                     if (aIsWS && aHours === 0 && !bIsWS) return -1;
                                     if (bIsWS && bHours === 0 && !aIsWS) return 1;
                                     if (aIsWS && aHours === 0 && bIsWS && bHours === 0) {
-                                        // Among work study students with 0 hours, sort by availability
+                                        // 🎲 RANDOMIZATION: Among equal work study students, randomize
                                         const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
                                         const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
-                                        return ratioA - ratioB;
+                                        const ratioDiff = ratioA - ratioB;
+                                        if (Math.abs(ratioDiff) < 0.1) {
+                                            return (Math.random() - 0.5); // Random tie-breaker
+                                        }
+                                        return ratioDiff;
                                     }
                                     
                                     // Then work study students with less than 5 hours
@@ -5193,9 +5197,14 @@ Schedule generation has been stopped.`;
                                 if (aIsWS && aHours === 0 && !bIsWS) return -1;
                                 if (bIsWS && bHours === 0 && !aIsWS) return 1;
                                 if (aIsWS && aHours === 0 && bIsWS && bHours === 0) {
+                                    // 🎲 RANDOMIZATION: Among equal work study students with 0 hours
                                     const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
                                     const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
-                                    return ratioA - ratioB;
+                                    const ratioDiff = ratioA - ratioB;
+                                    if (Math.abs(ratioDiff) < 0.1) {
+                                        return (Math.random() - 0.5); // Random tie-breaker
+                                    }
+                                    return ratioDiff;
                                 }
                                 
                                 // Then work study students with less than 5 hours
@@ -5209,9 +5218,14 @@ Schedule generation has been stopped.`;
                                 if (!aIsWS && aHours === 0 && bIsWS) return -1;
                                 if (!bIsWS && bHours === 0 && aIsWS) return 1;
                                 if (!aIsWS && aHours === 0 && !bIsWS && bHours === 0) {
+                                    // 🎲 RANDOMIZATION: Among equal regular workers with 0 hours
                                     const ratioA = aHours / Math.max(availabilityHours[a.email], 1);
                                     const ratioB = bHours / Math.max(availabilityHours[b.email], 1);
-                                    return ratioA - ratioB;
+                                    const ratioDiff = ratioA - ratioB;
+                                    if (Math.abs(ratioDiff) < 0.1) {
+                                        return (Math.random() - 0.5); // Random tie-breaker
+                                    }
+                                    return ratioDiff;
                                 }
                                 
                                 // Enhanced Fair Distribution for regular workers
@@ -5223,10 +5237,16 @@ Schedule generation has been stopped.`;
                                     }
                                 }
                                 
-                                // Finally, fallback to original fairness ratio
+                                // Finally, fallback to original fairness ratio with randomization
                                 const ratioA = assignedHours[a.email] / Math.max(availabilityHours[a.email], 1);
                                 const ratioB = assignedHours[b.email] / Math.max(availabilityHours[b.email], 1);
-                                return ratioA - ratioB;
+                                const ratioDiff = ratioA - ratioB;
+                                
+                                // 🎲 RANDOMIZATION: If workers have similar ratios, add randomness
+                                if (Math.abs(ratioDiff) < 0.1) {
+                                    return (Math.random() - 0.5); // Random tie-breaker
+                                }
+                                return ratioDiff;
                             });
                             
                             // Add the best candidates up to the needed count
@@ -13568,10 +13588,21 @@ Management Team`);
             try {
                 // Always use the best/fair logic: shuffle, prioritize work study, fair distribution
                 let processedWorkers = shuffleArray([...workersWithAvailability]);
+                
+                // 🎲 ADD RANDOMIZATION SEED - Each generation should be different!
+                const randomSeed = Math.random();
+                console.log('🎲 RANDOMIZATION SEED:', randomSeed);
+                
                 processedWorkers.sort((a, b) => {
                     if (a.work_study && !b.work_study) return -1;
                     if (!a.work_study && b.work_study) return 1;
-                    return calculateAvailabilityHours(a) - calculateAvailabilityHours(b);
+                    // 🎲 ADD RANDOMIZATION: Break ties randomly for same work study status
+                    const availabilityDiff = calculateAvailabilityHours(a) - calculateAvailabilityHours(b);
+                    if (Math.abs(availabilityDiff) < 0.5) {
+                        // If availability is very similar, randomize the order
+                        return (Math.random() - 0.5);
+                    }
+                    return availabilityDiff;
                 });
                 
                 console.log('🚀 Starting schedule generation with:', {
