@@ -3724,7 +3724,7 @@
                 },
                 checkDuplicateEmail: (email, editingWorkerId) => {
                     const duplicateWorker = workers.find(w => 
-                        w.email.toLowerCase() === email.toLowerCase() && 
+                        w['Email'].toLowerCase() === email.toLowerCase() && 
                         w.id !== editingWorkerId
                     );
                     return duplicateWorker ? 
@@ -10025,7 +10025,7 @@ Management Team`);
                 `;
                 
                 applications.forEach(app => {
-                    const worker = workers.find(w => w.email === app.workerEmail);
+                    const worker = workers.find(w => w['Email'] === app.workerEmail);
                     const statusColor = app.status === 'approved' ? '#28a745' : 
                                       app.status === 'denied' ? '#dc3545' : '#ffc107';
                     const statusIcon = app.status === 'approved' ? '✅' : 
@@ -10621,7 +10621,7 @@ Management Team`);
                 }
                 
                 // Find workplace worker data
-                const workplaceWorker = workers.find(w => w.email.toLowerCase() === email.toLowerCase());
+                const workplaceWorker = workers.find(w => w['Email'].toLowerCase() === email.toLowerCase());
                 
                 // Create detailed user view
                 const lastLogin = userData.loginTime ? 
@@ -13424,9 +13424,9 @@ Management Team`);
             
             // Check for duplicate F Number if provided
             if (fNumber) {
-                const duplicateFNumber = workers.find(w => w.f_number === fNumber && w.id !== editingWorkerId);
+                const duplicateFNumber = workers.find(w => w['F Number'] === fNumber && w.id !== editingWorkerId);
                 if (duplicateFNumber) {
-                    showNotification(`❌ F Number ${fNumber} is already used by ${duplicateFNumber.first_name} ${duplicateFNumber.last_name}`, 'error');
+                    showNotification(`❌ F Number ${fNumber} is already used by ${duplicateFNumber['First Name']} ${duplicateFNumber['Last Name']}`, 'error');
                     return;
                 }
             }
@@ -13685,7 +13685,7 @@ Management Team`);
                 await updateWorkerPinStatus(workerId, !isPinned);
                 
                 // Show success notification
-                const workerName = workers.find(w => w.id === workerId)?.first_name || 'Worker';
+                const workerName = workers.find(w => w.id === workerId)?.['First Name'] || 'Worker';
                 showNotification(`📌 ${workerName} ${!isPinned ? 'pinned' : 'unpinned'} successfully!`, 'success');
                 
                 // Refresh the workers tab immediately to show the updated order
@@ -15103,7 +15103,7 @@ Management Team`);
                     if (!shift.raw_assigned || shift.isGap) continue;
                     
                     for (const workerEmail of shift.raw_assigned) {
-                        const worker = workers.find(w => w.email === workerEmail);
+                        const worker = workers.find(w => w['Email'] === workerEmail);
                         if (!worker) continue;
                         
                         const shiftStart = timeToHour(shift.start);
@@ -15555,8 +15555,8 @@ Management Team`);
                 // Add to in-memory schedule
                 if (!schedule[day]) schedule[day] = [];
                 const newAssigned = selected.map(email => {
-                    const w = workers.find(x => x.email === email);
-                    return w ? `${w.first_name} ${w.last_name}` : email;
+                    const w = workers.find(x => x['Email'] === email);
+                    return w ? `${w['First Name']} ${w['Last Name']}` : email;
                 });
                 schedule[day].push({
                     start,
@@ -16060,7 +16060,7 @@ Management Team`);
                     return;
                 }
 
-                const selectedWorker = workers.find(w => w.email === selectedWorkerEmail);
+                const selectedWorker = workers.find(w => w['Email'] === selectedWorkerEmail);
                 if (!selectedWorker) {
                     showNotification('❌ Selected worker not found', 'error');
                     return;
@@ -18016,7 +18016,7 @@ Thank you!`;
                 shifts.forEach(shift => {
                     shift.assigned.forEach(name => {
                         // Find worker email for contact button
-                        const email = (workers.find(w => `${w.first_name} ${w.last_name}` === name) || {}).email || '';
+                        const email = (workers.find(w => `${w['First Name']} ${w['Last Name']}` === name) || {})['Email'] || '';
                         html += `<tr><td><strong>${name}</strong></td><td>${formatTime(shift.start)} - ${formatTime(shift.end)}</td><td><button class='btn btn-primary' onclick="contactWorker('${email}')">📧 Contact</button></td></tr>`;
                     });
                 });
