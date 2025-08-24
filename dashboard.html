@@ -2017,6 +2017,12 @@
                             <input type="email" id="workerEmail" required style="width: 100%;">
                         </div>
                         <div class="form-group">
+                            <label for="workerFNumber">F Number <span style="color: #666; font-size: 0.9rem;">(Optional)</span></label>
+                            <input type="text" id="workerFNumber" placeholder="F12345678" pattern="F\d{8}" title="Format: F followed by 8 digits (e.g., F12345678)" style="width: 100%;">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
                             <label for="workerWorkStudy">Work Study</label>
                             <select id="workerWorkStudy" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
                                 <option value="No">No</option>
@@ -6657,6 +6663,7 @@ Examples:
                             first_name: data['First Name'] || 'Unknown',
                             last_name: data['Last Name'] || 'Worker',
                             email: data['Email'] || 'no-email',
+                            f_number: data['F Number'] || null,
                             work_study: data['Work Study'] === 'Yes',
                             worker_type: data['Worker Type'] || 'Regular', // Default to Regular for existing workers
                             availability,
@@ -12345,6 +12352,7 @@ Management Team`);
                 document.getElementById('workerFirstName').value = worker.first_name;
                 document.getElementById('workerLastName').value = worker.last_name;
                 document.getElementById('workerEmail').value = worker.email;
+                document.getElementById('workerFNumber').value = worker.f_number || '';
                 document.getElementById('workerWorkStudy').value = worker.work_study ? 'Yes' : 'No';
                 
                 // Set worker type, defaulting to 'Regular' if not set
@@ -12705,11 +12713,12 @@ Management Team`);
             const firstName = document.getElementById('workerFirstName').value.trim();
             const lastName = document.getElementById('workerLastName').value.trim();
             const email = document.getElementById('workerEmail').value.trim();
+            const fNumber = document.getElementById('workerFNumber').value.trim();
             const workStudy = document.getElementById('workerWorkStudy').value;
             const workerType = document.getElementById('workerType').value;
             let availability = document.getElementById('workerAvailability').value.trim();
             
-            logger.debug('Form data:', { firstName, lastName, email, workStudy, workerType, availability });
+            logger.debug('Form data:', { firstName, lastName, email, fNumber, workStudy, workerType, availability });
             logger.debug('Raw availability value from form:', availability);
             logger.debug('Current availabilitySlots state:', availabilitySlots);
             
@@ -12732,6 +12741,21 @@ Management Team`);
                 return;
             }
             
+            // Validate F Number format if provided
+            if (fNumber && !/^F\d{8}$/.test(fNumber)) {
+                showNotification('❌ F Number must be in format F12345678 (F followed by 8 digits)', 'error');
+                return;
+            }
+            
+            // Check for duplicate F Number if provided
+            if (fNumber) {
+                const duplicateFNumber = workers.find(w => w.f_number === fNumber && w.id !== editingWorkerId);
+                if (duplicateFNumber) {
+                    showNotification(`❌ F Number ${fNumber} is already used by ${duplicateFNumber.first_name} ${duplicateFNumber.last_name}`, 'error');
+                    return;
+                }
+            }
+            
             // Validate availability format if provided
             if (availability) {
                 const availabilityValidation = Validator.worker.validateAvailability(availability);
@@ -12751,6 +12775,7 @@ Management Team`);
                 'First Name': firstName,
                 'Last Name': lastName,
                 'Email': email,
+                'F Number': fNumber || null,
                 'Work Study': workStudy,
                 'Worker Type': workerType,
                 'Days & Times Available': availability,
@@ -13213,6 +13238,7 @@ Management Team`);
                             <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; width: 60px;">📌 Pin</th>
                             <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Name</th>
                             <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Email</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">F Number</th>
                             <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Work Study</th>
                             <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Availability Status</th>
                             <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057; min-width: 150px;">Actions</th>
@@ -13231,6 +13257,13 @@ Management Team`);
                 const availabilityStatus = worker.availability_text ? 
                     '✅ Set' : 
                     '<span style="color: #dc3545;">❌ Missing</span>';
+                
+                // Format F Number for display
+                const fNumberDisplay = worker.f_number ? 
+                    `<span style="cursor: pointer; text-decoration: underline; color: #007bff;" 
+                           title="Click to view full F Number" 
+                           onclick="alert('F Number: ${worker.f_number}')">${worker.f_number}</span>` : 
+                    '<span style="color: #666;">Not Set</span>';
                     
                 html += `
                     <tr class="${rowClass}" style="border-bottom: 1px solid #dee2e6;">
@@ -13244,6 +13277,7 @@ Management Team`);
                             <strong>${worker.first_name} ${worker.last_name}</strong>${isPinned ? '<span class="pinned-indicator">📌</span>' : ''}
                         </td>
                         <td style="padding: 1rem;">${worker.email}</td>
+                        <td style="padding: 1rem;">${fNumberDisplay}</td>
                         <td style="padding: 1rem;">${worker.work_study ? '<span style="color: #28a745;">✅ Yes</span>' : '❌ No'}</td>
                         <td style="padding: 1rem;">${availabilityStatus}</td>
                         <td style="padding: 1rem;">
@@ -16943,7 +16977,7 @@ Thank you!`;
           }
           document.getElementById('importWorkersModalBody').innerHTML = `
             <div style='margin-bottom:1rem;'>
-              <strong>Select an Excel file (.xlsx) with columns: First Name, Last Name, Email, Work Study, Days & Time Available.</strong>
+              <strong>Select an Excel file (.xlsx) with columns: First Name, Last Name, Email, F Number (optional), Work Study, Days & Time Available.</strong>
               <br><br>
               <strong>Work Study Column Format:</strong>
               <ul style='margin: 0.5rem 0; padding-left: 1.5rem;'>
@@ -17056,16 +17090,23 @@ Thank you!`;
                 const firstName = (row['First Name'] || '').trim();
                 const lastName = (row['Last Name'] || '').trim();
                 const email = (row['Email'] || '').trim();
+                const fNumber = (row['F Number'] || '').trim();
                 
                 if (!firstName || !lastName || !email) {
                   console.warn(`⚠️ Skipping row with missing required fields: First Name="${firstName}", Last Name="${lastName}", Email="${email}"`);
                   continue;
                 }
                 
+                // Validate F Number format if provided
+                if (fNumber && !/^F\d{8}$/.test(fNumber)) {
+                  console.warn(`⚠️ Invalid F Number format for ${firstName} ${lastName}: "${fNumber}". Skipping F Number.`);
+                }
+                
                 newWorkers.push({
                   'First Name': firstName,
                   'Last Name': lastName,
                   'Email': email,
+                  'F Number': (fNumber && /^F\d{8}$/.test(fNumber)) ? fNumber : null,
                   'Work Study': isWorkStudy ? 'Yes' : 'No',
                   'Days & Times Available': row['Days & Time Available'] || '',
                   created_at: new Date().toISOString(),
