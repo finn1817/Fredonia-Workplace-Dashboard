@@ -14605,8 +14605,50 @@ Management Team`);
                     html += '</tbody></table>';
                 }
                 
-                // If no workers have hours assigned
-                if (workStudyWorkers.length === 0 && regularWorkers.length === 0) {
+                // Workers with no Hours Table (third table)
+                if (unassignedWithAvailability.length > 0) {
+                    html += '<h4 style="margin-top: 1.5rem;">⏸️ Workers with no Hours</h4>';
+                    html += '<table class="worker-table"><thead><tr><th>Worker</th><th>Hours Assigned</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>';
+                    
+                    // Sort unassigned workers alphabetically by name
+                    const sortedUnassignedWorkers = unassignedWithAvailability.sort((a, b) => {
+                        const nameA = `${a['First Name']} ${a['Last Name']}`;
+                        const nameB = `${b['First Name']} ${b['Last Name']}`;
+                        return nameA.localeCompare(nameB);
+                    });
+                    
+                    sortedUnassignedWorkers.forEach(worker => {
+                        const email = worker['Email'];
+                        const name = `${worker['First Name']} ${worker['Last Name']}`;
+                        const isWS = worker['Work Study'] === 'Yes';
+                        
+                        let status = '💤 Available';
+                        let statusColor = 'color: #6c757d;';
+                        
+                        // Different status for work study vs regular workers with no hours
+                        if (isWS) {
+                            status = '💤 WS Available';
+                            statusColor = 'color: #856404;';
+                        } else {
+                            status = '💤 Available';
+                            statusColor = 'color: #6c757d;';
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td><strong>${name}</strong> ${isWS ? '<small style="color: #ffc107;">(WS)</small>' : ''}</td>
+                                <td>0.0 hours</td>
+                                <td style="${statusColor}">${status}</td>
+                                <td class="no-print"><button class="btn btn-primary" onclick="contactWorker('${email}')">📧 Contact</button></td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                }
+                
+                // If no workers have hours assigned and no unassigned workers with availability
+                if (workStudyWorkers.length === 0 && regularWorkers.length === 0 && unassignedWithAvailability.length === 0) {
                     html += '<h4>📊 Worker Hours Summary</h4>';
                     html += '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; text-align: center;">';
                     html += '<p style="margin: 0; color: #6c757d;">No workers have been assigned hours in this schedule.</p>';
