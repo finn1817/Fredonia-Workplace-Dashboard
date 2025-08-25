@@ -14504,7 +14504,20 @@ Management Team`);
                 const unassignedWithAvailability = workersToUse.filter(w => {
                     const hours = assignedHours[w['Email']] || 0;
                     const hasAvailability = w.availability_text && w.availability_text.trim() !== '';
-                    return hours === 0 && hasAvailability;
+                    const isUnassigned = hours === 0 && hasAvailability;
+                    
+                    // Debug logging
+                    if (hasAvailability) {
+                        console.log(`DEBUG: Worker ${w['First Name']} ${w['Last Name']} - Hours: ${hours}, HasAvailability: ${hasAvailability}, IsUnassigned: ${isUnassigned}`);
+                        console.log(`DEBUG: Availability text: "${w.availability_text}"`);
+                    }
+                    
+                    return isUnassigned;
+                });
+                
+                console.log(`DEBUG: Total unassignedWithAvailability found: ${unassignedWithAvailability.length}`);
+                unassignedWithAvailability.forEach(w => {
+                    console.log(`DEBUG: Unassigned worker: ${w['First Name']} ${w['Last Name']} (${w['Email']})`);
                 });
                 
                 html += '<div style="margin-top: 2rem;">';
@@ -14606,7 +14619,9 @@ Management Team`);
                 }
                 
                 // Workers with no Hours Table (third table)
+                console.log(`DEBUG: Checking if third table should render - unassignedWithAvailability.length: ${unassignedWithAvailability.length}`);
                 if (unassignedWithAvailability.length > 0) {
+                    console.log('DEBUG: Rendering third table for unassigned workers with availability');
                     html += '<h4 style="margin-top: 1.5rem;">⏸️ Workers with no Hours</h4>';
                     html += '<table class="worker-table"><thead><tr><th>Worker</th><th>Hours Assigned</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>';
                     
@@ -14616,6 +14631,11 @@ Management Team`);
                         const nameB = `${b['First Name']} ${b['Last Name']}`;
                         return nameA.localeCompare(nameB);
                     });
+                    
+                    console.log(`DEBUG: Sorted unassigned workers for third table: ${sortedUnassignedWorkers.length}`);
+                } else {
+                    console.log('DEBUG: Third table NOT rendered - no unassigned workers with availability found');
+                }
                     
                     sortedUnassignedWorkers.forEach(worker => {
                         const email = worker['Email'];
