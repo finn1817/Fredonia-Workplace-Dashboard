@@ -9965,7 +9965,6 @@ Management Team`);
             } catch (error) {
                 console.error('Error contacting applicants:', error);
                 showNotification('❌ Failed to generate contact email', 'error');
-            }
         };
 
         window.viewShiftApplications = async function(postingId) {
@@ -14633,9 +14632,6 @@ Management Team`);
                     });
                     
                     console.log(`DEBUG: Sorted unassigned workers for third table: ${sortedUnassignedWorkers.length}`);
-                } else {
-                    console.log('DEBUG: Third table NOT rendered - no unassigned workers with availability found');
-                }
                     
                     sortedUnassignedWorkers.forEach(worker => {
                         const email = worker['Email'];
@@ -14665,6 +14661,9 @@ Management Team`);
                     });
                     
                     html += '</tbody></table>';
+                } else {
+                    console.log('DEBUG: Third table NOT rendered - no unassigned workers with availability found');
+                }
                 }
                 
                 // If no workers have hours assigned and no unassigned workers with availability
