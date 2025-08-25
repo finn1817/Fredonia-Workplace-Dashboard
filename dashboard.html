@@ -14503,7 +14503,7 @@ Management Team`);
                 // Check for unassigned workers with availability (for analysis warning)
                 const unassignedWithAvailability = workersToUse.filter(w => {
                     const hours = assignedHours[w['Email']] || 0;
-                    const hasAvailability = w.Availability && w.Availability.trim() !== '';
+                    const hasAvailability = w.availability_text && w.availability_text.trim() !== '';
                     return hours === 0 && hasAvailability;
                 });
                 
