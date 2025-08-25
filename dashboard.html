@@ -14488,53 +14488,132 @@ Management Team`);
                 });
             });
             
-            // Enhanced worker hours summary - only show for admin users
+            // Enhanced worker hours summary - only show for admin users with separated tables
             if (user.isAdmin) {
-                html += '<div style="margin-top: 2rem;"><h4>📊 Worker Hours Summary</h4>';
-                html += '<table class="worker-table"><thead><tr><th>Worker</th><th>Hours Assigned</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>';
-                
-                const sortedWorkers = Object.entries(assignedHours).sort((a, b) => b[1] - a[1]);
-                
-                workersToUse.forEach(w => {
-                    if (!(w['Email'] in assignedHours)) {
-                        sortedWorkers.push([w['Email'], 0]);
-                    }
+                // Filter workers: only show those with >0 assigned hours
+                const assignedWorkers = workersToUse.filter(w => {
+                    const hours = assignedHours[w['Email']] || 0;
+                    return hours > 0;
                 });
                 
-                sortedWorkers.forEach(([email, hours]) => {
-                    const worker = workersToUse.find(w => w['Email'] === email);
-                    if (!worker) return;
-                    
-                    const name = `${worker['First Name']} ${worker['Last Name']}`;
-                    const isWS = worker['Work Study'] === 'Yes';
-                    let status = '✅ Good';
-                    let statusColor = 'color: #28a745;';
-                    
-                    if (isWS && Math.abs(hours - 5) > 0.1) {
-                        status = `❌ WS Issue (${hours.toFixed(1)}h/5h)`;
-                        statusColor = 'color: #dc3545;';
-                    } else if (!isWS && hours < 3 && hours > 0) {
-                        status = '⚠️ Low Hours';
-                        statusColor = 'color: #ffc107;';
-                    } else if (hours === 0) {
-                        status = '❌ Unassigned';
-                        statusColor = 'color: #dc3545;';
-                    } else if (isWS && hours === 5) {
-                        status = '✅ Perfect (WS)';
-                        statusColor = 'color: #28a745;';
-                    }
-                    
+                // Separate Work Study and Regular workers
+                const workStudyWorkers = assignedWorkers.filter(w => w['Work Study'] === 'Yes');
+                const regularWorkers = assignedWorkers.filter(w => w['Work Study'] !== 'Yes');
+                
+                // Check for unassigned workers with availability (for analysis warning)
+                const unassignedWithAvailability = workersToUse.filter(w => {
+                    const hours = assignedHours[w['Email']] || 0;
+                    const hasAvailability = w.Availability && w.Availability.trim() !== '';
+                    return hours === 0 && hasAvailability;
+                });
+                
+                html += '<div style="margin-top: 2rem;">';
+                
+                // Add analysis warning if there are unassigned workers with availability
+                if (unassignedWithAvailability.length > 0) {
                     html += `
-                        <tr>
-                            <td><strong>${name}</strong> ${isWS ? '<small style="color: #ffc107;">(WS)</small>' : ''}</td>
-                            <td>${hours.toFixed(1)} hours</td>
-                            <td style="${statusColor}">${status}</td>
-                            <td class="no-print"><button class="btn btn-primary" onclick="contactWorker('${email}')">📧 Contact</button></td>
-                        </tr>
+                        <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                            <h5 style="color: #856404; margin: 0 0 0.5rem 0;">⚠️ Analysis Warning</h5>
+                            <p style="margin: 0; color: #856404;">
+                                <strong>${unassignedWithAvailability.length} worker(s)</strong> have availability but received 0 hours: 
+                                ${unassignedWithAvailability.map(w => `${w['First Name']} ${w['Last Name']}`).join(', ')}
+                            </p>
+                        </div>
                     `;
-                });
+                }
                 
-                html += '</tbody></table></div>';
+                // Work Study Workers Table (if any)
+                if (workStudyWorkers.length > 0) {
+                    html += '<h4>📚 Work Study Workers</h4>';
+                    html += '<table class="worker-table"><thead><tr><th>Worker</th><th>Hours Assigned</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>';
+                    
+                    // Sort Work Study workers by hours (descending)
+                    const sortedWSWorkers = workStudyWorkers.sort((a, b) => {
+                        const hoursA = assignedHours[a['Email']] || 0;
+                        const hoursB = assignedHours[b['Email']] || 0;
+                        return hoursB - hoursA;
+                    });
+                    
+                    sortedWSWorkers.forEach(worker => {
+                        const email = worker['Email'];
+                        const hours = assignedHours[email] || 0;
+                        const name = `${worker['First Name']} ${worker['Last Name']}`;
+                        
+                        let status = '✅ Perfect (WS)';
+                        let statusColor = 'color: #28a745;';
+                        
+                        if (Math.abs(hours - 5) > 0.1) {
+                            status = `❌ WS Issue (${hours.toFixed(1)}h/5h)`;
+                            statusColor = 'color: #dc3545;';
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td><strong>${name}</strong> <small style="color: #ffc107;">(WS)</small></td>
+                                <td>${hours.toFixed(1)} hours</td>
+                                <td style="${statusColor}">${status}</td>
+                                <td class="no-print"><button class="btn btn-primary" onclick="contactWorker('${email}')">📧 Contact</button></td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                }
+                
+                // Regular Workers Table (if any)
+                if (regularWorkers.length > 0) {
+                    html += '<h4 style="margin-top: 1.5rem;">👥 Regular Workers</h4>';
+                    html += '<table class="worker-table"><thead><tr><th>Worker</th><th>Hours Assigned</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>';
+                    
+                    // Sort Regular workers by hours (descending)
+                    const sortedRegularWorkers = regularWorkers.sort((a, b) => {
+                        const hoursA = assignedHours[a['Email']] || 0;
+                        const hoursB = assignedHours[b['Email']] || 0;
+                        return hoursB - hoursA;
+                    });
+                    
+                    sortedRegularWorkers.forEach(worker => {
+                        const email = worker['Email'];
+                        const hours = assignedHours[email] || 0;
+                        const name = `${worker['First Name']} ${worker['Last Name']}`;
+                        
+                        let status = '✅ Assigned';
+                        let statusColor = 'color: #28a745;';
+                        
+                        // Enhanced status for regular workers in limited-slot environments
+                        if (hours >= 4) {
+                            status = '🌟 High Hours';
+                            statusColor = 'color: #28a745;';
+                        } else if (hours >= 2) {
+                            status = '✅ Good Hours';
+                            statusColor = 'color: #28a745;';
+                        } else if (hours > 0) {
+                            status = '⭐ Selected';
+                            statusColor = 'color: #17a2b8;';
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td><strong>${name}</strong></td>
+                                <td>${hours.toFixed(1)} hours</td>
+                                <td style="${statusColor}">${status}</td>
+                                <td class="no-print"><button class="btn btn-primary" onclick="contactWorker('${email}')">📧 Contact</button></td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                }
+                
+                // If no workers have hours assigned
+                if (workStudyWorkers.length === 0 && regularWorkers.length === 0) {
+                    html += '<h4>📊 Worker Hours Summary</h4>';
+                    html += '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; text-align: center;">';
+                    html += '<p style="margin: 0; color: #6c757d;">No workers have been assigned hours in this schedule.</p>';
+                    html += '</div>';
+                }
+                
+                html += '</div>';
             }
             
             // Action buttons (admin vs user)
