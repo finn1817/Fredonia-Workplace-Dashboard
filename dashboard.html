@@ -3724,7 +3724,7 @@
                 },
                 checkDuplicateEmail: (email, editingWorkerId) => {
                     const duplicateWorker = workers.find(w => 
-                        w['Email'].toLowerCase() === email.toLowerCase() && 
+                        w['Email'] && w['Email'].toLowerCase() === email.toLowerCase() && 
                         w.id !== editingWorkerId
                     );
                     return duplicateWorker ? 
@@ -4608,7 +4608,7 @@ Schedule generation has been stopped to prevent issues.`;
                         unassigned: [], 
                         altSols: {}, 
                         unfilledShifts: [], 
-                        wsIssues: wsAvailabilityIssues.map(([w, issue]) => `${w.first_name} ${w.last_name}: ${issue}`), 
+                        wsIssues: wsAvailabilityIssues.map(([w, issue]) => `${w['First Name']} ${w['Last Name']}: ${issue}`), 
                         minHoursIssues: [], 
                         coverageGaps: [],
                         criticalError: 'Work study workers do not have sufficient availability for required 5 hours'
@@ -4617,7 +4617,7 @@ Schedule generation has been stopped to prevent issues.`;
             }
             
             const initialWsIssues = wsAvailabilityIssues.map(([w, issue]) => 
-                `${w.first_name} ${w.last_name}: ${issue}`
+                `${w['First Name']} ${w['Last Name']}: ${issue}`
             );
 
             // REMOVED: The early return logic that bypassed work study priority
@@ -4730,14 +4730,14 @@ Schedule generation has been stopped to prevent issues.`;
                     
                     // Check if this worker is already assigned to this exact time slot
                     if (shiftAssignments.has(shiftKey) && shiftAssignments.get(shiftKey).has(email)) {
-                        console.warn(`⚠️ Worker ${w.first_name} ${w.last_name} already assigned to ${slotStart}-${slotEnd}, skipping duplicate assignment`);
+                        console.warn(`⚠️ Worker ${w['First Name']} ${w['Last Name']} already assigned to ${slotStart}-${slotEnd}, skipping duplicate assignment`);
                         continue;
                     }
                     
                     // Check if this slot is already full with other workers
                     const currentWorkers = shiftAssignments.get(shiftKey) || new Set();
                     if (currentWorkers.size >= maxWorkersPerShift) {
-                        console.warn(`Work study student ${w.first_name} ${w.last_name} could not be assigned to ${slotStart}-${slotEnd} (slot full), looking for alternatives...`);
+                        console.warn(`Work study student ${w['First Name']} ${w['Last Name']} could not be assigned to ${slotStart}-${slotEnd} (slot full), looking for alternatives...`);
                         continue;
                     }
                     
@@ -4746,7 +4746,7 @@ Schedule generation has been stopped to prevent issues.`;
                     
                     if (existingShift && existingShift.raw_assigned.length < maxWorkersPerShift) {
                         // Add worker to existing shift
-                        existingShift.assigned.push(`${w.first_name} ${w.last_name}`);
+                        existingShift.assigned.push(`${w['First Name']} ${w['Last Name']}`);
                         existingShift.raw_assigned.push(email);
                         existingShift.all_available.push(w);
                         existingShift.is_work_study = true;
@@ -4757,7 +4757,7 @@ Schedule generation has been stopped to prevent issues.`;
                         }
                         shiftAssignments.get(shiftKey).add(email);
                         
-                        console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} added to existing shift ${slotStart}-${slotEnd} on ${day}`);
+                        console.log(`✅ Work study assignment: ${w['First Name']} ${w['Last Name']} added to existing shift ${slotStart}-${slotEnd} on ${day}`);
                     } else {
                         // Create new shift
                         if (!shiftAssignments.has(shiftKey)) {
@@ -4770,20 +4770,20 @@ Schedule generation has been stopped to prevent issues.`;
                         schedule[day].push({
                             start: slotStart,
                             end: slotEnd,
-                            assigned: [`${w.first_name} ${w.last_name}`],
-                            available: [`${w.first_name} ${w.last_name}`],
+                            assigned: [`${w['First Name']} ${w['Last Name']}`],
+                            available: [`${w['First Name']} ${w['Last Name']}`],
                             raw_assigned: [email],
                             all_available: [w],
                             is_work_study: true,
                             forced_shift: true // Mark as forced to ensure it's not overridden
                         });
                         
-                        console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} created new shift ${slotStart}-${slotEnd} on ${day}`);
+                        console.log(`✅ Work study assignment: ${w['First Name']} ${w['Last Name']} created new shift ${slotStart}-${slotEnd} on ${day}`);
                     }
                     
                     // CRITICAL FIX: Add hours only once
                     assignedHours[email] += duration;
-                    console.log(`✅ Work study assignment: ${w.first_name} ${w.last_name} assigned ${duration}h at ${slotStart}-${slotEnd} on ${day}`);
+                    console.log(`✅ Work study assignment: ${w['First Name']} ${w['Last Name']} assigned ${duration}h at ${slotStart}-${slotEnd} on ${day}`);
                     remaining -= duration;
                     assignedAny = true;
                 }
@@ -7214,15 +7214,24 @@ Examples:
                         
                         workers.push({
                             id: doc.id,
+                            // Use Firebase field names directly - this matches your database
+                            'First Name': data['First Name'] || 'Unknown',
+                            'Last Name': data['Last Name'] || 'Worker',
+                            'Email': data['Email'] || 'no-email',
+                            'F Number': data['F Number'] || null,
+                            'Work Study': data['Work Study'] || 'No',
+                            'Worker Type': data['Worker Type'] || 'Regular',
+                            'Days & Times Available': data['Days & Times Available'] || '',
+                            availability,
+                            isPinned: data.isPinned || false,
+                            // Add convenient lowercase properties for easier access
                             first_name: data['First Name'] || 'Unknown',
                             last_name: data['Last Name'] || 'Worker',
                             email: data['Email'] || 'no-email',
                             f_number: data['F Number'] || null,
                             work_study: data['Work Study'] === 'Yes',
-                            worker_type: data['Worker Type'] || 'Regular', // Default to Regular for existing workers
-                            availability,
-                            availability_text: data['Days & Times Available'] || '',
-                            isPinned: data.isPinned || false
+                            worker_type: data['Worker Type'] || 'Regular',
+                            availability_text: data['Days & Times Available'] || ''
                         });
                     } catch (error) {
                         console.error('Error parsing worker data:', error);
@@ -7240,6 +7249,18 @@ Examples:
                 }
 
                 console.log(`Loaded ${workers.length} workers and operating hours for ${selectedWorkplace}`);
+                
+                // Debug log first worker to verify structure
+                if (workers.length > 0) {
+                    console.log('🔍 Worker object structure (first worker):', {
+                        id: workers[0].id,
+                        email: workers[0].email,
+                        'Email': workers[0]['Email'],
+                        first_name: workers[0].first_name,
+                        'First Name': workers[0]['First Name']
+                    });
+                }
+                
                 showNotification(`✅ Loaded ${workers.length} workers for ${selectedWorkplace}`, 'success', { replaceAll: true });
                 
             } catch (error) {
@@ -11441,7 +11462,7 @@ Management Team`);
             if (databaseContainer) {
                 const authUsers = workers.length; // This would be actual auth users count
                 const workplaceUsers = workers.length;
-                const connectedUsers = workers.filter(w => w.email).length;
+                const connectedUsers = workers.filter(w => w['Email']).length;
                 
                 databaseContainer.innerHTML = `
                     <div style="margin-bottom: 1rem;">
@@ -12998,9 +13019,19 @@ Management Team`);
                 const data = workerDoc.data();
                 const worker = {
                     id: workerDoc.id,
+                    // Keep Firebase field names as primary
+                    'First Name': data['First Name'] || 'Unknown',
+                    'Last Name': data['Last Name'] || 'Worker',
+                    'Email': data['Email'] || 'no-email',
+                    'F Number': data['F Number'] || null,
+                    'Work Study': data['Work Study'] || 'No',
+                    'Worker Type': data['Worker Type'] || 'Regular',
+                    'Days & Times Available': data['Days & Times Available'] || '',
+                    // Add convenient properties
                     first_name: data['First Name'] || 'Unknown',
                     last_name: data['Last Name'] || 'Worker',
                     email: data['Email'] || 'no-email',
+                    f_number: data['F Number'] || null,
                     work_study: data['Work Study'] === 'Yes',
                     worker_type: data['Worker Type'] || 'Regular',
                     availability_text: data['Days & Times Available'] || ''
@@ -13012,18 +13043,18 @@ Management Team`);
                 editingWorkerId = workerId;
                 document.getElementById('workerFormTitle').textContent = '✏️ Edit Worker';
                 
-                document.getElementById('workerFirstName').value = worker['First Name'];
-                document.getElementById('workerLastName').value = worker['Last Name'];
-                document.getElementById('workerEmail').value = worker['Email'];
-                document.getElementById('workerFNumber').value = worker['F Number'] || '';
-                document.getElementById('workerWorkStudy').value = worker['Work Study'] || 'No';
+                document.getElementById('workerFirstName').value = data['First Name'] || '';
+                document.getElementById('workerLastName').value = data['Last Name'] || '';
+                document.getElementById('workerEmail').value = data['Email'] || '';
+                document.getElementById('workerFNumber').value = data['F Number'] || '';
+                document.getElementById('workerWorkStudy').value = data['Work Study'] || 'No';
                 
                 // Set worker type, defaulting to 'Regular' if not set
-                document.getElementById('workerType').value = worker['Worker Type'] || 'Regular';
+                document.getElementById('workerType').value = data['Worker Type'] || 'Regular';
                 
                 // Clear existing slots and load worker's availability
                 clearAllAvailabilitySlots();
-                loadWorkerAvailability(worker['Days & Times Available']);
+                loadWorkerAvailability(data['Days & Times Available'] || '');
                 
                 closeModal('workersModal');
                 document.getElementById('workerFormModal').style.display = 'block';
@@ -13366,9 +13397,7 @@ Management Team`);
 
         // Manual submission function for worker form
         window.submitWorkerForm = async function() {
-            // 🔍 DEBUG: Function called - USING ALERT TO ENSURE WE SEE IT
-            alert('🔍 submitWorkerForm function called - DEBUG ALERT');
-            console.log('🔍 submitWorkerForm function called');
+            console.log('submitWorkerForm function called');
             
             logger.debug('Worker form submitted manually');
             
@@ -15631,7 +15660,7 @@ Management Team`);
                     
                     // Check if worker has any shifts on this day
                     const existingShifts = (schedule[day] || []).filter(shift => 
-                        shift.raw_assigned && shift.raw_assigned.includes(w.email)
+                        shift.raw_assigned && shift.raw_assigned.includes(w['Email'])
                     );
                     
                     let shiftInfo = '';
@@ -15648,9 +15677,9 @@ Management Team`);
                     workersHtml += `
                         <div class="worker-item ${workerClass}">
                             <label class="worker-label">
-                                <input type="checkbox" name="addShiftWorker" value="${w.email}">
+                                <input type="checkbox" name="addShiftWorker" value="${w['Email']}">
                                 <div class="worker-info">
-                                    <strong>${w.first_name} ${w.last_name}${workStudyBadge}</strong>
+                                    <strong>${w['First Name']} ${w['Last Name']}${workStudyBadge}</strong>
                                     <div class="worker-details">
                                         <div><strong>Status:</strong> ${statusText}</div>
                                         <div><strong>${day} Availability:</strong> ${dayAvailability}</div>
@@ -15732,7 +15761,7 @@ Management Team`);
                     assigned: newAssigned,
                     available: newAssigned,
                     raw_assigned: selected,
-                    all_available: workers.filter(w => selected.includes(w.email))
+                    all_available: workers.filter(w => selected.includes(w['Email']))
                 });
                 showNotification('✅ Shift added (not yet saved to database)', 'success');
                 closeModal('addShiftModal');
@@ -15761,10 +15790,21 @@ Management Team`);
                 showNotification('❌ Admin access required', 'error');
                 return;
             }
+            
+            // Safety check for workers array
+            if (!workers || workers.length === 0) {
+                showNotification('❌ No workers data available. Please refresh the page.', 'error');
+                console.error('editShift called but workers array is empty:', workers);
+                return;
+            }
+            
+            console.log('🔍 editShift called with:', { day, shiftIndex, workersCount: workers.length });
+            
             // Find the shift
             const shift = (schedule[day] || [])[shiftIndex];
             if (!shift) {
                 showNotification('❌ Shift not found', 'error');
+                console.error('editShift: shift not found:', { day, shiftIndex, schedule: schedule[day] });
                 return;
             }
             
@@ -15778,11 +15818,9 @@ Management Team`);
             const opHours = (hours[day] && hours[day][0]) ? hours[day][0] : { start: '00:00', end: '23:59' };
             
             // 🔧 FIX: Function to recalculate worker availability based on current times
-            function updateWorkerLists() {
-                const currentStart = document.getElementById('editShiftStart').value;
-                const currentEnd = document.getElementById('editShiftEnd').value;
-                const startHour = timeToHour(currentStart);
-                const endHour = timeToHour(currentEnd);
+            function updateWorkerLists(startTime = shift.start, endTime = shift.end) {
+                const startHour = timeToHour(startTime);
+                const endHour = timeToHour(endTime);
                 
                 return {
                     available: workers.filter(w => isWorkerAvailable(w, day, startHour, endHour)),
@@ -15794,7 +15832,22 @@ Management Team`);
             const { available: availableWorkers, unavailable: unavailableWorkers } = updateWorkerLists();
             // Format availability in AM/PM
             function formatAvail(w) {
-                return Object.entries(w.availability).map(([d, slots]) => `${d}: ${slots.map(s => formatTime(s.start) + '-' + formatTime(s.end)).join(', ')}`).join('; ');
+                if (!w || !w.availability) {
+                    return 'No availability data';
+                }
+                
+                try {
+                    return Object.entries(w.availability).map(([d, slots]) => {
+                        if (!Array.isArray(slots)) return `${d}: Invalid data`;
+                        return `${d}: ${slots.map(s => {
+                            if (!s || !s.start || !s.end) return 'Invalid slot';
+                            return formatTime(s.start) + '-' + formatTime(s.end);
+                        }).join(', ')}`;
+                    }).join('; ');
+                } catch (error) {
+                    console.error('Error formatting availability for worker:', w, error);
+                    return 'Error formatting availability';
+                }
             }
             let html = `
                 <div class="edit-shift-section">
@@ -15813,12 +15866,12 @@ Management Team`);
                     <div class="edit-shift-workers-list">
             `;
             availableWorkers.forEach(w => {
-                const checked = assignedEmails.has(w.email) ? 'checked' : '';
+                const checked = assignedEmails.has(w['Email']) ? 'checked' : '';
                 html += `
                     <div class="edit-shift-worker-item">
-                        <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                        <input type='checkbox' name='editShiftWorker' value='${w['Email']}' ${checked}>
                         <div>
-                            <strong>${w.first_name} ${w.last_name}</strong>
+                            <strong>${w['First Name']} ${w['Last Name']}</strong>
                             <br><small style="color: #666;">${formatAvail(w)}</small>
                         </div>
                     </div>
@@ -15832,12 +15885,12 @@ Management Team`);
                     <div class="edit-shift-workers-list">
             `;
             unavailableWorkers.forEach(w => {
-                const checked = assignedEmails.has(w.email) ? 'checked' : '';
+                const checked = assignedEmails.has(w['Email']) ? 'checked' : '';
                 html += `
                     <div class="edit-shift-worker-item" style="opacity: 0.6;">
-                        <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                        <input type='checkbox' name='editShiftWorker' value='${w['Email']}' ${checked}>
                         <div>
-                            <strong>${w.first_name} ${w.last_name}</strong>
+                            <strong>${w['First Name']} ${w['Last Name']}</strong>
                             <br><small style="color: #666;">${formatAvail(w)}</small>
                         </div>
                     </div>
@@ -15859,12 +15912,18 @@ Management Team`);
                 const startInput = document.getElementById('editShiftStart');
                 const endInput = document.getElementById('editShiftEnd');
                 
-                if (!startInput || !endInput) return;
+                if (!startInput || !endInput) {
+                    console.warn('editShift time inputs not found in DOM');
+                    return;
+                }
                 
                 const currentStart = startInput.value;
                 const currentEnd = endInput.value;
                 
-                if (!currentStart || !currentEnd) return;
+                if (!currentStart || !currentEnd) {
+                    console.warn('editShift time inputs have no values');
+                    return;
+                }
                 
                 const startHour = timeToHour(currentStart);
                 const endHour = timeToHour(currentEnd);
@@ -15880,12 +15939,12 @@ Management Team`);
                 if (availableContainer) {
                     availableContainer.innerHTML = '';
                     newAvailable.forEach(w => {
-                        const checked = assignedEmails.has(w.email) ? 'checked' : '';
+                        const checked = assignedEmails.has(w['Email']) ? 'checked' : '';
                         availableContainer.innerHTML += `
                             <div class="edit-shift-worker-item">
-                                <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                                <input type='checkbox' name='editShiftWorker' value='${w['Email']}' ${checked}>
                                 <div>
-                                    <strong>${w.first_name} ${w.last_name}</strong>
+                                    <strong>${w['First Name']} ${w['Last Name']}</strong>
                                     <br><small style="color: #666;">${formatAvail(w)}</small>
                                 </div>
                             </div>
@@ -15896,12 +15955,12 @@ Management Team`);
                 if (unavailableContainer) {
                     unavailableContainer.innerHTML = '';
                     newUnavailable.forEach(w => {
-                        const checked = assignedEmails.has(w.email) ? 'checked' : '';
+                        const checked = assignedEmails.has(w['Email']) ? 'checked' : '';
                         unavailableContainer.innerHTML += `
                             <div class="edit-shift-worker-item" style="opacity: 0.6;">
-                                <input type='checkbox' name='editShiftWorker' value='${w.email}' ${checked}>
+                                <input type='checkbox' name='editShiftWorker' value='${w['Email']}' ${checked}>
                                 <div>
-                                    <strong>${w.first_name} ${w.last_name}</strong>
+                                    <strong>${w['First Name']} ${w['Last Name']}</strong>
                                     <br><small style="color: #666;">${formatAvail(w)}</small>
                                 </div>
                             </div>
@@ -16008,7 +16067,7 @@ Management Team`);
                 
                 // Show warnings for availability conflicts
                 if (conflictWorkers.length > 0) {
-                    const conflictNames = conflictWorkers.map(w => `${w.first_name} ${w.last_name}`).join(', ');
+                    const conflictNames = conflictWorkers.map(w => `${w['First Name']} ${w['Last Name']}`).join(', ');
                     showNotification(`⚠️ WARNING: ${conflictWorkers.length} worker(s) not available for new time ${formatTime(newStart)}-${formatTime(newEnd)}: ${conflictNames}`, 'warning', { duration: 8000 });
                     
                     // Ask for confirmation
@@ -16019,7 +16078,7 @@ Management Team`);
                 
                 shift.assigned = newAssigned;
                 shift.raw_assigned = checked;
-                shift.all_available = workers.filter(w => checked.includes(w.email));
+                shift.all_available = workers.filter(w => checked.includes(w['Email']));
                 shift.start = newStart;
                 shift.end = newEnd;
                 
@@ -16131,9 +16190,9 @@ Management Team`);
             
             // Also get regular workers who are available (for manual selection)
             const availableRegularWorkers = workers.filter(w => {
-                return w.worker_type !== 'Cover' && 
+                return w['Worker Type'] !== 'Cover' && 
                        isWorkerAvailable(w, day, timeToHour(shift.start), timeToHour(shift.end)) &&
-                       !shift.raw_assigned?.includes(w.email); // Not already assigned to this shift
+                       !shift.raw_assigned?.includes(w['Email']); // Not already assigned to this shift
             });
 
             let html = `
@@ -17801,8 +17860,8 @@ Thank you!`;
                 // Create mailto link
                 const allWorkers = await getAllWorkersForWorkplace();
                 const workerEmails = allWorkers
-                    .filter(w => !workers.includes(w.email)) // Exclude current shift workers
-                    .map(w => w.email)
+                    .filter(w => !workers.includes(w['Email'])) // Exclude current shift workers
+                    .map(w => w['Email'])
                     .join(';');
 
                 const mailtoLink = `mailto:${workerEmails}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
@@ -19116,7 +19175,7 @@ Thank you!`;
                 }
                 
                 // Populate target workers (all workers except current user)
-                const targetWorkers = workers.filter(w => w.email !== user.email);
+                const targetWorkers = workers.filter(w => w['Email'] !== user.email);
                 
                 // Populate form dropdowns
                 const requesterTimeSelect = document.getElementById('swapRequesterShiftTime');
