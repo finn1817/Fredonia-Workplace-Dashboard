@@ -14604,127 +14604,114 @@ Management Team`);
         function generateScheduleGridView(schedule, workersData = null) {
             console.log('🔍 Grid view called with schedule:', schedule);
             const workersToUse = workersData || workers;
-            
-            // Get operating hours to determine time slots
-            const allTimeSlots = new Set();
             const DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            
-            // Collect all unique time slots from all days
+
+            // Get all unique time slots (30-min intervals)
+            const allTimeSlots = new Set();
             Object.values(schedule).flat().forEach(shift => {
-                const startTime = shift.start;
-                const endTime = shift.end;
-                
-                // Generate 30-minute intervals between start and end
-                let currentTime = timeToHour(startTime);
-                const endHour = timeToHour(endTime);
-                
+                let currentTime = timeToHour(shift.start);
+                const endHour = timeToHour(shift.end);
                 while (currentTime < endHour) {
                     allTimeSlots.add(hourToTime(currentTime));
-                    currentTime += 0.5; // 30-minute intervals
+                    currentTime += 0.5;
                 }
             });
-            
-            // Sort time slots
             const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => timeToHour(a) - timeToHour(b));
-            
             if (sortedTimeSlots.length === 0) {
                 return '<div class="grid-empty-cell">No shifts scheduled</div>';
             }
-            
+
+            // Build a lookup for each day: for each shift, mark its start/end slot indices
+            const shiftRowspanMap = {};
+            DAYS_ORDER.forEach(day => {
+                shiftRowspanMap[day] = [];
+                (schedule[day] || []).forEach(shift => {
+                    const startIdx = sortedTimeSlots.findIndex(t => timeToHour(t) === timeToHour(shift.start));
+                    const endIdx = sortedTimeSlots.findIndex(t => timeToHour(t) === timeToHour(shift.end));
+                    shiftRowspanMap[day].push({
+                        shift,
+                        startIdx,
+                        endIdx,
+                        rowspan: endIdx > startIdx ? endIdx - startIdx : 1
+                    });
+                });
+            });
+
+            // Track which shifts have already been rendered (to skip cells for continued slots)
+            const rendered = {};
+            DAYS_ORDER.forEach(day => { rendered[day] = {}; });
+
             let gridHTML = '<div class="schedule-grid-view">';
             gridHTML += '<table class="schedule-grid-table">';
-            
-            // Header row with days
             gridHTML += '<thead><tr>';
             gridHTML += '<th>Time</th>';
             DAYS_ORDER.forEach(day => {
                 gridHTML += `<th>${day}</th>`;
             });
             gridHTML += '</tr></thead>';
-            
-            // Body rows with time slots
             gridHTML += '<tbody>';
-            
-            sortedTimeSlots.forEach(timeSlot => {
+
+            for (let rowIdx = 0; rowIdx < sortedTimeSlots.length; rowIdx++) {
+                const timeSlot = sortedTimeSlots[rowIdx];
                 gridHTML += '<tr>';
-                
-                // Time column
                 gridHTML += `<td>${formatTime(timeSlot)}</td>`;
-                
-                // Day columns
                 DAYS_ORDER.forEach(day => {
-                    const shiftsAtTime = (schedule[day] || []).filter(shift => {
-                        const shiftStart = timeToHour(shift.start);
-                        const shiftEnd = timeToHour(shift.end);
-                        const slotTime = timeToHour(timeSlot);
-                        return slotTime >= shiftStart && slotTime < shiftEnd;
-                    });
-                    
-                    gridHTML += '<td>';
-                    
-                    if (shiftsAtTime.length > 0) {
-                        shiftsAtTime.forEach((shift, shiftIndex) => {
-                            const isWorkStudy = shift.is_work_study || false;
-                            const isSpecial = shift.is_special || false;
-                            const isCovered = shift.covered === true;
-                            const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
-                            const unfilled = shift.assigned.includes('Unfilled');
-                            
-                            let shiftClass = 'grid-shift-item';
-                            if (isWorkStudy) shiftClass += ' grid-work-study';
-                            
-                            const duration = ((timeToHour(shift.end) - timeToHour(shift.start)) * 60) + ' min';
-                            const dayIndex = DAYS_ORDER.indexOf(day);
-                            const globalShiftIndex = (schedule[day] || []).indexOf(shift);
-                            
-                            gridHTML += `<div class="${shiftClass}">`;
-                            
-                            // Worker names
-                            if (isGap || unfilled) {
-                                gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${shift.assigned.join(', ')}</span>`;
-                            } else {
-                                gridHTML += `<span class="grid-shift-worker">${shift.assigned.join(', ')}</span>`;
-                            }
-                            
-                            // Duration
-                            gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
-                            
-                            // Special indicators
-                            if (isWorkStudy) {
-                                gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
-                            }
-                            if (isSpecial) {
-                                gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
-                            }
-                            if (isCovered) {
-                                gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
-                            }
-                            
-                            // Action buttons (admin only)
-                            if (user.isAdmin && !isGap && !unfilled) {
-                                gridHTML += '<div class="grid-shift-actions">';
-                                gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${globalShiftIndex})" title="Edit">✏️</button>`;
-                                gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${globalShiftIndex})" title="Remove">🗑️</button>`;
-                                gridHTML += `<button class="grid-action-btn cover" onclick="coverShift('${day}', ${globalShiftIndex})" title="Cover">🔄</button>`;
-                                gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${globalShiftIndex})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
-                                gridHTML += '</div>';
-                            }
-                            
+                    // Check if a shift starts at this slot
+                    const shiftInfo = shiftRowspanMap[day].find(s => s.startIdx === rowIdx);
+                    if (shiftInfo && !rendered[day][shiftInfo.shift]) {
+                        // Render the shift cell with rowspan
+                        rendered[day][shiftInfo.shift] = true;
+                        const shift = shiftInfo.shift;
+                        const rowspan = shiftInfo.rowspan;
+                        const isWorkStudy = shift.is_work_study || false;
+                        const isSpecial = shift.is_special || false;
+                        const isCovered = shift.covered === true;
+                        const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
+                        const unfilled = shift.assigned.includes('Unfilled');
+                        let shiftClass = 'grid-shift-item';
+                        if (isWorkStudy) shiftClass += ' grid-work-study';
+                        const duration = ((timeToHour(shift.end) - timeToHour(shift.start)) * 60) + ' min';
+                        const dayIndex = DAYS_ORDER.indexOf(day);
+                        const globalShiftIndex = (schedule[day] || []).indexOf(shift);
+                        gridHTML += `<td rowspan="${rowspan}">`;
+                        gridHTML += `<div class="${shiftClass}">`;
+                        if (isGap || unfilled) {
+                            gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${shift.assigned.join(', ')}</span>`;
+                        } else {
+                            gridHTML += `<span class="grid-shift-worker">${shift.assigned.join(', ')}</span>`;
+                        }
+                        gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
+                        if (isWorkStudy) {
+                            gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
+                        }
+                        if (isSpecial) {
+                            gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
+                        }
+                        if (isCovered) {
+                            gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
+                        }
+                        if (user.isAdmin && !isGap && !unfilled) {
+                            gridHTML += '<div class="grid-shift-actions">';
+                            gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${globalShiftIndex})" title="Edit">✏️</button>`;
+                            gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${globalShiftIndex})" title="Remove">🗑️</button>`;
+                            gridHTML += `<button class="grid-action-btn cover" onclick="coverShift('${day}', ${globalShiftIndex})" title="Cover">🔄</button>`;
+                            gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${globalShiftIndex})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
                             gridHTML += '</div>';
-                        });
+                        }
+                        gridHTML += '</div>';
+                        gridHTML += '</td>';
                     } else {
-                        gridHTML += '<div class="grid-empty-cell">-</div>';
+                        // Check if this slot is covered by a rowspan above; if so, skip cell
+                        const covered = shiftRowspanMap[day].some(s => s.startIdx < rowIdx && s.endIdx > rowIdx);
+                        if (!covered) {
+                            gridHTML += '<td><div class="grid-empty-cell">-</div></td>';
+                        }
                     }
-                    
-                    gridHTML += '</td>';
                 });
-                
                 gridHTML += '</tr>';
-            });
-            
+            }
             gridHTML += '</tbody></table>';
             gridHTML += '</div>';
-            
             return gridHTML;
         }
 
