@@ -2806,10 +2806,15 @@
         
         // Toggle schedule view
         window.toggleScheduleView = function() {
+            console.log('🔄 Toggle schedule view called');
             const dropdown = document.getElementById('scheduleViewToggle');
-            if (!dropdown) return;
+            if (!dropdown) {
+                console.error('❌ Dropdown not found');
+                return;
+            }
             
             const currentView = dropdown.value;
+            console.log('📊 Current view:', currentView);
             setScheduleViewPreference(currentView);
             
             // Re-render the current schedule with the new view
@@ -14597,6 +14602,7 @@ Management Team`);
         // Enhanced schedule display with coverage analysis and real-time updates
         // Generate schedule grid view (Excel-style)
         function generateScheduleGridView(schedule, workersData = null) {
+            console.log('🔍 Grid view called with schedule:', schedule);
             const workersToUse = workersData || workers;
             
             // Get operating hours to determine time slots
@@ -14819,11 +14825,14 @@ Management Team`);
             }
             
             // Render schedule based on selected view
+            console.log('🎯 Rendering schedule with view:', currentView);
             if (currentView === 'grid') {
                 // Grid view - Excel style
+                console.log('📊 Generating grid view...');
                 html += generateScheduleGridView(schedule, workersToUse);
             } else {
                 // List view - current format
+                console.log('📋 Generating list view...');
                 DAYS.forEach(day => {
                     const shifts = schedule[day] || [];
                     if (shifts.length === 0) return;
