@@ -1645,6 +1645,189 @@
             margin-left: 0.5rem;
             font-weight: normal;
         }
+
+        /* Schedule View Toggle Styles */
+        .schedule-view-toggle {
+            margin-bottom: 1rem;
+            text-align: right;
+        }
+
+        .view-toggle-dropdown {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            color: #333;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .view-toggle-dropdown:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Grid View Styles */
+        .schedule-grid-view {
+            overflow-x: auto;
+            margin: 1rem 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: white;
+        }
+
+        .schedule-grid-table {
+            width: 100%;
+            min-width: 1200px;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .schedule-grid-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem 0.5rem;
+            text-align: center;
+            font-weight: 600;
+            border-right: 1px solid rgba(255,255,255,0.2);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .schedule-grid-table th:first-child {
+            background: #495057;
+            min-width: 80px;
+        }
+
+        .schedule-grid-table td {
+            padding: 0.5rem;
+            border: 1px solid #e9ecef;
+            vertical-align: top;
+            min-height: 60px;
+            position: relative;
+        }
+
+        .schedule-grid-table td:first-child {
+            background: #f8f9fa;
+            font-weight: 600;
+            text-align: center;
+            color: #495057;
+            min-width: 80px;
+        }
+
+        .grid-shift-item {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border: 1px solid #2196f3;
+            border-radius: 4px;
+            padding: 0.4rem;
+            margin-bottom: 0.3rem;
+            font-size: 0.8rem;
+            position: relative;
+        }
+
+        .grid-shift-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .grid-shift-worker {
+            font-weight: 600;
+            color: #1976d2;
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        .grid-shift-duration {
+            color: #666;
+            font-size: 0.75rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .grid-shift-actions {
+            display: flex;
+            gap: 0.2rem;
+            flex-wrap: wrap;
+        }
+
+        .grid-action-btn {
+            padding: 0.1rem 0.3rem;
+            border: none;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .grid-action-btn.edit {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .grid-action-btn.remove {
+            background: #dc3545;
+            color: white;
+        }
+
+        .grid-action-btn.cover {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .grid-action-btn.special {
+            background: #6f42c1;
+            color: white;
+        }
+
+        .grid-action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .grid-work-study {
+            background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+            border-color: #4caf50;
+        }
+
+        .grid-work-study .grid-shift-worker {
+            color: #2e7d32;
+        }
+
+        .grid-empty-cell {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 1rem;
+        }
+
+        /* Responsive grid view */
+        @media (max-width: 1200px) {
+            .schedule-grid-table {
+                min-width: 1000px;
+            }
+            
+            .schedule-grid-table th,
+            .schedule-grid-table td {
+                padding: 0.4rem 0.3rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .schedule-grid-view {
+                margin: 0.5rem 0;
+            }
+            
+            .grid-shift-item {
+                padding: 0.3rem;
+                font-size: 0.75rem;
+            }
+            
+            .grid-action-btn {
+                padding: 0.05rem 0.2rem;
+                font-size: 0.6rem;
+            }
+        }
     </style>
 </head>
 
@@ -2606,6 +2789,54 @@
                 console.log('Notification suppressed for non-admin:', message, type);
                 // Do nothing - completely suppress all notifications
             };
+        }
+
+        // Schedule View Preference Management
+        const SCHEDULE_VIEW_STORAGE_KEY = 'schedule_view_preference';
+        
+        // Get user's preferred schedule view
+        function getScheduleViewPreference() {
+            return localStorage.getItem(SCHEDULE_VIEW_STORAGE_KEY) || 'list';
+        }
+        
+        // Set user's preferred schedule view
+        function setScheduleViewPreference(view) {
+            localStorage.setItem(SCHEDULE_VIEW_STORAGE_KEY, view);
+        }
+        
+        // Toggle schedule view
+        window.toggleScheduleView = function() {
+            const dropdown = document.getElementById('scheduleViewToggle');
+            if (!dropdown) return;
+            
+            const currentView = dropdown.value;
+            setScheduleViewPreference(currentView);
+            
+            // Re-render the current schedule with the new view
+            const scheduleContainer = document.getElementById('scheduleResults');
+            if (scheduleContainer && scheduleContainer.innerHTML.trim()) {
+                // Find the schedule data from the last display call
+                if (window.lastScheduleData) {
+                    displayEnhancedSchedule(
+                        window.lastScheduleData.schedule,
+                        window.lastScheduleData.assignedHours,
+                        window.lastScheduleData.lowHours,
+                        window.lastScheduleData.unassigned,
+                        window.lastScheduleData.isCurrent,
+                        window.lastScheduleData.coverageGaps,
+                        window.lastScheduleData.workersData
+                    );
+                }
+            }
+        };
+        
+        // Initialize schedule view dropdown
+        function initializeScheduleViewToggle() {
+            const preference = getScheduleViewPreference();
+            const dropdown = document.getElementById('scheduleViewToggle');
+            if (dropdown) {
+                dropdown.value = preference;
+            }
         }
         
         const userEmailElement = document.getElementById('userEmail');
@@ -12416,6 +12647,11 @@ Management Team`);
                     });
                 }
             }
+            
+            // Initialize schedule view toggle for all users
+            setTimeout(() => {
+                initializeScheduleViewToggle();
+            }, 500);
         });
         
         // Generate sample data for testing
@@ -14359,7 +14595,145 @@ Management Team`);
         }
 
         // Enhanced schedule display with coverage analysis and real-time updates
+        // Generate schedule grid view (Excel-style)
+        function generateScheduleGridView(schedule, workersData = null) {
+            const workersToUse = workersData || workers;
+            
+            // Get operating hours to determine time slots
+            const allTimeSlots = new Set();
+            const DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            
+            // Collect all unique time slots from all days
+            Object.values(schedule).flat().forEach(shift => {
+                const startTime = shift.start;
+                const endTime = shift.end;
+                
+                // Generate 30-minute intervals between start and end
+                let currentTime = timeToHour(startTime);
+                const endHour = timeToHour(endTime);
+                
+                while (currentTime < endHour) {
+                    allTimeSlots.add(hourToTime(currentTime));
+                    currentTime += 0.5; // 30-minute intervals
+                }
+            });
+            
+            // Sort time slots
+            const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => timeToHour(a) - timeToHour(b));
+            
+            if (sortedTimeSlots.length === 0) {
+                return '<div class="grid-empty-cell">No shifts scheduled</div>';
+            }
+            
+            let gridHTML = '<div class="schedule-grid-view">';
+            gridHTML += '<table class="schedule-grid-table">';
+            
+            // Header row with days
+            gridHTML += '<thead><tr>';
+            gridHTML += '<th>Time</th>';
+            DAYS_ORDER.forEach(day => {
+                gridHTML += `<th>${day}</th>`;
+            });
+            gridHTML += '</tr></thead>';
+            
+            // Body rows with time slots
+            gridHTML += '<tbody>';
+            
+            sortedTimeSlots.forEach(timeSlot => {
+                gridHTML += '<tr>';
+                
+                // Time column
+                gridHTML += `<td>${formatTime(timeSlot)}</td>`;
+                
+                // Day columns
+                DAYS_ORDER.forEach(day => {
+                    const shiftsAtTime = (schedule[day] || []).filter(shift => {
+                        const shiftStart = timeToHour(shift.start);
+                        const shiftEnd = timeToHour(shift.end);
+                        const slotTime = timeToHour(timeSlot);
+                        return slotTime >= shiftStart && slotTime < shiftEnd;
+                    });
+                    
+                    gridHTML += '<td>';
+                    
+                    if (shiftsAtTime.length > 0) {
+                        shiftsAtTime.forEach((shift, shiftIndex) => {
+                            const isWorkStudy = shift.is_work_study || false;
+                            const isSpecial = shift.is_special || false;
+                            const isCovered = shift.covered === true;
+                            const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
+                            const unfilled = shift.assigned.includes('Unfilled');
+                            
+                            let shiftClass = 'grid-shift-item';
+                            if (isWorkStudy) shiftClass += ' grid-work-study';
+                            
+                            const duration = ((timeToHour(shift.end) - timeToHour(shift.start)) * 60) + ' min';
+                            const dayIndex = DAYS_ORDER.indexOf(day);
+                            const globalShiftIndex = (schedule[day] || []).indexOf(shift);
+                            
+                            gridHTML += `<div class="${shiftClass}">`;
+                            
+                            // Worker names
+                            if (isGap || unfilled) {
+                                gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${shift.assigned.join(', ')}</span>`;
+                            } else {
+                                gridHTML += `<span class="grid-shift-worker">${shift.assigned.join(', ')}</span>`;
+                            }
+                            
+                            // Duration
+                            gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
+                            
+                            // Special indicators
+                            if (isWorkStudy) {
+                                gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
+                            }
+                            if (isSpecial) {
+                                gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
+                            }
+                            if (isCovered) {
+                                gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
+                            }
+                            
+                            // Action buttons (admin only)
+                            if (user.isAdmin && !isGap && !unfilled) {
+                                gridHTML += '<div class="grid-shift-actions">';
+                                gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${globalShiftIndex})" title="Edit">✏️</button>`;
+                                gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${globalShiftIndex})" title="Remove">🗑️</button>`;
+                                gridHTML += `<button class="grid-action-btn cover" onclick="coverShift('${day}', ${globalShiftIndex})" title="Cover">🔄</button>`;
+                                gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${globalShiftIndex})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
+                                gridHTML += '</div>';
+                            }
+                            
+                            gridHTML += '</div>';
+                        });
+                    } else {
+                        gridHTML += '<div class="grid-empty-cell">-</div>';
+                    }
+                    
+                    gridHTML += '</td>';
+                });
+                
+                gridHTML += '</tr>';
+            });
+            
+            gridHTML += '</tbody></table>';
+            gridHTML += '</div>';
+            
+            return gridHTML;
+        }
+
         function displayEnhancedSchedule(schedule, assignedHours, lowHours, unassigned, isCurrent = false, coverageGaps = [], workersData = null) {
+            // Store schedule data for view switching
+            window.lastScheduleData = {
+                schedule,
+                assignedHours,
+                lowHours,
+                unassigned,
+                isCurrent,
+                coverageGaps,
+                workersData
+            };
+            
             // Use provided workers data or fall back to global workers variable
             const workersToUse = workersData || workers;
             
@@ -14384,6 +14758,17 @@ Management Team`);
             
             // Print header for print view
             html += '<div class="print-only"><h2>📅 Schedule for ' + selectedWorkplace.replace('_', ' ').toUpperCase() + '</h2><p>Generated: ' + new Date().toLocaleDateString() + '</p></div>';
+            
+            // Add view toggle dropdown
+            const currentView = getScheduleViewPreference();
+            html += `
+                <div class="schedule-view-toggle">
+                    <select id="scheduleViewToggle" class="view-toggle-dropdown" onchange="toggleScheduleView()">
+                        <option value="list" ${currentView === 'list' ? 'selected' : ''}>📋 List View</option>
+                        <option value="grid" ${currentView === 'grid' ? 'selected' : ''}>📊 Grid View</option>
+                    </select>
+                </div>
+            `;
             
             if (isCurrent) {
                 html += '<div class="success">✅ This is the current active schedule that workers can see</div>';
@@ -14433,89 +14818,95 @@ Management Team`);
                 }
             }
             
-            // Display schedule by day with enhanced shift marking
-            DAYS.forEach(day => {
-                const shifts = schedule[day] || [];
-                if (shifts.length === 0) return;
-                
-                // Sort shifts by start time to ensure proper chronological order
-                const sortedShifts = shifts.sort((a, b) => {
-                    const timeA = timeToHour(a.start);
-                    const timeB = timeToHour(b.start);
-                    return timeA - timeB;
-                });
-                
-                html += `<div class="day-header">${day}</div>`;
-                sortedShifts.forEach((shift, index) => {
-                    const unfilled = shift.assigned.includes('Unfilled');
-                    const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
-                    const workStudy = shift.is_work_study || false;
-                    const isSpecial = shift.is_special || false;
-                    const isForced = shift.forced === true;
-                    const isCovered = shift.covered === true;
+            // Render schedule based on selected view
+            if (currentView === 'grid') {
+                // Grid view - Excel style
+                html += generateScheduleGridView(schedule, workersToUse);
+            } else {
+                // List view - current format
+                DAYS.forEach(day => {
+                    const shifts = schedule[day] || [];
+                    if (shifts.length === 0) return;
                     
-                    let shiftClass = 'shift';
-                    if (isGap) shiftClass += ' coverage-gap';
-                    else if (unfilled) shiftClass += ' unfilled';
-                    else if (isSpecial) shiftClass += ' special';
-                    else if (workStudy) shiftClass += ' work-study';
-                    else if (isCovered) shiftClass += ' covered-shift';
-                    if (isForced) shiftClass += ' forced-shift';
-                    if (shift.assigned.length > 1) shiftClass += ' multiple-workers';
+                    // Sort shifts by start time to ensure proper chronological order
+                    const sortedShifts = shifts.sort((a, b) => {
+                        const timeA = timeToHour(a.start);
+                        const timeB = timeToHour(b.start);
+                        return timeA - timeB;
+                    });
                     
-                    // Check for cross-workplace conflicts
-                    let conflictWarning = '';
-                    if (window.crossWorkplaceConflicts && !isGap && !unfilled) {
-                        const conflictsForThisShift = window.crossWorkplaceConflicts.filter(c => 
-                            c.day === day && c.time === `${formatTime(shift.start)}-${formatTime(shift.end)}`
-                        );
-                        if (conflictsForThisShift.length > 0) {
-                            shiftClass += ' cross-workplace-conflict';
-                            const conflictNames = conflictsForThisShift.map(c => c.worker).join(', ');
-                            conflictWarning = `<div style="color: #e53935; font-size: 0.85rem; margin-top: 0.25rem;">⚠️ Cross-workplace conflict: ${conflictNames}</div>`;
+                    html += `<div class="day-header">${day}</div>`;
+                    sortedShifts.forEach((shift, index) => {
+                        const unfilled = shift.assigned.includes('Unfilled');
+                        const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
+                        const workStudy = shift.is_work_study || false;
+                        const isSpecial = shift.is_special || false;
+                        const isForced = shift.forced === true;
+                        const isCovered = shift.covered === true;
+                        
+                        let shiftClass = 'shift';
+                        if (isGap) shiftClass += ' coverage-gap';
+                        else if (unfilled) shiftClass += ' unfilled';
+                        else if (isSpecial) shiftClass += ' special';
+                        else if (workStudy) shiftClass += ' work-study';
+                        else if (isCovered) shiftClass += ' covered-shift';
+                        if (isForced) shiftClass += ' forced-shift';
+                        if (shift.assigned.length > 1) shiftClass += ' multiple-workers';
+                        
+                        // Check for cross-workplace conflicts
+                        let conflictWarning = '';
+                        if (window.crossWorkplaceConflicts && !isGap && !unfilled) {
+                            const conflictsForThisShift = window.crossWorkplaceConflicts.filter(c => 
+                                c.day === day && c.time === `${formatTime(shift.start)}-${formatTime(shift.end)}`
+                            );
+                            if (conflictsForThisShift.length > 0) {
+                                shiftClass += ' cross-workplace-conflict';
+                                const conflictNames = conflictsForThisShift.map(c => c.worker).join(', ');
+                                conflictWarning = `<div style="color: #e53935; font-size: 0.85rem; margin-top: 0.25rem;">⚠️ Cross-workplace conflict: ${conflictNames}</div>`;
+                            }
                         }
-                    }
-                    
-                    // Prepare coverage info
-                    let coverageInfo = '';
-                    if (isCovered) {
-                        const restoreTime = shift.auto_restore_at ? new Date(shift.auto_restore_at).toLocaleString() : 'Unknown';
-                        coverageInfo = `<div style="color: #17a2b8; font-size: 0.85rem; margin-top: 0.25rem;">
-                            🔄 Covered by ${shift.cover_worker_name} (${shift.cover_type}) - Auto-restore: ${restoreTime}
-                        </div>`;
-                    }
-                    
-                    html += `
-                        <div class="${shiftClass}">
-                            <div>
-                                <strong>${formatTime(shift.start)} - ${formatTime(shift.end)}</strong>
-                                ${workStudy ? '<span style="color: #ffc107; margin-left: 0.5rem;">(Work Study)</span>' : ''}
-                                ${isSpecial ? '<span style="color: #28a745; margin-left: 0.5rem; font-weight: bold;">(SPECIAL)</span>' : ''}
-                                ${isGap ? '<span style="color: #ff5722; margin-left: 0.5rem;">(CRITICAL GAP)</span>' : ''}
-                                ${isForced ? '<span style="color: #e53935; margin-left: 0.5rem; font-weight: bold;">(FORCED)</span>' : ''}
-                                ${isCovered ? '<span style="color: #17a2b8; margin-left: 0.5rem; font-weight: bold;">(COVERED)</span>' : ''}
-                                <div style="margin-top: 0.25rem; font-size: 0.9rem;">
-                                    ${shift.assigned.length > 1 ? 
-                                        `<span style="color: #007bff; font-weight: 600;">👥 ${shift.assigned.length} Workers:</span> ${shift.assigned.join(', ')}` :
-                                        shift.assigned.join(', ')
-                                    }
+                        
+                        // Prepare coverage info
+                        let coverageInfo = '';
+                        if (isCovered) {
+                            const restoreTime = shift.auto_restore_at ? new Date(shift.auto_restore_at).toLocaleString() : 'Unknown';
+                            coverageInfo = `<div style="color: #17a2b8; font-size: 0.85rem; margin-top: 0.25rem;">
+                                🔄 Covered by ${shift.cover_worker_name} (${shift.cover_type}) - Auto-restore: ${restoreTime}
+                            </div>`;
+                        }
+                        
+                        html += `
+                            <div class="${shiftClass}">
+                                <div>
+                                    <strong>${formatTime(shift.start)} - ${formatTime(shift.end)}</strong>
+                                    ${workStudy ? '<span style="color: #ffc107; margin-left: 0.5rem;">(Work Study)</span>' : ''}
+                                    ${isSpecial ? '<span style="color: #28a745; margin-left: 0.5rem; font-weight: bold;">(SPECIAL)</span>' : ''}
+                                    ${isGap ? '<span style="color: #ff5722; margin-left: 0.5rem;">(CRITICAL GAP)</span>' : ''}
+                                    ${isForced ? '<span style="color: #e53935; margin-left: 0.5rem; font-weight: bold;">(FORCED)</span>' : ''}
+                                    ${isCovered ? '<span style="color: #17a2b8; margin-left: 0.5rem; font-weight: bold;">(COVERED)</span>' : ''}
+                                    <div style="margin-top: 0.25rem; font-size: 0.9rem;">
+                                        ${shift.assigned.length > 1 ? 
+                                            `<span style="color: #007bff; font-weight: 600;">👥 ${shift.assigned.length} Workers:</span> ${shift.assigned.join(', ')}` :
+                                            shift.assigned.join(', ')
+                                        }
+                                    </div>
+                                    ${coverageInfo}
+                                    ${conflictWarning}
                                 </div>
-                                ${coverageInfo}
-                                ${conflictWarning}
+                                ${user.isAdmin ? `
+                                <div class="shift-actions no-print">
+                                    <button class="btn btn-warning" onclick="editShift('${day}', ${index})">✏️ Edit</button>
+                                    <button class="btn btn-danger" onclick="removeShift('${day}', ${index})">🗑️ Remove</button>
+                                    <button class="btn btn-info" onclick="coverShift('${day}', ${index})" style="background: #17a2b8; color: white;">🔄 Cover Shift</button>
+                                    <button class="btn ${isSpecial ? 'btn-success' : 'btn-secondary'}" onclick="toggleSpecialShift('${day}', ${index})" style="background: ${isSpecial ? '#28a745' : '#6c757d'}; color: white;">${isSpecial ? '⭐ Special' : '⭐ Special'}</button>
+                                    ${(unfilled || isGap) ? '<button class="btn btn-info" onclick="suggestAlternatives(\'' + day + '\', ' + index + ')">💡 Fix</button>' : ''}
+                                </div>
+                                ` : ''}
                             </div>
-                            ${user.isAdmin ? `
-                            <div class="shift-actions no-print">
-                                <button class="btn btn-warning" onclick="editShift('${day}', ${index})">✏️ Edit</button>
-                                <button class="btn btn-danger" onclick="removeShift('${day}', ${index})">🗑️ Remove</button>
-                                <button class="btn btn-info" onclick="coverShift('${day}', ${index})" style="background: #17a2b8; color: white;">🔄 Cover Shift</button>
-                                <button class="btn ${isSpecial ? 'btn-success' : 'btn-secondary'}" onclick="toggleSpecialShift('${day}', ${index})" style="background: ${isSpecial ? '#28a745' : '#6c757d'}; color: white;">${isSpecial ? '⭐ Special' : '⭐ Special'}</button>
-                                ${(unfilled || isGap) ? '<button class="btn btn-info" onclick="suggestAlternatives(\'' + day + '\', ' + index + ')">💡 Fix</button>' : ''}
-                            </div>
-                            ` : ''}
-                        </div>
-                    `;
+                        `;
+                    });
                 });
-            });
+            }
             
             // Enhanced worker hours summary - only show for admin users with separated tables
             if (user.isAdmin) {
