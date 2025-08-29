@@ -14595,11 +14595,10 @@ Management Team`);
     // Get all unique time slots (30-min intervals)
     const allTimeSlots = new Set();
     Object.values(schedule).flat().forEach(shift => {
-        let currentTime = timeToHour(shift.start);
-        const endHour = timeToHour(shift.end);
-        while (currentTime < endHour) {
-            allTimeSlots.add(hourToTime(currentTime));
-            currentTime += 0.5;
+        let t = shift.start;
+        while (t < shift.end) {
+            allTimeSlots.add(t);
+            t = incrementTimeBy30(t);
         }
     });
     const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => timeToHour(a) - timeToHour(b));
@@ -14611,8 +14610,8 @@ Management Team`);
     DAYS_ORDER.forEach(day => {
         shiftRowspanMap[day] = [];
         (schedule[day] || []).forEach((shift, idx) => {
-            const startIdx = sortedTimeSlots.findIndex(t => timeToHour(t) === timeToHour(shift.start));
-            let endIdx = sortedTimeSlots.findIndex(t => timeToHour(t) === timeToHour(shift.end));
+            const startIdx = sortedTimeSlots.findIndex(t => t === shift.start);
+            let endIdx = sortedTimeSlots.findIndex(t => t === shift.end);
             if (endIdx === -1) endIdx = sortedTimeSlots.length;
             shiftRowspanMap[day].push({
                 shift,
@@ -14635,12 +14634,85 @@ Management Team`);
     });
     gridHTML += '</tr></thead>';
     gridHTML += '<tbody>';
+    // Helper to format time as h:mm AM/PM
+    function formatTimeHM(t) {
+        let [h, m] = t.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0) h = 12;
+        return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
+    }
+    // Helper to get duration in hours:min
+    function getDurationHM(start, end) {
+        let [sh, sm] = start.split(':').map(Number);
+        let [eh, em] = end.split(':').map(Number);
+        let mins = (eh * 60 + em) - (sh * 60 + sm);
+        let h = Math.floor(mins / 60);
+        let m = mins % 60;
+        return `${h > 0 ? h + 'h ' : ''}${m}m`;
+    }
     for (let rowIdx = 0; rowIdx < sortedTimeSlots.length; rowIdx++) {
         const timeSlot = sortedTimeSlots[rowIdx];
         gridHTML += '<tr>';
-        gridHTML += `<td>${formatTime(timeSlot)}</td>`;
+        gridHTML += `<td>${formatTimeHM(timeSlot)}</td>`;
         DAYS_ORDER.forEach(day => {
-            // Check if a shift starts at this slot
+            const shiftInfo = shiftRowspanMap[day].find(s => s.startIdx === rowIdx);
+            if (shiftInfo && !rendered[day][shiftInfo.idx]) {
+                rendered[day][shiftInfo.idx] = true;
+                const shift = shiftInfo.shift;
+                const rowspan = shiftInfo.rowspan;
+                const isWorkStudy = shift.is_work_study || shift.isWorkStudy || false;
+                const isSpecial = shift.is_special || false;
+                const isCovered = shift.covered === true;
+                const isGap = shift.assigned && (shift.assigned.includes('COVERAGE GAP') || shift.isGap);
+                const unfilled = shift.assigned && shift.assigned.includes('Unfilled');
+                let shiftClass = 'grid-shift-item';
+                if (isWorkStudy) shiftClass += ' grid-work-study';
+                // Show worker name, shift time, and duration in h:mm format
+                let workerName = Array.isArray(shift.assigned) ? shift.assigned.join(', ') : (shift.workerName || shift.worker || '');
+                let shiftTime = `${formatTimeHM(shift.start)} - ${formatTimeHM(shift.end)}`;
+                let duration = getDurationHM(shift.start, shift.end);
+                gridHTML += `<td rowspan="${rowspan}">`;
+                gridHTML += `<div class="${shiftClass}">`;
+                if (isGap || unfilled) {
+                    gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${workerName}</span>`;
+                } else {
+                    gridHTML += `<span class="grid-shift-worker">${workerName}</span>`;
+                }
+                gridHTML += `<div class="grid-shift-time">${shiftTime}</div>`;
+                gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
+                if (isWorkStudy) {
+                    gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
+                }
+                if (isSpecial) {
+                    gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
+                }
+                if (isCovered) {
+                    gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
+                }
+                if (user.isAdmin && !isGap && !unfilled) {
+                    gridHTML += '<div class="grid-shift-actions">';
+                    gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${shiftInfo.idx})" title="Edit">✏️</button>`;
+                    gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${shiftInfo.idx})" title="Remove">🗑️</button>`;
+                    gridHTML += `<button class="grid-action-btn cover" onclick="coverShift('${day}', ${shiftInfo.idx})" title="Cover">🔄</button>`;
+                    gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${shiftInfo.idx})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
+                    gridHTML += '</div>';
+                }
+                gridHTML += '</div>';
+                gridHTML += '</td>';
+            } else {
+                const covered = shiftRowspanMap[day].some(s => s.startIdx < rowIdx && s.endIdx > rowIdx);
+                if (!covered) {
+                    gridHTML += '<td><div class="grid-empty-cell">-</div></td>';
+                }
+            }
+        });
+        gridHTML += '</tr>';
+    }
+    gridHTML += '</tbody></table>';
+    gridHTML += '</div>';
+    return gridHTML;
+}
             const shiftInfo = shiftRowspanMap[day].find(s => s.startIdx === rowIdx);
             if (shiftInfo && !rendered[day][shiftInfo.idx]) {
                 // Render the shift cell with rowspan
