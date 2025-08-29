@@ -4510,104 +4510,6 @@ Schedule generation has been stopped to prevent issues.`;
             window.location.href = 'index.html';
         };
 
-        // ==========================================
-        // NON-ADMIN USER DASHBOARD: event wiring
-        // ==========================================
-        // Centralized setup for user dashboard buttons and forms.
-        // This keeps bindings in one place and avoids duplicate handlers.
-        function setupUserDashboardEventListeners() {
-            try {
-                // Request Availability Change button
-                const requestAvailabilityBtn = document.getElementById('requestAvailabilityBtn');
-                if (requestAvailabilityBtn) {
-                    requestAvailabilityBtn.onclick = function() {
-                        const modal = document.getElementById('availabilityRequestModal');
-                        if (modal) {
-                            const nameEl = document.getElementById('requestName');
-                            const emailEl = document.getElementById('requestEmail');
-                            const availEl = document.getElementById('requestAvailability');
-                            if (nameEl) nameEl.value = user.displayName || '';
-                            if (emailEl) emailEl.value = user.email || '';
-                            if (availEl) availEl.value = '';
-                            modal.style.display = 'block';
-                        }
-                    };
-                }
-
-                // Request Time Off button
-                const requestTimeOffBtn = document.getElementById('requestTimeOffBtn');
-                if (requestTimeOffBtn) {
-                    requestTimeOffBtn.onclick = function() {
-                        const modal = document.getElementById('timeOffRequestModal');
-                        if (modal) {
-                            const today = new Date().toISOString().split('T')[0];
-                            const startEl = document.getElementById('timeOffStartDate');
-                            const endEl = document.getElementById('timeOffEndDate');
-                            const reasonEl = document.getElementById('timeOffReason');
-                            if (startEl) startEl.value = today;
-                            if (endEl) endEl.value = '';
-                            if (reasonEl) reasonEl.value = '';
-                            modal.style.display = 'block';
-                        }
-                    };
-                }
-
-                // Request Shift Swap button
-                const requestShiftSwapBtn = document.getElementById('requestShiftSwapBtn');
-                if (requestShiftSwapBtn) {
-                    requestShiftSwapBtn.onclick = function() {
-                        // Defer to existing loader if available
-                        if (typeof loadUserShiftSwapData === 'function') {
-                            loadUserShiftSwapData();
-                        } else {
-                            alert('🔄 Shift swap feature is being prepared. Please contact an admin.');
-                        }
-                    };
-                }
-
-                // My Shift Swap Requests
-                const myShiftSwapRequestsBtn = document.getElementById('myShiftSwapRequestsBtn');
-                if (myShiftSwapRequestsBtn) {
-                    myShiftSwapRequestsBtn.onclick = function() {
-                        if (typeof showUserShiftSwapRequests === 'function') showUserShiftSwapRequests();
-                    };
-                }
-
-                // Send user message button
-                const sendUserMessageBtn = document.getElementById('sendUserMessageBtn');
-                if (sendUserMessageBtn) {
-                    sendUserMessageBtn.onclick = async function() {
-                        if (typeof sendUserMessage === 'function') {
-                            await sendUserMessage();
-                        } else {
-                            const input = document.getElementById('userMessageInput');
-                            if (input && input.value.trim()) alert('Message ready to send (but handler missing)');
-                        }
-                    };
-                }
-
-                // Availability request form - prefer submit handler if present
-                const availabilityRequestForm = document.getElementById('availabilityRequestForm');
-                if (availabilityRequestForm) {
-                    availabilityRequestForm.onsubmit = async function(e) {
-                        e.preventDefault();
-                        if (typeof submitAvailabilityRequest === 'function') await submitAvailabilityRequest();
-                    };
-                }
-
-                // Time off request form
-                const timeOffRequestForm = document.getElementById('timeOffRequestForm');
-                if (timeOffRequestForm) {
-                    timeOffRequestForm.onsubmit = async function(e) {
-                        e.preventDefault();
-                        if (typeof submitTimeOffRequest === 'function') await submitTimeOffRequest();
-                    };
-                }
-            } catch (err) {
-                console.warn('setupUserDashboardEventListeners failed:', err);
-            }
-        }
-
         // PRODUCTION-READY: Comprehensive validation and safety functions
         const validateScheduleInputs = (hoursOfOperation, workersData, maxHoursPerWorker, maxWorkersPerShift, minHoursPerWorker) => {
             const errors = [];
@@ -7353,8 +7255,6 @@ Examples:
             // At the end of selectWorkplace, after loading data and notes:
             if (!user.isAdmin) {
                 await loadUserDashboard();
-                // Ensure UI buttons are wired after dashboard content is rendered
-                try { setupUserDashboardEventListeners(); } catch(e) { console.warn('Could not setup user dashboard listeners', e); }
             }
         };
 
@@ -18633,19 +18533,6 @@ Thank you!`;
             setTimeout(testConnection, 3000);
         }
 
-        // Initialize user dashboard for non-admin users
-        if (!user.isAdmin) {
-            // Attach listeners once DOM is ready
-            document.addEventListener('DOMContentLoaded', function() {
-                try { setupUserDashboardEventListeners(); } catch (e) { console.warn('User dashboard init failed on DOMContentLoaded', e); }
-            });
-
-            // Fallback: also attach after a short delay in case DOMContentLoaded already fired
-            setTimeout(() => {
-                try { setupUserDashboardEventListeners(); } catch (e) { /* ignore */ }
-            }, 1000);
-        }
-
         // Debug function to check current hours
         window.debugHours = function() {
             console.log('=== CURRENT HOURS DEBUG ===');
@@ -19351,6 +19238,39 @@ Thank you!`;
         // --- AVAILABILITY REQUESTS FEATURE ---
         // Helper: safe bind to avoid null element errors
         function safeBind(id, handler) {
+        // --- TEMP: Silence user dashboard buttons for non-admins (safe fallback)
+        // This prevents broken handlers from being relied upon while we fix the root cause.
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                if (window.user && window.user.isAdmin) return; // keep for admins
+
+                const ids = [
+                    'requestAvailabilityBtn',
+                    'requestTimeOffBtn',
+                    'requestShiftSwapBtn',
+                    'myShiftSwapRequestsBtn'
+                ];
+
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    // Disable and add a visual muted appearance
+                    el.disabled = true;
+                    el.style.opacity = '0.5';
+                    el.title = 'Temporarily disabled while dashboard is being finished';
+                    // Remove pointer interactions as well
+                    el.style.pointerEvents = 'none';
+                });
+
+                // Also silence the availability/timeoff forms submit buttons if present
+                const availFormBtn = document.querySelector('#availabilityRequestForm button[type="submit"]');
+                if (availFormBtn) { availFormBtn.disabled = true; availFormBtn.style.opacity = '0.5'; }
+                const timeOffFormBtn = document.querySelector('#timeOffRequestForm button[type="submit"]');
+                if (timeOffFormBtn) { timeOffFormBtn.disabled = true; timeOffFormBtn.style.opacity = '0.5'; }
+            } catch (e) {
+                console.warn('Failed to apply non-admin button silence:', e);
+            }
+        });
             const el = document.getElementById(id);
             if (!el) {
                 console.warn('[BIND WARN] Element not found for id:', id);
@@ -21845,7 +21765,6 @@ Question/Issue:
             const mailtoUrl = `mailto:finn1817@fredonia.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             window.open(mailtoUrl, '_self');
         }
-        // shit - revert, revert!!
     </script>
 </body>
 </html>
