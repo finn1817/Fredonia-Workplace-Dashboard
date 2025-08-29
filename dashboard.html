@@ -1688,13 +1688,29 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 0.75rem 0.5rem;
-            text-align: center;
-            font-weight: 600;
-            border-right: 1px solid rgba(255,255,255,0.2);
-            position: sticky;
-            top: 0;
-            z-index: 10;
         }
+
+        /* Day column container & shift item styles for multi-lane grid view */
+        .day-column-container {
+            position: relative;
+            background: #fbfdff;
+            border-left: 1px solid #eee;
+            border-right: 1px solid #eee;
+            overflow: hidden;
+            min-width: 160px;
+        }
+
+        .grid-shift-item {
+            background: #e9f5ff;
+            border: 1px solid #9fc9ff;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            font-size: 0.8rem;
+        }
+
+        .grid-shift-item .grid-shift-worker { font-weight: 600; display:block; margin-bottom:4px; }
+        .grid-shift-item .grid-shift-time { color:#1e88e5; font-size:0.75rem; }
+    .grid-shift-item .grid-shift-duration { color:#666; font-size:0.75rem; }
 
         .schedule-grid-table th:first-child {
             background: #495057;
@@ -14697,8 +14713,41 @@ Management Team`);
         });
     });
 
+    // Prepare per-day layouts (lane packing for overlapping shifts)
     const rendered = {};
-    DAYS_ORDER.forEach(day => { rendered[day] = {}; });
+    const dayLayouts = {};
+    DAYS_ORDER.forEach(day => { rendered[day] = {}; dayLayouts[day] = { lanes: 0, shifts: [] }; });
+
+    // Packing algorithm: assign each shift to the first lane where it doesn't overlap
+    DAYS_ORDER.forEach(day => {
+        const shifts = shiftRowspanMap[day] || [];
+        // sort by startIdx to pack deterministically
+        shifts.sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx);
+        const lanes = []; // each lane will track last endIdx
+        const assigned = [];
+        for (const s of shifts) {
+            let placed = false;
+            for (let li = 0; li < lanes.length; li++) {
+                if (s.startIdx >= lanes[li]) {
+                    // place in this lane
+                    assigned.push(Object.assign({}, s, { lane: li }));
+                    lanes[li] = s.endIdx;
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                // new lane
+                const li = lanes.length;
+                lanes.push(s.endIdx);
+                assigned.push(Object.assign({}, s, { lane: li }));
+            }
+        }
+        dayLayouts[day].lanes = lanes.length;
+        dayLayouts[day].shifts = assigned;
+        // Debug info
+        try { if (window && window.__DEBUG_SCHEDULE) console.log('[SCHEDULE GRID DEBUG] dayLayout', { day, lanes: lanes.length, assigned }); } catch (e) {}
+    });
 
     function formatTimeHMFromMinutes(mins) {
         // Display times modulo 24 hours so slot labels like 24:30 -> 12:30 AM are shown correctly
@@ -14722,65 +14771,70 @@ Management Team`);
     DAYS_ORDER.forEach(day => { gridHTML += `<th>${day}</th>`; });
     gridHTML += '</tr></thead><tbody>';
 
+    // Render: create a single large cell per day (rowspan = total slots) on the first row
+    const SLOT_HEIGHT_PX = 40; // height per 30-min slot; adjust with CSS if needed
     for (let rowIdx = 0; rowIdx < sortedTimeSlots.length; rowIdx++) {
         const timeSlot = sortedTimeSlots[rowIdx];
         gridHTML += '<tr>';
         gridHTML += `<td>${formatTimeHM(timeSlot)}</td>`;
-        DAYS_ORDER.forEach(day => {
-            const shiftInfo = shiftRowspanMap[day].find(s => s.startIdx === rowIdx);
-            if (shiftInfo && !rendered[day][shiftInfo.idx]) {
-                // Conditional debug logging at render time
-                try {
-                    if (window && window.__DEBUG_SCHEDULE) {
-                        console.log('[SCHEDULE GRID DEBUG] renderEntry', {
-                            day,
-                            idx: shiftInfo.idx,
-                            start: shiftInfo.shift.start,
-                            end: shiftInfo.shift.end,
-                            sMin: shiftInfo.sMin,
-                            eMin: shiftInfo.eMin,
-                            startIdx: shiftInfo.startIdx,
-                            endIdx: shiftInfo.endIdx,
-                            rowspan: shiftInfo.rowspan,
-                            rowIdx
-                        });
+
+        // Only render the day columns on the first time row as large containers with absolute-positioned shifts
+        if (rowIdx === 0) {
+            DAYS_ORDER.forEach(day => {
+                const layout = dayLayouts[day] || { lanes: 0, shifts: [] };
+                const totalHeight = sortedTimeSlots.length * SLOT_HEIGHT_PX;
+                gridHTML += `<td rowspan="${sortedTimeSlots.length}">`;
+                gridHTML += `<div class="day-column-container" style="position:relative; height:${totalHeight}px; min-width:180px;">`;
+
+                // Render each shift as absolutely positioned box inside the container
+                for (const s of layout.shifts) {
+                    // find original shift object
+                    const shiftInfo = s; // already contains shift, startIdx, endIdx, rowspan, idx, sMin, eMin, lane
+                    try { if (window && window.__DEBUG_SCHEDULE) console.log('[SCHEDULE GRID DEBUG] renderEntry', Object.assign({ day }, shiftInfo)); } catch (e) {}
+                    const shift = shiftInfo.shift;
+                    const top = (shiftInfo.startIdx - 0) * SLOT_HEIGHT_PX;
+                    const height = Math.max(1, (shiftInfo.endIdx - shiftInfo.startIdx)) * SLOT_HEIGHT_PX;
+                    const lanes = Math.max(1, layout.lanes);
+                    const widthPercent = 100 / lanes;
+                    const leftPercent = shiftInfo.lane * widthPercent;
+                    const isWorkStudy = shift.is_work_study || shift.isWorkStudy || false;
+                    const isSpecial = shift.is_special || false;
+                    const isCovered = shift.covered === true;
+                    const isGap = shift.assigned && (shift.assigned.includes('COVERAGE GAP') || shift.isGap);
+                    const unfilled = shift.assigned && shift.assigned.includes('Unfilled');
+                    let shiftClass = 'grid-shift-item'; if (isWorkStudy) shiftClass += ' grid-work-study';
+                    let workerName = Array.isArray(shift.assigned) ? shift.assigned.join(', ') : (shift.workerName || shift.worker || '');
+                    const shiftTime = `${formatTimeHM(shift.start)} - ${formatTimeHM(shift.end)}`;
+                    const duration = formatDurationHMM(shiftInfo.sMin, shiftInfo.eMin);
+                    gridHTML += `<div class="${shiftClass}" style="position:absolute; top:${top}px; left:${leftPercent}%; width:${widthPercent}%; height:${height}px; box-sizing:border-box; padding:6px; overflow:hidden;">`;
+                    if (isGap || unfilled) gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${workerName}</span>`;
+                    else gridHTML += `<span class="grid-shift-worker">${workerName}</span>`;
+                    gridHTML += `<div class="grid-shift-time">${shiftTime}</div>`;
+                    gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
+                    if (isWorkStudy) gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
+                    if (isSpecial) gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
+                    if (isCovered) gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
+                    if (user && user.isAdmin && !isGap && !unfilled) {
+                        gridHTML += '<div class="grid-shift-actions">';
+                        gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${shiftInfo.idx})" title="Edit">✏️</button>`;
+                        gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${shiftInfo.idx})" title="Remove">🗑️</button>`;
+                        gridHTML += `<button class="grid-action-btn cover" onclick="coverShift('${day}', ${shiftInfo.idx})" title="Cover">🔄</button>`;
+                        gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${shiftInfo.idx})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
+                        gridHTML += '</div>';
                     }
-                } catch (e) { /* ignore */ }
-                rendered[day][shiftInfo.idx] = true;
-                const shift = shiftInfo.shift;
-                const rowspan = shiftInfo.rowspan;
-                const isWorkStudy = shift.is_work_study || shift.isWorkStudy || false;
-                const isSpecial = shift.is_special || false;
-                const isCovered = shift.covered === true;
-                const isGap = shift.assigned && (shift.assigned.includes('COVERAGE GAP') || shift.isGap);
-                const unfilled = shift.assigned && shift.assigned.includes('Unfilled');
-                let shiftClass = 'grid-shift-item'; if (isWorkStudy) shiftClass += ' grid-work-study';
-                let workerName = Array.isArray(shift.assigned) ? shift.assigned.join(', ') : (shift.workerName || shift.worker || '');
-                const shiftTime = `${formatTimeHM(shift.start)} - ${formatTimeHM(shift.end)}`;
-                const duration = formatDurationHMM(shiftInfo.sMin, shiftInfo.eMin);
-                gridHTML += `<td rowspan="${rowspan}">`;
-                gridHTML += `<div class="${shiftClass}">`;
-                if (isGap || unfilled) gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${workerName}</span>`;
-                else gridHTML += `<span class="grid-shift-worker">${workerName}</span>`;
-                gridHTML += `<div class="grid-shift-time">${shiftTime}</div>`;
-                gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
-                if (isWorkStudy) gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
-                if (isSpecial) gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
-                if (isCovered) gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
-                if (user && user.isAdmin && !isGap && !unfilled) {
-                    gridHTML += '<div class="grid-shift-actions">';
-                    gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${shiftInfo.idx})" title="Edit">✏️</button>`;
-                    gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${shiftInfo.idx})" title="Remove">🗑️</button>`;
-                    gridHTML += `<button class="grid-action-btn cover" onclick="coverShift('${day}', ${shiftInfo.idx})" title="Cover">🔄</button>`;
-                    gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${shiftInfo.idx})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
                     gridHTML += '</div>';
                 }
+
+                // If no shifts, show empties visually aligned to the grid
+                if ((layout.shifts || []).length === 0) {
+                    // render lightweight grid lines or a dash
+                    gridHTML += `<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#ccc;">-</div>`;
+                }
+
                 gridHTML += '</div></td>';
-            } else {
-                const covered = shiftRowspanMap[day].some(s => s.startIdx < rowIdx && s.endIdx > rowIdx);
-                if (!covered) gridHTML += '<td><div class="grid-empty-cell">-</div></td>';
-            }
-        });
+            });
+        } // end first row
+
         gridHTML += '</tr>';
     }
 
