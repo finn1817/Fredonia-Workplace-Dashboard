@@ -2799,11 +2799,37 @@
                 return true;
             });
             
-            // CRITICAL: Override showNotification function to prevent ALL notification popups
+            // CRITICAL: Override showNotification to avoid modal popups but still surface inline feedback
             window.showNotificationOriginal = window.showNotification || function() {};
             window.showNotification = function(message, type = 'info', options = {}) {
-                console.log('Notification suppressed for non-admin:', message, type);
-                // Do nothing - completely suppress all notifications
+                console.log('Notification (non-admin inline):', message, type, options);
+                try {
+                    // Create a small toast container if not present
+                    let container = document.getElementById('inlineNotificationContainer');
+                    if (!container) {
+                        container = document.createElement('div');
+                        container.id = 'inlineNotificationContainer';
+                        container.style.position = 'fixed';
+                        container.style.bottom = '1rem';
+                        container.style.right = '1rem';
+                        container.style.zIndex = 99999;
+                        document.body.appendChild(container);
+                    }
+                    const bg = type === 'success' ? '#164e63' : (type === 'error' ? '#7f1d1d' : '#0f172a');
+                    const el = document.createElement('div');
+                    el.textContent = message;
+                    el.style.background = bg;
+                    el.style.color = '#fff';
+                    el.style.padding = '0.6rem 0.8rem';
+                    el.style.marginTop = '0.5rem';
+                    el.style.borderRadius = '6px';
+                    el.style.boxShadow = '0 4px 12px rgba(2,6,23,0.4)';
+                    el.style.fontSize = '0.9rem';
+                    container.appendChild(el);
+                    setTimeout(() => { el.remove(); if (!container.children.length) container.remove(); }, options.duration || 4000);
+                } catch (e) {
+                    console.log('Failed to show inline notification:', e);
+                }
             };
         }
 
@@ -3023,14 +3049,27 @@
             };
         }
 
-        // Global state
-        let selectedWorkplace = null;
+    // Global state
+    let selectedWorkplace = null;
         let workers = [];
         let hours = {};
         let editingWorkerId = null;
         let schedule = {};
         const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         let currentScheduleId = null; // <-- Track the current schedule doc ID
+        // Expose current user and selectedWorkplace on window for legacy code & defensive handlers
+        // `user` is read from localStorage above; make it available globally
+        try {
+            window.user = user;
+            Object.defineProperty(window, 'selectedWorkplace', {
+                configurable: true,
+                enumerable: true,
+                get() { return selectedWorkplace; },
+                set(v) { selectedWorkplace = v; }
+            });
+        } catch (e) {
+            console.warn('Could not expose globals for legacy handlers:', e);
+        }
         
         // ==========================================
         // 🧹 REUSABLE UTILITY COMPONENTS
@@ -19304,13 +19343,9 @@ Thank you!`;
                     return;
                 }
                 try {
-                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'availability_requests'), {
-                        name,
-                        email,
-                        requestedAvailability,
-                        status: 'pending',
-                        submittedAt: new Date().toISOString(),
-                    });
+                    // Unified user_requests write (plus legacy collection for compatibility)
+                    const payload = { type: 'availability_request', name, email, requestedAvailability, status: 'pending', submittedAt: new Date().toISOString() };
+                    await writeUserRequest(payload);
                     showNotification('✅ Request submitted! Admins will review your request.', 'success');
                     closeModal('availabilityRequestModal');
                 } catch (error) {
@@ -19347,15 +19382,8 @@ Thank you!`;
                 }
 
                 try {
-                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'time_off_requests'), {
-                        fromEmail: user.email,
-                        fromName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                        startDate,
-                        endDate: finalEndDate,
-                        reason,
-                        status: 'pending',
-                        submittedAt: new Date().toISOString(),
-                    });
+                    const payload = { type: 'time_off_request', fromEmail: user.email, fromName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email, startDate, endDate: finalEndDate, reason, status: 'pending', submittedAt: new Date().toISOString() };
+                    await writeUserRequest(payload);
                     showNotification('✅ Time off request submitted! Admins will review your request.', 'success');
                     closeModal('timeOffRequestModal');
                 } catch (error) {
@@ -21159,8 +21187,8 @@ Thank you!`;
                     targetWorkerEmail;
                 console.log('DEBUG: Target worker name:', targetWorkerName);
                 
-                // Create shift swap request
-                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), {
+                // Create shift swap request (unified user_requests + legacy collection)
+                const swapPayload = {
                     requesterId: user.uid || user.email,
                     requesterName: (user.firstName && user.lastName) ? `${user.firstName} ${user.lastName}` : user.email,
                     requesterEmail: user.email,
@@ -21182,7 +21210,8 @@ Thank you!`;
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     updatedBy: user.email
-                });
+                };
+                await writeUserRequest(Object.assign({ type: 'shift_swap_request' }, swapPayload));
                 
                 console.log('DEBUG: Shift swap request saved successfully!');
                 showNotification('✅ Shift swap request submitted successfully!', 'success');
@@ -21818,11 +21847,29 @@ Question/Issue:
                 const setBusy = (b) => { document.getElementById('sendFallbackAdminMsg').disabled = b; document.getElementById('sendFallbackAvailability').disabled = b; document.getElementById('sendFallbackTimeOff').disabled = b; document.getElementById('sendFallbackSwap').disabled = b; };
 
                 // Helpers to write to Firestore
-                async function writeToWorkplaceCollection(collName, data){
+                // Unified helper: write a user request to workplaces/<selectedWorkplace>/user_requests
+                // Also write to legacy collection(s) for compatibility when appropriate
+                async function writeUserRequest(payload) {
                     if (!window.selectedWorkplace) { showStatus('Please select a workplace first', false); throw new Error('no workplace'); }
-                    const colRef = collection(db, 'workplaces', selectedWorkplace, collName);
-                    console.log('[FALLBACK] writing to', collName, data);
-                    return await addDoc(colRef, data);
+                    const wpPath = `workplaces/${selectedWorkplace}`;
+                    const dest = collection(db, 'workplaces', selectedWorkplace, 'user_requests');
+                    console.log('[FALLBACK] writeUserRequest to', wpPath, payload);
+                    const docRef = await addDoc(dest, payload);
+                    // Backwards compatibility: write to legacy targeted collections
+                    try {
+                        if (payload.type === 'availability_request') {
+                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'availability_requests'), payload);
+                        } else if (payload.type === 'time_off_request') {
+                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'time_off_requests'), payload);
+                        } else if (payload.type === 'shift_swap' || payload.type === 'shift_swap_request') {
+                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), payload);
+                        } else if (payload.type === 'user_message') {
+                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'notifications'), payload);
+                        }
+                    } catch (e) {
+                        console.warn('[FALLBACK] legacy write failed (non-fatal):', e);
+                    }
+                    return docRef;
                 }
 
                 document.getElementById('sendFallbackAdminMsg').addEventListener('click', async function(){
@@ -21831,7 +21878,7 @@ Question/Issue:
                         const txt = (document.getElementById('fallbackAdminMessage')||{value:''}).value.trim();
                         if (!txt) { showStatus('Message is empty', false); setBusy(false); return; }
                         const payload = { fromEmail: window.user.email || null, fromName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), message: txt, createdAt: new Date().toISOString(), type: 'user_message' };
-                        await writeToWorkplaceCollection('notifications', payload);
+                        await writeUserRequest(Object.assign({type: 'user_message'}, payload));
                         showStatus('Message sent — admins will see it.', true);
                         (document.getElementById('fallbackAdminMessage')||{value:''}).value='';
                     } catch (e) { console.error('[FALLBACK] send message failed', e); showStatus('Failed to send message', false); }
@@ -21844,7 +21891,7 @@ Question/Issue:
                         const txt = (document.getElementById('fallbackAvailabilityText')||{value:''}).value.trim();
                         if (!txt) { showStatus('Availability text is empty', false); setBusy(false); return; }
                         const payload = { name: (window.user.firstName||'') + ' ' + (window.user.lastName||''), email: window.user.email || null, requestedAvailability: txt, status: 'pending', submittedAt: new Date().toISOString() };
-                        await writeToWorkplaceCollection('availability_requests', payload);
+                        await writeUserRequest(Object.assign({type: 'availability_request'}, payload));
                         showStatus('Availability request submitted.', true);
                         (document.getElementById('fallbackAvailabilityText')||{value:''}).value='';
                     } catch (e) { console.error('[FALLBACK] availability failed', e); showStatus('Failed to submit availability', false); }
@@ -21859,7 +21906,7 @@ Question/Issue:
                         const reason = (document.getElementById('fallbackTimeOffReason')||{value:''}).value.trim();
                         if (!start) { showStatus('Start date required', false); setBusy(false); return; }
                         const payload = { fromEmail: window.user.email || null, fromName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), startDate: start, endDate: end || start, reason, status: 'pending', submittedAt: new Date().toISOString() };
-                        await writeToWorkplaceCollection('time_off_requests', payload);
+                        await writeUserRequest(Object.assign({type: 'time_off_request'}, payload));
                         showStatus('Time off request submitted.', true);
                         (document.getElementById('fallbackTimeOffReason')||{value:''}).value='';
                     } catch (e) { console.error('[FALLBACK] time off failed', e); showStatus('Failed to submit time off', false); }
@@ -21872,7 +21919,7 @@ Question/Issue:
                         const desc = (document.getElementById('fallbackShiftSwap')||{value:''}).value.trim();
                         if (!desc) { showStatus('Describe the shift to swap', false); setBusy(false); return; }
                         const payload = { requesterEmail: window.user.email || null, requesterName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), description: desc, status: 'pending', createdAt: new Date().toISOString() };
-                        await writeToWorkplaceCollection('shiftSwaps', payload);
+                        await writeUserRequest(Object.assign({type: 'shift_swap_request'}, payload));
                         showStatus('Shift swap request submitted.', true);
                         (document.getElementById('fallbackShiftSwap')||{value:''}).value='';
                     } catch (e) { console.error('[FALLBACK] swap failed', e); showStatus('Failed to submit swap', false); }
@@ -21897,36 +21944,62 @@ Question/Issue:
         })();
     </script>
     <script>
-        // Defensive bindings for user dashboard buttons.
-        // This runs independently of the large module script so we can diagnose missing bindings/runtime errors.
-        document.addEventListener('DOMContentLoaded', function() {
+        // Defensive bindings for user dashboard buttons with wait/retry to avoid init race conditions.
+        // This waits for runtime essentials (window.user and window.db) and falls back to deriving values at click-time.
+        function waitFor(conditionFn, timeout = 10000, interval = 100) {
+            const start = Date.now();
+            return new Promise((resolve, reject) => {
+                (function check() {
+                    try {
+                        if (conditionFn()) return resolve(true);
+                    } catch (e) {
+                        // ignore
+                    }
+                    if (Date.now() - start >= timeout) return resolve(false);
+                    setTimeout(check, interval);
+                })();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async function() {
             try {
+                console.log('[DEFENSIVE BIND] waiting for runtime (user & db) before attaching handlers...');
+                const ready = await waitFor(() => (typeof window.db !== 'undefined') && (typeof window.user !== 'undefined') && window.user && Object.keys(window.user).length > 0, 8000, 150);
+                if (!ready) {
+                    console.warn('[DEFENSIVE BIND] runtime not fully ready after wait - will bind anyway and use fallbacks at click-time');
+                } else {
+                    console.log('[DEFENSIVE BIND] runtime ready, attaching handlers');
+                }
+
                 const ids = ['requestAvailabilityBtn','requestTimeOffBtn','requestShiftSwapBtn','myShiftSwapRequestsBtn'];
-                console.log('[DEFENSIVE BIND] Checking user dashboard buttons...');
                 ids.forEach(id => {
                     const el = document.getElementById(id);
                     if (!el) {
                         console.warn('[DEFENSIVE BIND] Element not found:', id);
                         return;
                     }
-                    // Avoid double-binding
                     if (el.__defensive_bound) return;
                     el.__defensive_bound = true;
 
                     el.addEventListener('click', function(e) {
                         console.log('[DEFENSIVE CLICK]', id);
                         try {
+                            // Derive runtime values defensively
+                            const usr = window.user || JSON.parse(localStorage.getItem('user') || '{}') || {};
+                            const wp = window.selectedWorkplace || localStorage.getItem('selectedWorkplace') || null;
+
                             if (id === 'requestAvailabilityBtn') {
                                 const nameEl = document.getElementById('requestName');
                                 const emailEl = document.getElementById('requestEmail');
                                 const availEl = document.getElementById('requestAvailability');
-                                if (nameEl && window.user) nameEl.value = window.user.firstName || '';
-                                if (emailEl && window.user) emailEl.value = window.user.email || '';
+                                if (nameEl) nameEl.value = usr.firstName || '';
+                                if (emailEl) emailEl.value = usr.email || '';
                                 if (availEl) availEl.value = '';
                                 const modal = document.getElementById('availabilityRequestModal');
                                 if (modal) modal.style.display = 'block';
                                 return;
                             }
+
                             if (id === 'requestTimeOffBtn') {
                                 const today = new Date().toISOString().split('T')[0];
                                 const startEl = document.getElementById('timeOffStartDate');
@@ -21939,9 +22012,10 @@ Question/Issue:
                                 if (modal) modal.style.display = 'block';
                                 return;
                             }
+
                             if (id === 'requestShiftSwapBtn') {
-                                console.log('DEF: requestShiftSwapBtn clicked - selectedWorkplace=', window.selectedWorkplace, 'user=', window.user);
-                                if (!window.selectedWorkplace) {
+                                console.log('DEF: requestShiftSwapBtn clicked - selectedWorkplace=', wp, 'user=', usr);
+                                if (!wp) {
                                     if (typeof showNotification === 'function') showNotification('❌ Please select a workplace first', 'error');
                                     else console.warn('showNotification not defined');
                                     return;
@@ -21949,12 +22023,16 @@ Question/Issue:
                                 if (typeof openShiftSwapRequestModal === 'function') {
                                     openShiftSwapRequestModal();
                                 } else {
-                                    console.warn('openShiftSwapRequestModal is not defined');
+                                    // Fallback: open the modal if present
+                                    const modal = document.getElementById('shiftSwapRequestModal');
+                                    if (modal) modal.style.display = 'block';
+                                    else console.warn('openShiftSwapRequestModal is not defined and modal not found');
                                 }
                                 return;
                             }
+
                             if (id === 'myShiftSwapRequestsBtn') {
-                                if (!window.selectedWorkplace) {
+                                if (!wp) {
                                     if (typeof showNotification === 'function') showNotification('❌ Please select a workplace first', 'error');
                                     else console.warn('showNotification not defined');
                                     return;
@@ -21965,13 +22043,14 @@ Question/Issue:
                                 else console.warn('loadUserShiftSwapRequests is not defined');
                                 return;
                             }
+
                         } catch (err) {
                             console.error('[DEFENSIVE CLICK] handler error for', id, err);
                         }
                     });
                 });
 
-                // Quick diagnostic: print which buttons exist right now
+                // Diagnostic: list present buttons
                 const present = ids.filter(id => !!document.getElementById(id));
                 console.log('[DEFENSIVE BIND] Present buttons:', present);
             } catch (err) {
