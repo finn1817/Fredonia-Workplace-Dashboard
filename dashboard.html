@@ -14592,65 +14592,130 @@ Management Team`);
         // Generate schedule grid view (Excel-style)
         function generateScheduleGridView(schedule, workersData = null) {
     const DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    // Get all unique time slots (30-min intervals)
-    const allTimeSlots = new Set();
-    Object.values(schedule).flat().forEach(shift => {
-        let t = shift.start;
-        while (t < shift.end) {
-            allTimeSlots.add(t);
-            t = incrementTimeBy30(t);
+
+    // Helper: convert many time formats to minutes since midnight
+    function toMinutes(t) {
+        if (t == null) return 0;
+        if (typeof t === 'number') return Math.round(t * 60);
+        if (typeof t === 'string') {
+            const s = t.trim();
+            // Match formats like '2:30 PM' or '02:30 pm'
+            const ampmMatch = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/);
+            if (ampmMatch) {
+                let hh = parseInt(ampmMatch[1], 10);
+                const mm = parseInt(ampmMatch[2], 10);
+                const ampm = ampmMatch[3].toUpperCase();
+                if (ampm === 'PM' && hh !== 12) hh += 12;
+                if (ampm === 'AM' && hh === 12) hh = 0;
+                return hh * 60 + mm;
+            }
+            // Match 24-hour HH:MM
+            const hhmmMatch = s.match(/^(\d{1,2}):(\d{2})$/);
+            if (hhmmMatch) {
+                const hh = parseInt(hhmmMatch[1], 10);
+                const mm = parseInt(hhmmMatch[2], 10);
+                return hh * 60 + mm;
+            }
+            // Decimal hours like '14.5' or '8.75'
+            if (s.includes('.')) {
+                const num = Number(s);
+                if (!isNaN(num)) return Math.round(num * 60);
+            }
+            // Plain hour like '14' or '2 PM'
+            const plainMatch = s.match(/^(\d{1,2})\s*(AM|PM|am|pm)?$/);
+            if (plainMatch) {
+                let hh = parseInt(plainMatch[1], 10);
+                const ampm = plainMatch[2] ? plainMatch[2].toUpperCase() : null;
+                if (ampm === 'PM' && hh !== 12) hh += 12;
+                if (ampm === 'AM' && hh === 12) hh = 0;
+                return hh * 60;
+            }
+            return 0;
         }
-    });
-    const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => timeToHour(a) - timeToHour(b));
-    if (sortedTimeSlots.length === 0) {
-        return '<div class="grid-empty-cell">No shifts scheduled</div>';
+        return 0;
     }
-    // Build a lookup for each day: for each shift, mark its start/end slot indices
+
+    // Align boundaries to 30-minute grid
+    let minMinute = Infinity;
+    let maxMinute = -Infinity;
+    Object.values(schedule).flat().forEach(shift => {
+        const s = toMinutes(shift.start);
+        const e = toMinutes(shift.end);
+        if (s < minMinute) minMinute = s;
+        if (e > maxMinute) maxMinute = e;
+    });
+    if (minMinute === Infinity) return '<div class="grid-empty-cell">No shifts scheduled</div>';
+    // Snap to 30-min boundaries
+    minMinute = Math.floor(minMinute / 30) * 30;
+    maxMinute = Math.ceil(maxMinute / 30) * 30;
+
+    const sortedTimeSlots = [];
+    for (let m = minMinute; m < maxMinute; m += 30) {
+        const hh = Math.floor(m / 60).toString().padStart(2, '0');
+        const mm = (m % 60).toString().padStart(2, '0');
+        sortedTimeSlots.push(`${hh}:${mm}`);
+    }
+
+    const slotMinutes = sortedTimeSlots.map(t => toMinutes(t));
+
+    // Build lookup per day
     const shiftRowspanMap = {};
     DAYS_ORDER.forEach(day => {
         shiftRowspanMap[day] = [];
         (schedule[day] || []).forEach((shift, idx) => {
-            const startIdx = sortedTimeSlots.findIndex(t => t === shift.start);
-            let endIdx = sortedTimeSlots.findIndex(t => t === shift.end);
-            if (endIdx === -1) endIdx = sortedTimeSlots.length;
-            shiftRowspanMap[day].push({
-                shift,
-                startIdx,
-                endIdx,
-                rowspan: endIdx > startIdx ? endIdx - startIdx : 1,
-                idx
-            });
+            const sMin = toMinutes(shift.start);
+            const eMin = toMinutes(shift.end);
+            // startIdx is index of slotMinutes where slotMinutes[startIdx] === nearest slot at or before sMin
+            let startIdx = slotMinutes.findIndex(m => m >= sMin);
+            if (startIdx === -1) startIdx = 0;
+            let endIdx = slotMinutes.findIndex(m => m >= eMin);
+            if (endIdx === -1) endIdx = slotMinutes.length;
+            // If shift ends exactly on a slot boundary, endIdx is correct; rowspan is endIdx - startIdx
+            const rowspan = Math.max(1, endIdx - startIdx);
+            shiftRowspanMap[day].push({ shift, startIdx, endIdx, rowspan, idx, sMin, eMin });
+            // Conditional debug logging: enable in browser console with `window.__DEBUG_SCHEDULE = true`
+            try {
+                if (window && window.__DEBUG_SCHEDULE) {
+                    console.log('[SCHEDULE GRID DEBUG] buildEntry', {
+                        day,
+                        idx,
+                        start: shift.start,
+                        end: shift.end,
+                        sMin,
+                        eMin,
+                        startIdx,
+                        endIdx,
+                        rowspan
+                    });
+                }
+            } catch (e) { /* ignore in non-browser environments */ }
         });
     });
-    // Track which shifts have already been rendered (to skip cells for continued slots)
+
     const rendered = {};
     DAYS_ORDER.forEach(day => { rendered[day] = {}; });
+
+    function formatTimeHMFromMinutes(mins) {
+        const hh24 = Math.floor(mins / 60);
+        const h12 = ((hh24 + 11) % 12) + 1;
+        const mm = (mins % 60).toString().padStart(2, '0');
+        const ampm = hh24 >= 12 ? 'PM' : 'AM';
+        return `${h12}:${mm} ${ampm}`;
+    }
+    function formatTimeHM(t) { return formatTimeHMFromMinutes(toMinutes(t)); }
+    function formatDurationHMM(startMin, endMin) {
+        const mins = Math.max(0, endMin - startMin);
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${h}:${m.toString().padStart(2, '0')}`;
+    }
+
     let gridHTML = '<div class="schedule-grid-view">';
     gridHTML += '<table class="schedule-grid-table">';
-    gridHTML += '<thead><tr>';
-    gridHTML += '<th>Time</th>';
-    DAYS_ORDER.forEach(day => {
-        gridHTML += `<th>${day}</th>`;
-    });
-    gridHTML += '</tr></thead>';
-    gridHTML += '<tbody>';
-    // Helper to format time as h:mm AM/PM
-    function formatTimeHM(t) {
-        let [h, m] = t.split(':').map(Number);
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        h = h % 12;
-        if (h === 0) h = 12;
-        return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
-    }
-    // Helper to get duration in hours:min
-    function getDurationHM(start, end) {
-        let [sh, sm] = start.split(':').map(Number);
-        let [eh, em] = end.split(':').map(Number);
-        let mins = (eh * 60 + em) - (sh * 60 + sm);
-        let h = Math.floor(mins / 60);
-        let m = mins % 60;
-        return `${h > 0 ? h + 'h ' : ''}${m}m`;
-    }
+    gridHTML += '<thead><tr><th>Time</th>';
+    DAYS_ORDER.forEach(day => { gridHTML += `<th>${day}</th>`; });
+    gridHTML += '</tr></thead><tbody>';
+
     for (let rowIdx = 0; rowIdx < sortedTimeSlots.length; rowIdx++) {
         const timeSlot = sortedTimeSlots[rowIdx];
         gridHTML += '<tr>';
@@ -14658,6 +14723,23 @@ Management Team`);
         DAYS_ORDER.forEach(day => {
             const shiftInfo = shiftRowspanMap[day].find(s => s.startIdx === rowIdx);
             if (shiftInfo && !rendered[day][shiftInfo.idx]) {
+                // Conditional debug logging at render time
+                try {
+                    if (window && window.__DEBUG_SCHEDULE) {
+                        console.log('[SCHEDULE GRID DEBUG] renderEntry', {
+                            day,
+                            idx: shiftInfo.idx,
+                            start: shiftInfo.shift.start,
+                            end: shiftInfo.shift.end,
+                            sMin: shiftInfo.sMin,
+                            eMin: shiftInfo.eMin,
+                            startIdx: shiftInfo.startIdx,
+                            endIdx: shiftInfo.endIdx,
+                            rowspan: shiftInfo.rowspan,
+                            rowIdx
+                        });
+                    }
+                } catch (e) { /* ignore */ }
                 rendered[day][shiftInfo.idx] = true;
                 const shift = shiftInfo.shift;
                 const rowspan = shiftInfo.rowspan;
@@ -14666,31 +14748,20 @@ Management Team`);
                 const isCovered = shift.covered === true;
                 const isGap = shift.assigned && (shift.assigned.includes('COVERAGE GAP') || shift.isGap);
                 const unfilled = shift.assigned && shift.assigned.includes('Unfilled');
-                let shiftClass = 'grid-shift-item';
-                if (isWorkStudy) shiftClass += ' grid-work-study';
-                // Show worker name, shift time, and duration in h:mm format
+                let shiftClass = 'grid-shift-item'; if (isWorkStudy) shiftClass += ' grid-work-study';
                 let workerName = Array.isArray(shift.assigned) ? shift.assigned.join(', ') : (shift.workerName || shift.worker || '');
-                let shiftTime = `${formatTimeHM(shift.start)} - ${formatTimeHM(shift.end)}`;
-                let duration = getDurationHM(shift.start, shift.end);
+                const shiftTime = `${formatTimeHM(shift.start)} - ${formatTimeHM(shift.end)}`;
+                const duration = formatDurationHMM(shiftInfo.sMin, shiftInfo.eMin);
                 gridHTML += `<td rowspan="${rowspan}">`;
                 gridHTML += `<div class="${shiftClass}">`;
-                if (isGap || unfilled) {
-                    gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${workerName}</span>`;
-                } else {
-                    gridHTML += `<span class="grid-shift-worker">${workerName}</span>`;
-                }
+                if (isGap || unfilled) gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${workerName}</span>`;
+                else gridHTML += `<span class="grid-shift-worker">${workerName}</span>`;
                 gridHTML += `<div class="grid-shift-time">${shiftTime}</div>`;
                 gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
-                if (isWorkStudy) {
-                    gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
-                }
-                if (isSpecial) {
-                    gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
-                }
-                if (isCovered) {
-                    gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
-                }
-                if (user.isAdmin && !isGap && !unfilled) {
+                if (isWorkStudy) gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
+                if (isSpecial) gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
+                if (isCovered) gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
+                if (user && user.isAdmin && !isGap && !unfilled) {
                     gridHTML += '<div class="grid-shift-actions">';
                     gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${shiftInfo.idx})" title="Edit">✏️</button>`;
                     gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${shiftInfo.idx})" title="Remove">🗑️</button>`;
@@ -14698,76 +14769,16 @@ Management Team`);
                     gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${shiftInfo.idx})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
                     gridHTML += '</div>';
                 }
-                gridHTML += '</div>';
-                gridHTML += '</td>';
+                gridHTML += '</div></td>';
             } else {
                 const covered = shiftRowspanMap[day].some(s => s.startIdx < rowIdx && s.endIdx > rowIdx);
-                if (!covered) {
-                    gridHTML += '<td><div class="grid-empty-cell">-</div></td>';
-                }
+                if (!covered) gridHTML += '<td><div class="grid-empty-cell">-</div></td>';
             }
         });
         gridHTML += '</tr>';
     }
-    gridHTML += '</tbody></table>';
-    gridHTML += '</div>';
-    return gridHTML;
-}
-            const shiftInfo = shiftRowspanMap[day].find(s => s.startIdx === rowIdx);
-            if (shiftInfo && !rendered[day][shiftInfo.idx]) {
-                // Render the shift cell with rowspan
-                rendered[day][shiftInfo.idx] = true;
-                const shift = shiftInfo.shift;
-                const rowspan = shiftInfo.rowspan;
-                const isWorkStudy = shift.is_work_study || false;
-                const isSpecial = shift.is_special || false;
-                const isCovered = shift.covered === true;
-                const isGap = shift.assigned.includes('COVERAGE GAP') || shift.isGap;
-                const unfilled = shift.assigned.includes('Unfilled');
-                let shiftClass = 'grid-shift-item';
-                if (isWorkStudy) shiftClass += ' grid-work-study';
-                const duration = ((timeToHour(shift.end) - timeToHour(shift.start)) * 60) + ' min';
-                const dayIndex = DAYS_ORDER.indexOf(day);
-                const globalShiftIndex = (schedule[day] || []).indexOf(shift);
-                gridHTML += `<td rowspan="${rowspan}">`;
-                gridHTML += `<div class="${shiftClass}">`;
-                if (isGap || unfilled) {
-                    gridHTML += `<span class="grid-shift-worker" style="color: #dc3545;">⚠️ ${shift.assigned.join(', ')}</span>`;
-                } else {
-                    gridHTML += `<span class="grid-shift-worker">${shift.assigned.join(', ')}</span>`;
-                }
-                gridHTML += `<div class="grid-shift-duration">${duration}</div>`;
-                if (isWorkStudy) {
-                    gridHTML += `<div style="color: #2e7d32; font-size: 0.7rem; font-weight: bold;">WS</div>`;
-                }
-                if (isSpecial) {
-                    gridHTML += `<div style="color: #28a745; font-size: 0.7rem; font-weight: bold;">SPECIAL</div>`;
-                }
-                if (isCovered) {
-                    gridHTML += `<div style="color: #17a2b8; font-size: 0.7rem; font-weight: bold;">COVERED</div>`;
-                }
-                if (user.isAdmin && !isGap && !unfilled) {
-                    gridHTML += '<div class="grid-shift-actions">';
-                    gridHTML += `<button class="grid-action-btn edit" onclick="editShift('${day}', ${globalShiftIndex})" title="Edit">✏️</button>`;
-                    gridHTML += `<button class="grid-action-btn remove" onclick="removeShift('${day}', ${globalShiftIndex})" title="Remove">🗑️</button>`;
-                    gridHTML += `<button class="grid-action-btn cover" onclick="coverShift('${day}', ${globalShiftIndex})" title="Cover">🔄</button>`;
-                    gridHTML += `<button class="grid-action-btn special" onclick="toggleSpecialShift('${day}', ${globalShiftIndex})" title="Special">${isSpecial ? '⭐' : '☆'}</button>`;
-                    gridHTML += '</div>';
-                }
-                gridHTML += '</div>';
-                gridHTML += '</td>';
-            } else {
-                // Check if this slot is covered by a rowspan above; if so, skip cell
-                const covered = shiftRowspanMap[day].some(s => s.startIdx < rowIdx && s.endIdx > rowIdx);
-                if (!covered) {
-                    gridHTML += '<td><div class="grid-empty-cell">-</div></td>';
-                }
-            }
-        });
-        gridHTML += '</tr>';
-    }
-    gridHTML += '</tbody></table>';
-    gridHTML += '</div>';
+
+    gridHTML += '</tbody></table></div>';
     return gridHTML;
 }
 
@@ -15185,7 +15196,13 @@ Management Team`);
                     const endTime = formatTime(shift.end);
                     const workers = shift.assigned.join(' & ');
                     const isWorkStudy = shift.is_work_study ? 'Yes' : 'No';
-                    const duration = (timeToHour(shift.end) - timeToHour(shift.start)).toFixed(1);
+                    // Format duration as H:MM
+                    const startMin = (typeof shift.start === 'string' ? (shift.start.includes(':') ? (Number(shift.start.split(':')[0]) * 60 + Number(shift.start.split(':')[1])) : Math.round(Number(shift.start) * 60)) : Math.round(Number(shift.start) * 60));
+                    const endMin = (typeof shift.end === 'string' ? (shift.end.includes(':') ? (Number(shift.end.split(':')[0]) * 60 + Number(shift.end.split(':')[1])) : Math.round(Number(shift.end) * 60)) : Math.round(Number(shift.end) * 60));
+                    const totalMins = Math.max(0, endMin - startMin);
+                    const dh = Math.floor(totalMins / 60);
+                    const dm = (totalMins % 60).toString().padStart(2, '0');
+                    const duration = `${dh}:${dm}`;
                     
                     csvContent += `"${day}","${startTime}","${endTime}","${workers}","${isWorkStudy}","${duration}"\n`;
                 });
@@ -21540,7 +21557,7 @@ Question/Issue:
             const mailtoUrl = `mailto:finn1817@fredonia.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             window.open(mailtoUrl, '_self');
         }
-        // forcing old push
+
     </script>
 </body>
 </html>
