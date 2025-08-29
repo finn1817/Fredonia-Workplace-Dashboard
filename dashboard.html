@@ -19864,6 +19864,28 @@ Thank you!`;
                 // Update display
                 document.getElementById('userShiftsPlaceholder').innerHTML = shiftsHtml;
                 document.getElementById('userHoursPlaceholder').innerHTML = `<strong>${totalHours.toFixed(1)}</strong> hours assigned this week.`;
+                // Load and display this user's availability (from workers collection if available)
+                try {
+                    const workersSnapshot = await getDocs(query(
+                        collection(db, 'workplaces', selectedWorkplace, 'workers'),
+                        where('Email', '==', userEmail)
+                    ));
+                    if (!workersSnapshot.empty) {
+                        const wDoc = workersSnapshot.docs[0].data();
+                        const availText = wDoc['Days & Times Available'] || wDoc.availability_text || '';
+                        if (availText && availText.trim().length > 0) {
+                            // Show raw availability text for clarity; keep parsing available via loadWorkerAvailability elsewhere
+                            document.getElementById('userAvailabilityPlaceholder').innerHTML = `<div>${availText}</div>`;
+                        } else {
+                            document.getElementById('userAvailabilityPlaceholder').innerHTML = '<div style="color:#888;">No availability set. Click "Request Availability Change" to add your availability.</div>';
+                        }
+                    } else {
+                        document.getElementById('userAvailabilityPlaceholder').innerHTML = '<div style="color:#888;">No availability record found for your account.</div>';
+                    }
+                } catch (e) {
+                    console.error('Error loading user availability:', e);
+                    document.getElementById('userAvailabilityPlaceholder').innerHTML = '<div style="color:#888;">Error loading availability.</div>';
+                }
                 // Show the dashboard
                 document.getElementById('userDashboard').style.display = 'block';
                 console.log('User dashboard should now be visible');
