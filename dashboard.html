@@ -19254,19 +19254,15 @@ Thank you!`;
                 ids.forEach(id => {
                     const el = document.getElementById(id);
                     if (!el) return;
-                    // Disable and add a visual muted appearance
-                    el.disabled = true;
-                    el.style.opacity = '0.5';
-                    el.title = 'Temporarily disabled while dashboard is being finished';
-                    // Remove pointer interactions as well
-                    el.style.pointerEvents = 'none';
+                    // HIDE the button entirely for non-admin users while we repair the dashboard
+                    el.style.display = 'none';
                 });
 
-                // Also silence the availability/timeoff forms submit buttons if present
+                // Also hide the availability/timeoff forms submit buttons if present
                 const availFormBtn = document.querySelector('#availabilityRequestForm button[type="submit"]');
-                if (availFormBtn) { availFormBtn.disabled = true; availFormBtn.style.opacity = '0.5'; }
+                if (availFormBtn) { availFormBtn.style.display = 'none'; }
                 const timeOffFormBtn = document.querySelector('#timeOffRequestForm button[type="submit"]');
-                if (timeOffFormBtn) { timeOffFormBtn.disabled = true; timeOffFormBtn.style.opacity = '0.5'; }
+                if (timeOffFormBtn) { timeOffFormBtn.style.display = 'none'; }
             } catch (e) {
                 console.warn('Failed to apply non-admin button silence:', e);
             }
