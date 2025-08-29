@@ -21734,5 +21734,88 @@ Question/Issue:
         }
 
     </script>
+    <script>
+        // Defensive bindings for user dashboard buttons.
+        // This runs independently of the large module script so we can diagnose missing bindings/runtime errors.
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                const ids = ['requestAvailabilityBtn','requestTimeOffBtn','requestShiftSwapBtn','myShiftSwapRequestsBtn'];
+                console.log('[DEFENSIVE BIND] Checking user dashboard buttons...');
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) {
+                        console.warn('[DEFENSIVE BIND] Element not found:', id);
+                        return;
+                    }
+                    // Avoid double-binding
+                    if (el.__defensive_bound) return;
+                    el.__defensive_bound = true;
+
+                    el.addEventListener('click', function(e) {
+                        console.log('[DEFENSIVE CLICK]', id);
+                        try {
+                            if (id === 'requestAvailabilityBtn') {
+                                const nameEl = document.getElementById('requestName');
+                                const emailEl = document.getElementById('requestEmail');
+                                const availEl = document.getElementById('requestAvailability');
+                                if (nameEl && window.user) nameEl.value = window.user.firstName || '';
+                                if (emailEl && window.user) emailEl.value = window.user.email || '';
+                                if (availEl) availEl.value = '';
+                                const modal = document.getElementById('availabilityRequestModal');
+                                if (modal) modal.style.display = 'block';
+                                return;
+                            }
+                            if (id === 'requestTimeOffBtn') {
+                                const today = new Date().toISOString().split('T')[0];
+                                const startEl = document.getElementById('timeOffStartDate');
+                                const endEl = document.getElementById('timeOffEndDate');
+                                const reasonEl = document.getElementById('timeOffReason');
+                                if (startEl) startEl.value = today;
+                                if (endEl) endEl.value = '';
+                                if (reasonEl) reasonEl.value = '';
+                                const modal = document.getElementById('timeOffRequestModal');
+                                if (modal) modal.style.display = 'block';
+                                return;
+                            }
+                            if (id === 'requestShiftSwapBtn') {
+                                console.log('DEF: requestShiftSwapBtn clicked - selectedWorkplace=', window.selectedWorkplace, 'user=', window.user);
+                                if (!window.selectedWorkplace) {
+                                    if (typeof showNotification === 'function') showNotification('❌ Please select a workplace first', 'error');
+                                    else console.warn('showNotification not defined');
+                                    return;
+                                }
+                                if (typeof openShiftSwapRequestModal === 'function') {
+                                    openShiftSwapRequestModal();
+                                } else {
+                                    console.warn('openShiftSwapRequestModal is not defined');
+                                }
+                                return;
+                            }
+                            if (id === 'myShiftSwapRequestsBtn') {
+                                if (!window.selectedWorkplace) {
+                                    if (typeof showNotification === 'function') showNotification('❌ Please select a workplace first', 'error');
+                                    else console.warn('showNotification not defined');
+                                    return;
+                                }
+                                const modal = document.getElementById('userShiftSwapRequestsModal');
+                                if (modal) modal.style.display = 'block';
+                                if (typeof loadUserShiftSwapRequests === 'function') loadUserShiftSwapRequests();
+                                else console.warn('loadUserShiftSwapRequests is not defined');
+                                return;
+                            }
+                        } catch (err) {
+                            console.error('[DEFENSIVE CLICK] handler error for', id, err);
+                        }
+                    });
+                });
+
+                // Quick diagnostic: print which buttons exist right now
+                const present = ids.filter(id => !!document.getElementById(id));
+                console.log('[DEFENSIVE BIND] Present buttons:', present);
+            } catch (err) {
+                console.error('[DEFENSIVE BIND] Unexpected error:', err);
+            }
+        });
+    </script>
 </body>
 </html>
