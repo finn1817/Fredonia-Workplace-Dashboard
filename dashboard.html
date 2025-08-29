@@ -2889,16 +2889,30 @@
         
         // CRITICAL: For non-admin users, suppress ALL error popups and alerts
         if (!user.isAdmin) {
-            // Override window.alert to prevent any popups
+            // Override window.alert to log and show native alerts for non-admins
+            const originalAlert = window.alert;
             window.alert = function(message) {
-                console.log('Alert suppressed for non-admin:', message);
+                console.log('Alert (non-admin) shown:', message);
+                try {
+                    return originalAlert.call(window, message);
+                } catch (err) {
+                    console.error('Alert failed to display:', err);
+                    return undefined;
+                }
             };
             
-            // Override window.confirm to prevent any popups
+            // Override window.confirm to allow confirmations but keep a console trace for diagnostics
             const originalConfirm = window.confirm;
             window.confirm = function(message) {
-                console.log('Confirm suppressed for non-admin:', message);
-                return false; // Default to false for safety
+                console.log('Confirm (non-admin) triggered:', message);
+                try {
+                    // Use the original browser confirm so users see the popup
+                    return originalConfirm.call(window, message);
+                } catch (err) {
+                    // If the native confirm fails (rare), log and default to false
+                    console.error('Confirm failed, returning false:', err);
+                    return false;
+                }
             };
             
             // Wrap any potential error sources in try-catch
@@ -2914,11 +2928,15 @@
                 return true;
             });
             
-            // CRITICAL: Override showNotification function to prevent ALL notification popups
-            window.showNotificationOriginal = window.showNotification || function() {};
+            // Override showNotification to log and call original (if present) so non-admins still see notifications
+            window.showNotificationOriginal = window.showNotification || function(message, type = 'info', options = {}) { console.log('showNotification fallback:', message, type); };
             window.showNotification = function(message, type = 'info', options = {}) {
-                console.log('Notification suppressed for non-admin:', message, type);
-                // Do nothing - completely suppress all notifications
+                console.log('Notification (non-admin):', message, type, options);
+                try {
+                    return window.showNotificationOriginal.call(window, message, type, options);
+                } catch (err) {
+                    console.error('showNotification failed:', err);
+                }
             };
         }
 
@@ -4429,17 +4447,30 @@
         const showQuickInfo = (message) => showNotification(message, 'info', { duration: 2000 });
         const showPersistentWarning = (message) => showNotification(message, 'warning', { duration: 0 }); // 0 = doesn't auto-dismiss
 
-        // ULTIMATE FIX: Override all notification functions for non-admin users
+        // For non-admin users, wrap notification functions to log and call originals when present
         if (!user.isAdmin) {
-            // Completely disable ALL notification functions for non-admin users
-            window.showNotification = function() { console.log('showNotification suppressed for non-admin'); };
-            window.showSuccess = function() { console.log('showSuccess suppressed for non-admin'); };
-            window.showError = function() { console.log('showError suppressed for non-admin'); };
-            window.showWarning = function() { console.log('showWarning suppressed for non-admin'); };
-            window.showInfo = function() { console.log('showInfo suppressed for non-admin'); };
-            window.showCriticalError = function() { console.log('showCriticalError suppressed for non-admin'); };
-            window.showQuickInfo = function() { console.log('showQuickInfo suppressed for non-admin'); };
-            window.showPersistentWarning = function() { console.log('showPersistentWarning suppressed for non-admin'); };
+            // Ensure we have fallbacks
+            const _notifyOrig = window.showNotification || function(message, type = 'info', options = {}) { console.log('showNotification fallback:', message, type); };
+            window.showNotification = function(message, type = 'info', options = {}) {
+                console.log('Notification (non-admin):', message, type, options);
+                try { return _notifyOrig.call(window, message, type, options); } catch (err) { console.error('showNotification failed:', err); }
+            };
+
+            const wrapFn = (name) => {
+                const orig = window[name] || function(...args) { console.log(`${name} fallback:`, ...args); };
+                window[name] = function(...args) {
+                    console.log(`${name} (non-admin):`, ...args);
+                    try { return orig.apply(window, args); } catch (err) { console.error(`${name} failed:`, err); }
+                };
+            };
+
+            wrapFn('showSuccess');
+            wrapFn('showError');
+            wrapFn('showWarning');
+            wrapFn('showInfo');
+            wrapFn('showCriticalError');
+            wrapFn('showQuickInfo');
+            wrapFn('showPersistentWarning');
         }
 
         // Enhanced schedule validation
