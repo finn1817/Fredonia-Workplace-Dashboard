@@ -19236,114 +19236,133 @@ Thank you!`;
         }
 
         // --- AVAILABILITY REQUESTS FEATURE ---
+        // Helper: safe bind to avoid null element errors
+        function safeBind(id, handler) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.warn('[BIND WARN] Element not found for id:', id);
+                return false;
+            }
+            el.addEventListener('click', handler);
+            return true;
+        }
+
         // User: Open modal
         if (!user.isAdmin) {
-            document.getElementById('requestAvailabilityBtn').onclick = function() {
-                document.getElementById('requestName').value = user.firstName || '';
-                document.getElementById('requestEmail').value = user.email || '';
-                document.getElementById('requestAvailability').value = '';
-                document.getElementById('availabilityRequestModal').style.display = 'block';
-            };
-            
+            safeBind('requestAvailabilityBtn', function() {
+                const nameEl = document.getElementById('requestName');
+                const emailEl = document.getElementById('requestEmail');
+                const availEl = document.getElementById('requestAvailability');
+                const modalEl = document.getElementById('availabilityRequestModal');
+                if (nameEl) nameEl.value = user.firstName || '';
+                if (emailEl) emailEl.value = user.email || '';
+                if (availEl) availEl.value = '';
+                if (modalEl) modalEl.style.display = 'block';
+            });
+
             // User: Open time off request modal
-            document.getElementById('requestTimeOffBtn').onclick = function() {
+            safeBind('requestTimeOffBtn', function() {
                 // Set default start date to today
                 const today = new Date().toISOString().split('T')[0];
-                document.getElementById('timeOffStartDate').value = today;
-                document.getElementById('timeOffEndDate').value = '';
-                document.getElementById('timeOffReason').value = '';
-                document.getElementById('timeOffRequestModal').style.display = 'block';
-            };
-            
+                const startEl = document.getElementById('timeOffStartDate');
+                const endEl = document.getElementById('timeOffEndDate');
+                const reasonEl = document.getElementById('timeOffReason');
+                const modalEl = document.getElementById('timeOffRequestModal');
+                if (startEl) startEl.value = today;
+                if (endEl) endEl.value = '';
+                if (reasonEl) reasonEl.value = '';
+                if (modalEl) modalEl.style.display = 'block';
+            });
+
             // User: Open shift swap request modal
-            document.getElementById('requestShiftSwapBtn').onclick = function() {
+            safeBind('requestShiftSwapBtn', function() {
                 console.log('Shift swap button clicked!');
                 console.log('Selected workplace:', selectedWorkplace);
                 console.log('User:', user);
-                
+
                 if (!selectedWorkplace) {
                     showNotification('❌ Please select a workplace first', 'error');
                     return;
                 }
                 openShiftSwapRequestModal();
-            };
+            });
         }
         // User: Submit request
         const availabilityRequestForm = document.getElementById('availabilityRequestForm');
         if (availabilityRequestForm) {
-            availabilityRequestForm.onsubmit = async function(e) {
+            availabilityRequestForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                const name = document.getElementById('requestName').value.trim();
-                const email = document.getElementById('requestEmail').value.trim();
-                const requestedAvailability = document.getElementById('requestAvailability').value.trim();
+                const name = (document.getElementById('requestName') || { value: '' }).value.trim();
+                const email = (document.getElementById('requestEmail') || { value: '' }).value.trim();
+                const requestedAvailability = (document.getElementById('requestAvailability') || { value: '' }).value.trim();
                 if (!selectedWorkplace) {
                     showNotification('❌ Please select a workplace first', 'error');
-                return;
-            }
-            if (!name || !email || !requestedAvailability) {
-                showNotification('❌ All fields are required', 'error');
-                return;
-            }
-            try {
-                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'availability_requests'), {
-                    name,
-                    email,
-                    requestedAvailability,
-                    status: 'pending',
-                    submittedAt: new Date().toISOString(),
-                });
-                showNotification('✅ Request submitted! Admins will review your request.', 'success');
-                closeModal('availabilityRequestModal');
-            } catch (error) {
-                showNotification('❌ Failed to submit request', 'error');
-            }
-            };
+                    return;
+                }
+                if (!name || !email || !requestedAvailability) {
+                    showNotification('❌ All fields are required', 'error');
+                    return;
+                }
+                try {
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'availability_requests'), {
+                        name,
+                        email,
+                        requestedAvailability,
+                        status: 'pending',
+                        submittedAt: new Date().toISOString(),
+                    });
+                    showNotification('✅ Request submitted! Admins will review your request.', 'success');
+                    closeModal('availabilityRequestModal');
+                } catch (error) {
+                    showNotification('❌ Failed to submit request', 'error');
+                }
+            });
         }
         
         // User: Submit time off request
         const timeOffRequestForm = document.getElementById('timeOffRequestForm');
         if (timeOffRequestForm) {
-            timeOffRequestForm.onsubmit = async function(e) {
+            timeOffRequestForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                const startDate = document.getElementById('timeOffStartDate').value;
-                const endDate = document.getElementById('timeOffEndDate').value;
-                const reason = document.getElementById('timeOffReason').value.trim();
-            
-            if (!selectedWorkplace) {
-                showNotification('❌ Please select a workplace first', 'error');
-                return;
-            }
-            if (!startDate) {
-                showNotification('❌ Start date is required', 'error');
-                return;
-            }
-            
-            // If no end date provided, use start date
-            const finalEndDate = endDate || startDate;
-            
-            // Validate dates
-            if (new Date(finalEndDate) < new Date(startDate)) {
-                showNotification('❌ End date cannot be before start date', 'error');
-                return;
-            }
-            
-            try {
-                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'time_off_requests'), {
-                    fromEmail: user.email,
-                    fromName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                    startDate,
-                    endDate: finalEndDate,
-                    reason,
-                    status: 'pending',
-                    submittedAt: new Date().toISOString(),
-                });
-                showNotification('✅ Time off request submitted! Admins will review your request.', 'success');
-                closeModal('timeOffRequestModal');
-            } catch (error) {
-                console.error('Error submitting time off request:', error);
-                showNotification('❌ Failed to submit time off request', 'error');
-            }
-            };
+                const startDate = (document.getElementById('timeOffStartDate') || { value: '' }).value;
+                const endDate = (document.getElementById('timeOffEndDate') || { value: '' }).value;
+                const reason = (document.getElementById('timeOffReason') || { value: '' }).value.trim();
+
+                if (!selectedWorkplace) {
+                    showNotification('❌ Please select a workplace first', 'error');
+                    return;
+                }
+                if (!startDate) {
+                    showNotification('❌ Start date is required', 'error');
+                    return;
+                }
+
+                // If no end date provided, use start date
+                const finalEndDate = endDate || startDate;
+
+                // Validate dates
+                if (new Date(finalEndDate) < new Date(startDate)) {
+                    showNotification('❌ End date cannot be before start date', 'error');
+                    return;
+                }
+
+                try {
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'time_off_requests'), {
+                        fromEmail: user.email,
+                        fromName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                        startDate,
+                        endDate: finalEndDate,
+                        reason,
+                        status: 'pending',
+                        submittedAt: new Date().toISOString(),
+                    });
+                    showNotification('✅ Time off request submitted! Admins will review your request.', 'success');
+                    closeModal('timeOffRequestModal');
+                } catch (error) {
+                    console.error('Error submitting time off request:', error);
+                    showNotification('❌ Failed to submit time off request', 'error');
+                }
+            });
         }
         
         // Admin: Hour Requests button logic
@@ -21414,14 +21433,16 @@ Thank you!`;
 
         // 12. User: My Shift Swap Requests button logic
         if (!user.isAdmin) {
-            document.getElementById('myShiftSwapRequestsBtn').onclick = async function() {
+            safeBind('myShiftSwapRequestsBtn', async function() {
+                console.log('myShiftSwapRequestsBtn clicked');
                 if (!selectedWorkplace) {
                     showNotification('❌ Please select a workplace first', 'error');
                     return;
                 }
-                document.getElementById('userShiftSwapRequestsModal').style.display = 'block';
+                const modalEl = document.getElementById('userShiftSwapRequestsModal');
+                if (modalEl) modalEl.style.display = 'block';
                 loadUserShiftSwapRequests();
-            };
+            });
         }
 
         // 13. Load user's own shift swap requests
