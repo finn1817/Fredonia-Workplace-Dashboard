@@ -2760,14 +2760,24 @@
                     } catch(e) {/* ignore overlay errors */}
                 }
 
-                window.addEventListener('error', function(e){
-                    addMsg('error', e.message || 'Unknown error', { filename: e.filename, lineno: e.lineno, colno: e.colno, error: (e.error && e.error.message) || e.error });
-                });
+                        window.addEventListener('error', function(e){
+                            try{
+                                const stack = e && e.error && e.error.stack ? e.error.stack : (e.error && (e.error.toString())) || null;
+                                addMsg('error', e.message || 'Unknown error', { filename: e.filename, lineno: e.lineno, colno: e.colno, error: (e.error && e.error.message) || e.error, stack: stack });
+                            } catch(err){
+                                try{ addMsg('error','Error handler failed', {err: err && err.message}); } catch(_){}
+                            }
+                        });
 
-                window.addEventListener('unhandledrejection', function(ev){
-                    var reason = ev && ev.reason ? (ev.reason.message || ev.reason) : 'Unknown reason';
-                    addMsg('error', 'UnhandledPromiseRejection: ' + reason, ev.reason);
-                });
+                        window.addEventListener('unhandledrejection', function(ev){
+                            try{
+                                var reason = ev && ev.reason ? (ev.reason.message || ev.reason) : 'Unknown reason';
+                                const stack = ev && ev.reason && ev.reason.stack ? ev.reason.stack : null;
+                                addMsg('error', 'UnhandledPromiseRejection: ' + reason, { reason: ev.reason, stack: stack });
+                            } catch(err){
+                                try{ addMsg('error','UnhandledRejection handler failed', {err: err && err.message}); } catch(_){}
+                            }
+                        });
 
                 document.addEventListener('DOMContentLoaded', function(){ addMsg('log', 'DOMContentLoaded'); });
                 window.addEventListener('load', function(){ addMsg('log', 'window.load'); });
@@ -2822,6 +2832,33 @@
     </div>
 
     <script type="module">
+        // SAFETY SHIM: Prevent crashes during initialization when code expects elements that may not exist yet.
+        // This returns a lightweight stub object instead of null so accessing `.style` won't throw.
+        (function(){
+            const _origGetElementById = document.getElementById.bind(document);
+            document.getElementById = function(id){
+                try{
+                    const real = _origGetElementById(id);
+                    if(real) return real;
+                    // lightweight stub - only implement commonly used properties/methods
+                    return {
+                        style: {},
+                        setAttribute: function(){},
+                        getAttribute: function(){ return null; },
+                        querySelector: function(){ return null; },
+                        querySelectorAll: function(){ return []; },
+                        appendChild: function(){},
+                        removeChild: function(){},
+                        addEventListener: function(){},
+                        removeEventListener: function(){},
+                        focus: function(){},
+                        innerHTML: '',
+                        value: '',
+                        classList: { add: function(){}, remove: function(){}, contains: function(){ return false; } }
+                    };
+                } catch(e){ return _origGetElementById(id); }
+            };
+        })();
         // 🔍 IMMEDIATE DEBUG - Check if script is loading
         console.log('🔍 SCRIPT LOADED - Dashboard script is running');
         console.log('🔍 USER INFO:', JSON.parse(localStorage.getItem('user') || '{}'));
@@ -3163,6 +3200,13 @@
         
         // Modal Management Utilities - Centralized modal operations
         const ModalManager = {
+            // Safe display setter to avoid null-style errors
+            _safeSetDisplay(id, value) {
+                try {
+                    const el = document.getElementById(id);
+                    if (el && el.style) el.style.display = value;
+                } catch (e) { console.warn('safeSetDisplay failed for', id, e); }
+            },
             // Create and show modal with content
             show(modalId, title, content, options = {}) {
                 const modal = document.getElementById(modalId);
@@ -3186,7 +3230,7 @@
                     modalContent.innerHTML = html;
                 }
                 
-                modal.style.display = 'block';
+                this._safeSetDisplay(modalId, 'block');
                 
                 // Auto-focus first input if requested
                 if (options.autoFocus) {
@@ -3203,7 +3247,7 @@
             hide(modalId) {
                 const modal = document.getElementById(modalId);
                 if (modal) {
-                    modal.style.display = 'none';
+                    this._safeSetDisplay(modalId, 'none');
                 }
             },
             
@@ -3226,7 +3270,7 @@
             // Show loading state in modal
             showLoading(modalId, message = 'Loading...') {
                 this.setContent(modalId, `<div class="loading">${message}</div>`);
-                document.getElementById(modalId).style.display = 'block';
+                this._safeSetDisplay(modalId, 'block');
             }
         };
         
