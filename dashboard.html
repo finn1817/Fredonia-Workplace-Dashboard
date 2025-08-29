@@ -14636,11 +14636,14 @@ Management Team`);
     }
 
     // Align boundaries to 30-minute grid
+    // Handle overnight shifts (end <= start) by treating end as next-day (add 24*60)
     let minMinute = Infinity;
     let maxMinute = -Infinity;
     Object.values(schedule).flat().forEach(shift => {
         const s = toMinutes(shift.start);
-        const e = toMinutes(shift.end);
+        let e = toMinutes(shift.end);
+        // If end is earlier or equal to start, assume shift crosses midnight and treat end as next day
+        if (e <= s) e += 24 * 60;
         if (s < minMinute) minMinute = s;
         if (e > maxMinute) maxMinute = e;
     });
@@ -14663,8 +14666,10 @@ Management Team`);
     DAYS_ORDER.forEach(day => {
         shiftRowspanMap[day] = [];
         (schedule[day] || []).forEach((shift, idx) => {
-            const sMin = toMinutes(shift.start);
-            const eMin = toMinutes(shift.end);
+            let sMin = toMinutes(shift.start);
+            let eMin = toMinutes(shift.end);
+            // If the end is earlier or equal to start, treat as next-day end (overnight shift)
+            if (eMin <= sMin) eMin += 24 * 60;
             // startIdx is index of slotMinutes where slotMinutes[startIdx] === nearest slot at or before sMin
             let startIdx = slotMinutes.findIndex(m => m >= sMin);
             if (startIdx === -1) startIdx = 0;
@@ -14696,7 +14701,8 @@ Management Team`);
     DAYS_ORDER.forEach(day => { rendered[day] = {}; });
 
     function formatTimeHMFromMinutes(mins) {
-        const hh24 = Math.floor(mins / 60);
+        // Display times modulo 24 hours so slot labels like 24:30 -> 12:30 AM are shown correctly
+        const hh24 = Math.floor(mins / 60) % 24;
         const h12 = ((hh24 + 11) % 12) + 1;
         const mm = (mins % 60).toString().padStart(2, '0');
         const ampm = hh24 >= 12 ? 'PM' : 'AM';
