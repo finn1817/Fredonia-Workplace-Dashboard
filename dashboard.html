@@ -21734,6 +21734,168 @@ Question/Issue:
         }
 
     </script>
+    <!-- Fallback User Actions Panel: lightweight, self-contained, writes directly to Firestore -->
+    <style>
+        #userFallbackActions { position: fixed; right: 18px; bottom: 18px; width: 320px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 6px 18px rgba(16,24,40,0.08); border-radius: 8px; padding: 12px; z-index: 9999; font-family: Arial, sans-serif; }
+        #userFallbackActions h4 { margin: 0 0 8px 0; font-size: 14px; }
+        #userFallbackActions button { margin: 6px 4px 6px 0; padding: 8px 10px; border-radius: 6px; border: none; cursor: pointer; }
+        #userFallbackActions .btn-primary { background: #0ea5a4; color: white; }
+        #userFallbackActions .btn-ghost { background: #f1f5f9; color: #0f172a; }
+        #userFallbackActions textarea { width: 100%; min-height: 70px; margin-top: 6px; }
+        #userFallbackActions input[type='date'] { width: 100%; margin-top:6px; }
+        #userFallbackStatus { font-size: 12px; color: #334155; margin-top:8px; }
+    </style>
+    <div id="userFallbackActions" aria-hidden="true" style="display:none;">
+        <h4>Quick Actions (Fallback)</h4>
+        <div id="userFallbackBody">
+            <div>
+                <label style="font-size:12px;color:#334155;">Message to Admins</label>
+                <textarea id="fallbackAdminMessage" placeholder="Write a message to your admins"></textarea>
+                <div style="text-align:right;margin-top:6px;">
+                    <button id="sendFallbackAdminMsg" class="btn-primary">Send Message</button>
+                </div>
+            </div>
+            <hr />
+            <div>
+                <label style="font-size:12px;color:#334155;">Request Availability (text)</label>
+                <textarea id="fallbackAvailabilityText" placeholder="Mon 09:00-12:00, Tue 14:00-18:00"></textarea>
+                <div style="text-align:right;margin-top:6px;">
+                    <button id="sendFallbackAvailability" class="btn-ghost">Request Availability Change</button>
+                </div>
+            </div>
+            <hr />
+            <div>
+                <label style="font-size:12px;color:#334155;">Time Off</label>
+                <input id="fallbackTimeOffStart" type="date" />
+                <input id="fallbackTimeOffEnd" type="date" />
+                <textarea id="fallbackTimeOffReason" placeholder="Reason (optional)"></textarea>
+                <div style="text-align:right;margin-top:6px;">
+                    <button id="sendFallbackTimeOff" class="btn-ghost">Request Time Off</button>
+                </div>
+            </div>
+            <hr />
+            <div>
+                <label style="font-size:12px;color:#334155;">Shift Swap (simple)</label>
+                <textarea id="fallbackShiftSwap" placeholder='Describe the shift you want to swap (e.g. "Thu 20:00-00:00")'></textarea>
+                <div style="text-align:right;margin-top:6px;">
+                    <button id="sendFallbackSwap" class="btn-ghost">Request Shift Swap</button>
+                    <button id="viewMyFallbackSwaps" class="btn-ghost">My Swap Requests</button>
+                </div>
+            </div>
+            <div id="userFallbackStatus"></div>
+        </div>
+    </div>
+
+    <script>
+        // Only show fallback panel for non-admin users and when global db is present
+        (function(){
+            try {
+                function showStatus(msg, ok=true){
+                    const s = document.getElementById('userFallbackStatus');
+                    if (s) { s.textContent = msg; s.style.color = ok ? '#065f46' : '#8b0000'; }
+                }
+
+                function showPanel(){
+                    const panel = document.getElementById('userFallbackActions');
+                    if (!panel) return;
+                    panel.style.display = 'block';
+                    panel.setAttribute('aria-hidden','false');
+                }
+
+                // If there is no firebase db object, don't show
+                if (typeof window.db === 'undefined' || !window.user) {
+                    console.warn('[FALLBACK] db or user not present, hiding fallback panel');
+                    return;
+                }
+                // Don't show to admins (they have their admin UI)
+                if (window.user.isAdmin) return;
+
+                // Only show when a workplace is selected (or show with warning)
+                const panel = document.getElementById('userFallbackActions');
+                if (!panel) return;
+                showPanel();
+
+                const setBusy = (b) => { document.getElementById('sendFallbackAdminMsg').disabled = b; document.getElementById('sendFallbackAvailability').disabled = b; document.getElementById('sendFallbackTimeOff').disabled = b; document.getElementById('sendFallbackSwap').disabled = b; };
+
+                // Helpers to write to Firestore
+                async function writeToWorkplaceCollection(collName, data){
+                    if (!window.selectedWorkplace) { showStatus('Please select a workplace first', false); throw new Error('no workplace'); }
+                    const colRef = collection(db, 'workplaces', selectedWorkplace, collName);
+                    console.log('[FALLBACK] writing to', collName, data);
+                    return await addDoc(colRef, data);
+                }
+
+                document.getElementById('sendFallbackAdminMsg').addEventListener('click', async function(){
+                    try {
+                        setBusy(true); showStatus('Sending message...');
+                        const txt = (document.getElementById('fallbackAdminMessage')||{value:''}).value.trim();
+                        if (!txt) { showStatus('Message is empty', false); setBusy(false); return; }
+                        const payload = { fromEmail: window.user.email || null, fromName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), message: txt, createdAt: new Date().toISOString(), type: 'user_message' };
+                        await writeToWorkplaceCollection('notifications', payload);
+                        showStatus('Message sent — admins will see it.', true);
+                        (document.getElementById('fallbackAdminMessage')||{value:''}).value='';
+                    } catch (e) { console.error('[FALLBACK] send message failed', e); showStatus('Failed to send message', false); }
+                    finally{ setBusy(false); }
+                });
+
+                document.getElementById('sendFallbackAvailability').addEventListener('click', async function(){
+                    try {
+                        setBusy(true); showStatus('Submitting availability request...');
+                        const txt = (document.getElementById('fallbackAvailabilityText')||{value:''}).value.trim();
+                        if (!txt) { showStatus('Availability text is empty', false); setBusy(false); return; }
+                        const payload = { name: (window.user.firstName||'') + ' ' + (window.user.lastName||''), email: window.user.email || null, requestedAvailability: txt, status: 'pending', submittedAt: new Date().toISOString() };
+                        await writeToWorkplaceCollection('availability_requests', payload);
+                        showStatus('Availability request submitted.', true);
+                        (document.getElementById('fallbackAvailabilityText')||{value:''}).value='';
+                    } catch (e) { console.error('[FALLBACK] availability failed', e); showStatus('Failed to submit availability', false); }
+                    finally{ setBusy(false); }
+                });
+
+                document.getElementById('sendFallbackTimeOff').addEventListener('click', async function(){
+                    try {
+                        setBusy(true); showStatus('Submitting time off request...');
+                        const start = (document.getElementById('fallbackTimeOffStart')||{value:''}).value;
+                        const end = (document.getElementById('fallbackTimeOffEnd')||{value:''}).value;
+                        const reason = (document.getElementById('fallbackTimeOffReason')||{value:''}).value.trim();
+                        if (!start) { showStatus('Start date required', false); setBusy(false); return; }
+                        const payload = { fromEmail: window.user.email || null, fromName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), startDate: start, endDate: end || start, reason, status: 'pending', submittedAt: new Date().toISOString() };
+                        await writeToWorkplaceCollection('time_off_requests', payload);
+                        showStatus('Time off request submitted.', true);
+                        (document.getElementById('fallbackTimeOffReason')||{value:''}).value='';
+                    } catch (e) { console.error('[FALLBACK] time off failed', e); showStatus('Failed to submit time off', false); }
+                    finally{ setBusy(false); }
+                });
+
+                document.getElementById('sendFallbackSwap').addEventListener('click', async function(){
+                    try {
+                        setBusy(true); showStatus('Submitting shift swap request...');
+                        const desc = (document.getElementById('fallbackShiftSwap')||{value:''}).value.trim();
+                        if (!desc) { showStatus('Describe the shift to swap', false); setBusy(false); return; }
+                        const payload = { requesterEmail: window.user.email || null, requesterName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), description: desc, status: 'pending', createdAt: new Date().toISOString() };
+                        await writeToWorkplaceCollection('shiftSwaps', payload);
+                        showStatus('Shift swap request submitted.', true);
+                        (document.getElementById('fallbackShiftSwap')||{value:''}).value='';
+                    } catch (e) { console.error('[FALLBACK] swap failed', e); showStatus('Failed to submit swap', false); }
+                    finally{ setBusy(false); }
+                });
+
+                document.getElementById('viewMyFallbackSwaps').addEventListener('click', async function(){
+                    try {
+                        showStatus('Loading your swap requests...');
+                        if (!selectedWorkplace) { showStatus('Select a workplace first', false); return; }
+                        const q = query(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), where('requesterEmail','==', window.user.email || ''));
+                        const snap = await getDocs(q);
+                        if (snap.empty) { alert('No swap requests found.'); showStatus('No swap requests found.', true); return; }
+                        let msg = 'Your swap requests:\n\n';
+                        snap.forEach(d => { const data = d.data(); msg += `• ${data.description || JSON.stringify(data)} (status: ${data.status || 'unknown'})\n`; });
+                        alert(msg);
+                        showStatus('Loaded your swap requests', true);
+                    } catch (e) { console.error('[FALLBACK] view swaps failed', e); showStatus('Failed to load swap requests', false); }
+                });
+
+            } catch (err) { console.error('[FALLBACK] init failed', err); }
+        })();
+    </script>
     <script>
         // Defensive bindings for user dashboard buttons.
         // This runs independently of the large module script so we can diagnose missing bindings/runtime errors.
