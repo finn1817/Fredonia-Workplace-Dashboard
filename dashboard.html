@@ -2799,37 +2799,11 @@
                 return true;
             });
             
-            // CRITICAL: Override showNotification to avoid modal popups but still surface inline feedback
+            // CRITICAL: Override showNotification function to prevent ALL notification popups
             window.showNotificationOriginal = window.showNotification || function() {};
             window.showNotification = function(message, type = 'info', options = {}) {
-                console.log('Notification (non-admin inline):', message, type, options);
-                try {
-                    // Create a small toast container if not present
-                    let container = document.getElementById('inlineNotificationContainer');
-                    if (!container) {
-                        container = document.createElement('div');
-                        container.id = 'inlineNotificationContainer';
-                        container.style.position = 'fixed';
-                        container.style.bottom = '1rem';
-                        container.style.right = '1rem';
-                        container.style.zIndex = 99999;
-                        document.body.appendChild(container);
-                    }
-                    const bg = type === 'success' ? '#164e63' : (type === 'error' ? '#7f1d1d' : '#0f172a');
-                    const el = document.createElement('div');
-                    el.textContent = message;
-                    el.style.background = bg;
-                    el.style.color = '#fff';
-                    el.style.padding = '0.6rem 0.8rem';
-                    el.style.marginTop = '0.5rem';
-                    el.style.borderRadius = '6px';
-                    el.style.boxShadow = '0 4px 12px rgba(2,6,23,0.4)';
-                    el.style.fontSize = '0.9rem';
-                    container.appendChild(el);
-                    setTimeout(() => { el.remove(); if (!container.children.length) container.remove(); }, options.duration || 4000);
-                } catch (e) {
-                    console.log('Failed to show inline notification:', e);
-                }
+                console.log('Notification suppressed for non-admin:', message, type);
+                // Do nothing - completely suppress all notifications
             };
         }
 
@@ -3049,27 +3023,14 @@
             };
         }
 
-    // Global state
-    let selectedWorkplace = null;
+        // Global state
+        let selectedWorkplace = null;
         let workers = [];
         let hours = {};
         let editingWorkerId = null;
         let schedule = {};
         const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         let currentScheduleId = null; // <-- Track the current schedule doc ID
-        // Expose current user and selectedWorkplace on window for legacy code & defensive handlers
-        // `user` is read from localStorage above; make it available globally
-        try {
-            window.user = user;
-            Object.defineProperty(window, 'selectedWorkplace', {
-                configurable: true,
-                enumerable: true,
-                get() { return selectedWorkplace; },
-                set(v) { selectedWorkplace = v; }
-            });
-        } catch (e) {
-            console.warn('Could not expose globals for legacy handlers:', e);
-        }
         
         // ==========================================
         // 🧹 REUSABLE UTILITY COMPONENTS
@@ -19343,9 +19304,13 @@ Thank you!`;
                     return;
                 }
                 try {
-                    // Unified user_requests write (plus legacy collection for compatibility)
-                    const payload = { type: 'availability_request', name, email, requestedAvailability, status: 'pending', submittedAt: new Date().toISOString() };
-                    await writeUserRequest(payload);
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'availability_requests'), {
+                        name,
+                        email,
+                        requestedAvailability,
+                        status: 'pending',
+                        submittedAt: new Date().toISOString(),
+                    });
                     showNotification('✅ Request submitted! Admins will review your request.', 'success');
                     closeModal('availabilityRequestModal');
                 } catch (error) {
@@ -19382,8 +19347,15 @@ Thank you!`;
                 }
 
                 try {
-                    const payload = { type: 'time_off_request', fromEmail: user.email, fromName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email, startDate, endDate: finalEndDate, reason, status: 'pending', submittedAt: new Date().toISOString() };
-                    await writeUserRequest(payload);
+                    await addDoc(collection(db, 'workplaces', selectedWorkplace, 'time_off_requests'), {
+                        fromEmail: user.email,
+                        fromName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                        startDate,
+                        endDate: finalEndDate,
+                        reason,
+                        status: 'pending',
+                        submittedAt: new Date().toISOString(),
+                    });
                     showNotification('✅ Time off request submitted! Admins will review your request.', 'success');
                     closeModal('timeOffRequestModal');
                 } catch (error) {
@@ -21187,8 +21159,8 @@ Thank you!`;
                     targetWorkerEmail;
                 console.log('DEBUG: Target worker name:', targetWorkerName);
                 
-                // Create shift swap request (unified user_requests + legacy collection)
-                const swapPayload = {
+                // Create shift swap request
+                await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), {
                     requesterId: user.uid || user.email,
                     requesterName: (user.firstName && user.lastName) ? `${user.firstName} ${user.lastName}` : user.email,
                     requesterEmail: user.email,
@@ -21210,8 +21182,7 @@ Thank you!`;
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     updatedBy: user.email
-                };
-                await writeUserRequest(Object.assign({ type: 'shift_swap_request' }, swapPayload));
+                });
                 
                 console.log('DEBUG: Shift swap request saved successfully!');
                 showNotification('✅ Shift swap request submitted successfully!', 'success');
@@ -21761,302 +21732,7 @@ Question/Issue:
             const mailtoUrl = `mailto:finn1817@fredonia.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             window.open(mailtoUrl, '_self');
         }
-
-    </script>
-    <!-- Fallback User Actions Panel: lightweight, self-contained, writes directly to Firestore -->
-    <style>
-        #userFallbackActions { position: fixed; right: 18px; bottom: 18px; width: 320px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 6px 18px rgba(16,24,40,0.08); border-radius: 8px; padding: 12px; z-index: 9999; font-family: Arial, sans-serif; }
-        #userFallbackActions h4 { margin: 0 0 8px 0; font-size: 14px; }
-        #userFallbackActions button { margin: 6px 4px 6px 0; padding: 8px 10px; border-radius: 6px; border: none; cursor: pointer; }
-        #userFallbackActions .btn-primary { background: #0ea5a4; color: white; }
-        #userFallbackActions .btn-ghost { background: #f1f5f9; color: #0f172a; }
-        #userFallbackActions textarea { width: 100%; min-height: 70px; margin-top: 6px; }
-        #userFallbackActions input[type='date'] { width: 100%; margin-top:6px; }
-        #userFallbackStatus { font-size: 12px; color: #334155; margin-top:8px; }
-    </style>
-    <div id="userFallbackActions" aria-hidden="true" style="display:none;">
-        <h4>Quick Actions (Fallback)</h4>
-        <div id="userFallbackBody">
-            <div>
-                <label style="font-size:12px;color:#334155;">Message to Admins</label>
-                <textarea id="fallbackAdminMessage" placeholder="Write a message to your admins"></textarea>
-                <div style="text-align:right;margin-top:6px;">
-                    <button id="sendFallbackAdminMsg" class="btn-primary">Send Message</button>
-                </div>
-            </div>
-            <hr />
-            <div>
-                <label style="font-size:12px;color:#334155;">Request Availability (text)</label>
-                <textarea id="fallbackAvailabilityText" placeholder="Mon 09:00-12:00, Tue 14:00-18:00"></textarea>
-                <div style="text-align:right;margin-top:6px;">
-                    <button id="sendFallbackAvailability" class="btn-ghost">Request Availability Change</button>
-                </div>
-            </div>
-            <hr />
-            <div>
-                <label style="font-size:12px;color:#334155;">Time Off</label>
-                <input id="fallbackTimeOffStart" type="date" />
-                <input id="fallbackTimeOffEnd" type="date" />
-                <textarea id="fallbackTimeOffReason" placeholder="Reason (optional)"></textarea>
-                <div style="text-align:right;margin-top:6px;">
-                    <button id="sendFallbackTimeOff" class="btn-ghost">Request Time Off</button>
-                </div>
-            </div>
-            <hr />
-            <div>
-                <label style="font-size:12px;color:#334155;">Shift Swap (simple)</label>
-                <textarea id="fallbackShiftSwap" placeholder='Describe the shift you want to swap (e.g. "Thu 20:00-00:00")'></textarea>
-                <div style="text-align:right;margin-top:6px;">
-                    <button id="sendFallbackSwap" class="btn-ghost">Request Shift Swap</button>
-                    <button id="viewMyFallbackSwaps" class="btn-ghost">My Swap Requests</button>
-                </div>
-            </div>
-            <div id="userFallbackStatus"></div>
-        </div>
-    </div>
-
-    <script>
-        // Only show fallback panel for non-admin users and when global db is present
-        (function(){
-            try {
-                function showStatus(msg, ok=true){
-                    const s = document.getElementById('userFallbackStatus');
-                    if (s) { s.textContent = msg; s.style.color = ok ? '#065f46' : '#8b0000'; }
-                }
-
-                function showPanel(){
-                    const panel = document.getElementById('userFallbackActions');
-                    if (!panel) return;
-                    panel.style.display = 'block';
-                    panel.setAttribute('aria-hidden','false');
-                }
-
-                // If there is no firebase db object, don't show
-                if (typeof window.db === 'undefined' || !window.user) {
-                    console.warn('[FALLBACK] db or user not present, hiding fallback panel');
-                    return;
-                }
-                // Don't show to admins (they have their admin UI)
-                if (window.user.isAdmin) return;
-
-                // Only show when a workplace is selected (or show with warning)
-                const panel = document.getElementById('userFallbackActions');
-                if (!panel) return;
-                showPanel();
-
-                const setBusy = (b) => { document.getElementById('sendFallbackAdminMsg').disabled = b; document.getElementById('sendFallbackAvailability').disabled = b; document.getElementById('sendFallbackTimeOff').disabled = b; document.getElementById('sendFallbackSwap').disabled = b; };
-
-                // Helpers to write to Firestore
-                // Unified helper: write a user request to workplaces/<selectedWorkplace>/user_requests
-                // Also write to legacy collection(s) for compatibility when appropriate
-                async function writeUserRequest(payload) {
-                    if (!window.selectedWorkplace) { showStatus('Please select a workplace first', false); throw new Error('no workplace'); }
-                    const wpPath = `workplaces/${selectedWorkplace}`;
-                    const dest = collection(db, 'workplaces', selectedWorkplace, 'user_requests');
-                    console.log('[FALLBACK] writeUserRequest to', wpPath, payload);
-                    const docRef = await addDoc(dest, payload);
-                    // Backwards compatibility: write to legacy targeted collections
-                    try {
-                        if (payload.type === 'availability_request') {
-                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'availability_requests'), payload);
-                        } else if (payload.type === 'time_off_request') {
-                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'time_off_requests'), payload);
-                        } else if (payload.type === 'shift_swap' || payload.type === 'shift_swap_request') {
-                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), payload);
-                        } else if (payload.type === 'user_message') {
-                            await addDoc(collection(db, 'workplaces', selectedWorkplace, 'notifications'), payload);
-                        }
-                    } catch (e) {
-                        console.warn('[FALLBACK] legacy write failed (non-fatal):', e);
-                    }
-                    return docRef;
-                }
-
-                document.getElementById('sendFallbackAdminMsg').addEventListener('click', async function(){
-                    try {
-                        setBusy(true); showStatus('Sending message...');
-                        const txt = (document.getElementById('fallbackAdminMessage')||{value:''}).value.trim();
-                        if (!txt) { showStatus('Message is empty', false); setBusy(false); return; }
-                        const payload = { fromEmail: window.user.email || null, fromName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), message: txt, createdAt: new Date().toISOString(), type: 'user_message' };
-                        await writeUserRequest(Object.assign({type: 'user_message'}, payload));
-                        showStatus('Message sent — admins will see it.', true);
-                        (document.getElementById('fallbackAdminMessage')||{value:''}).value='';
-                    } catch (e) { console.error('[FALLBACK] send message failed', e); showStatus('Failed to send message', false); }
-                    finally{ setBusy(false); }
-                });
-
-                document.getElementById('sendFallbackAvailability').addEventListener('click', async function(){
-                    try {
-                        setBusy(true); showStatus('Submitting availability request...');
-                        const txt = (document.getElementById('fallbackAvailabilityText')||{value:''}).value.trim();
-                        if (!txt) { showStatus('Availability text is empty', false); setBusy(false); return; }
-                        const payload = { name: (window.user.firstName||'') + ' ' + (window.user.lastName||''), email: window.user.email || null, requestedAvailability: txt, status: 'pending', submittedAt: new Date().toISOString() };
-                        await writeUserRequest(Object.assign({type: 'availability_request'}, payload));
-                        showStatus('Availability request submitted.', true);
-                        (document.getElementById('fallbackAvailabilityText')||{value:''}).value='';
-                    } catch (e) { console.error('[FALLBACK] availability failed', e); showStatus('Failed to submit availability', false); }
-                    finally{ setBusy(false); }
-                });
-
-                document.getElementById('sendFallbackTimeOff').addEventListener('click', async function(){
-                    try {
-                        setBusy(true); showStatus('Submitting time off request...');
-                        const start = (document.getElementById('fallbackTimeOffStart')||{value:''}).value;
-                        const end = (document.getElementById('fallbackTimeOffEnd')||{value:''}).value;
-                        const reason = (document.getElementById('fallbackTimeOffReason')||{value:''}).value.trim();
-                        if (!start) { showStatus('Start date required', false); setBusy(false); return; }
-                        const payload = { fromEmail: window.user.email || null, fromName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), startDate: start, endDate: end || start, reason, status: 'pending', submittedAt: new Date().toISOString() };
-                        await writeUserRequest(Object.assign({type: 'time_off_request'}, payload));
-                        showStatus('Time off request submitted.', true);
-                        (document.getElementById('fallbackTimeOffReason')||{value:''}).value='';
-                    } catch (e) { console.error('[FALLBACK] time off failed', e); showStatus('Failed to submit time off', false); }
-                    finally{ setBusy(false); }
-                });
-
-                document.getElementById('sendFallbackSwap').addEventListener('click', async function(){
-                    try {
-                        setBusy(true); showStatus('Submitting shift swap request...');
-                        const desc = (document.getElementById('fallbackShiftSwap')||{value:''}).value.trim();
-                        if (!desc) { showStatus('Describe the shift to swap', false); setBusy(false); return; }
-                        const payload = { requesterEmail: window.user.email || null, requesterName: (window.user.firstName||'') + ' ' + (window.user.lastName||''), description: desc, status: 'pending', createdAt: new Date().toISOString() };
-                        await writeUserRequest(Object.assign({type: 'shift_swap_request'}, payload));
-                        showStatus('Shift swap request submitted.', true);
-                        (document.getElementById('fallbackShiftSwap')||{value:''}).value='';
-                    } catch (e) { console.error('[FALLBACK] swap failed', e); showStatus('Failed to submit swap', false); }
-                    finally{ setBusy(false); }
-                });
-
-                document.getElementById('viewMyFallbackSwaps').addEventListener('click', async function(){
-                    try {
-                        showStatus('Loading your swap requests...');
-                        if (!selectedWorkplace) { showStatus('Select a workplace first', false); return; }
-                        const q = query(collection(db, 'workplaces', selectedWorkplace, 'shiftSwaps'), where('requesterEmail','==', window.user.email || ''));
-                        const snap = await getDocs(q);
-                        if (snap.empty) { alert('No swap requests found.'); showStatus('No swap requests found.', true); return; }
-                        let msg = 'Your swap requests:\n\n';
-                        snap.forEach(d => { const data = d.data(); msg += `• ${data.description || JSON.stringify(data)} (status: ${data.status || 'unknown'})\n`; });
-                        alert(msg);
-                        showStatus('Loaded your swap requests', true);
-                    } catch (e) { console.error('[FALLBACK] view swaps failed', e); showStatus('Failed to load swap requests', false); }
-                });
-
-            } catch (err) { console.error('[FALLBACK] init failed', err); }
-        })();
-    </script>
-    <script>
-        // Defensive bindings for user dashboard buttons with wait/retry to avoid init race conditions.
-        // This waits for runtime essentials (window.user and window.db) and falls back to deriving values at click-time.
-        function waitFor(conditionFn, timeout = 10000, interval = 100) {
-            const start = Date.now();
-            return new Promise((resolve, reject) => {
-                (function check() {
-                    try {
-                        if (conditionFn()) return resolve(true);
-                    } catch (e) {
-                        // ignore
-                    }
-                    if (Date.now() - start >= timeout) return resolve(false);
-                    setTimeout(check, interval);
-                })();
-            });
-        }
-
-        document.addEventListener('DOMContentLoaded', async function() {
-            try {
-                console.log('[DEFENSIVE BIND] waiting for runtime (user & db) before attaching handlers...');
-                const ready = await waitFor(() => (typeof window.db !== 'undefined') && (typeof window.user !== 'undefined') && window.user && Object.keys(window.user).length > 0, 8000, 150);
-                if (!ready) {
-                    console.warn('[DEFENSIVE BIND] runtime not fully ready after wait - will bind anyway and use fallbacks at click-time');
-                } else {
-                    console.log('[DEFENSIVE BIND] runtime ready, attaching handlers');
-                }
-
-                const ids = ['requestAvailabilityBtn','requestTimeOffBtn','requestShiftSwapBtn','myShiftSwapRequestsBtn'];
-                ids.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (!el) {
-                        console.warn('[DEFENSIVE BIND] Element not found:', id);
-                        return;
-                    }
-                    if (el.__defensive_bound) return;
-                    el.__defensive_bound = true;
-
-                    el.addEventListener('click', function(e) {
-                        console.log('[DEFENSIVE CLICK]', id);
-                        try {
-                            // Derive runtime values defensively
-                            const usr = window.user || JSON.parse(localStorage.getItem('user') || '{}') || {};
-                            const wp = window.selectedWorkplace || localStorage.getItem('selectedWorkplace') || null;
-
-                            if (id === 'requestAvailabilityBtn') {
-                                const nameEl = document.getElementById('requestName');
-                                const emailEl = document.getElementById('requestEmail');
-                                const availEl = document.getElementById('requestAvailability');
-                                if (nameEl) nameEl.value = usr.firstName || '';
-                                if (emailEl) emailEl.value = usr.email || '';
-                                if (availEl) availEl.value = '';
-                                const modal = document.getElementById('availabilityRequestModal');
-                                if (modal) modal.style.display = 'block';
-                                return;
-                            }
-
-                            if (id === 'requestTimeOffBtn') {
-                                const today = new Date().toISOString().split('T')[0];
-                                const startEl = document.getElementById('timeOffStartDate');
-                                const endEl = document.getElementById('timeOffEndDate');
-                                const reasonEl = document.getElementById('timeOffReason');
-                                if (startEl) startEl.value = today;
-                                if (endEl) endEl.value = '';
-                                if (reasonEl) reasonEl.value = '';
-                                const modal = document.getElementById('timeOffRequestModal');
-                                if (modal) modal.style.display = 'block';
-                                return;
-                            }
-
-                            if (id === 'requestShiftSwapBtn') {
-                                console.log('DEF: requestShiftSwapBtn clicked - selectedWorkplace=', wp, 'user=', usr);
-                                if (!wp) {
-                                    if (typeof showNotification === 'function') showNotification('❌ Please select a workplace first', 'error');
-                                    else console.warn('showNotification not defined');
-                                    return;
-                                }
-                                if (typeof openShiftSwapRequestModal === 'function') {
-                                    openShiftSwapRequestModal();
-                                } else {
-                                    // Fallback: open the modal if present
-                                    const modal = document.getElementById('shiftSwapRequestModal');
-                                    if (modal) modal.style.display = 'block';
-                                    else console.warn('openShiftSwapRequestModal is not defined and modal not found');
-                                }
-                                return;
-                            }
-
-                            if (id === 'myShiftSwapRequestsBtn') {
-                                if (!wp) {
-                                    if (typeof showNotification === 'function') showNotification('❌ Please select a workplace first', 'error');
-                                    else console.warn('showNotification not defined');
-                                    return;
-                                }
-                                const modal = document.getElementById('userShiftSwapRequestsModal');
-                                if (modal) modal.style.display = 'block';
-                                if (typeof loadUserShiftSwapRequests === 'function') loadUserShiftSwapRequests();
-                                else console.warn('loadUserShiftSwapRequests is not defined');
-                                return;
-                            }
-
-                        } catch (err) {
-                            console.error('[DEFENSIVE CLICK] handler error for', id, err);
-                        }
-                    });
-                });
-
-                // Diagnostic: list present buttons
-                const present = ids.filter(id => !!document.getElementById(id));
-                console.log('[DEFENSIVE BIND] Present buttons:', present);
-            } catch (err) {
-                console.error('[DEFENSIVE BIND] Unexpected error:', err);
-            }
-        });
+        // shit - revert, revert!!
     </script>
 </body>
 </html>
